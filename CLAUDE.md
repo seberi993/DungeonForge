@@ -14,7 +14,7 @@
 ## Architectural Standards
 - Pattern: Vertical Slice CQRS (No MediatR). Features live under `src/DungeonForge.Api/Features/<Group>/<FeatureName>/`.
 - Endpoints: Minimal API slices utilizing `IEndpoint` and `AddEndpointFilter` for cross-cutting checks.
-- AI Narration: Stateless, concise calls to Claude 3.5 Haiku via Anthropic C# SDK. Game rules and math executed in C#.
+- AI Narration: Stateless, concise calls to Claude Haiku 5.5 via Anthropic C# SDK. Game rules and math executed in C#.
 
 ## Token Conservation Protocols
 - Do not explain basic C# syntax or framework design patterns. Provide direct code implementations.
