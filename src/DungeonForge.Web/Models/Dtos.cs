@@ -21,3 +21,12 @@ public sealed record ExploreResponse(
     int Gold);
 
 public sealed record LogEntry(int Turn, RoomType RoomType, int HpChange, int GoldFound, string FlavorEvent);
+
+public sealed record PartyStateDto(
+    Guid PartyId,
+    string Name,
+    IReadOnlyList<string> Members,
+    DateTimeOffset CreatedAt,
+    int Hp,
+    int Gold,
+    int Turn);

@@ -65,4 +65,46 @@ public class PartyLobbyTests : TestContext
         cut.Find("button#create-party").Click();
         cut.WaitForAssertion(() => cut.Find(".validation-message").TextContent.Should().NotBeNullOrWhiteSpace());
     }
+
+    [Fact]
+    public void Join_Success_LoadsStateAndNavigatesToDungeon()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A"],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3}""");
+        var cut = Render(handler);
+
+        cut.Find("input#join-id").Change(Id.ToString());
+        cut.Find("button#join-party").Click();
+
+        cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
+        _session.PartyId.Should().Be(Id);
+        _session.Hp.Should().Be(9);
+        _session.Turn.Should().Be(3);
+    }
+
+    [Fact]
+    public void Join_InvalidGuid_ShowsErrorWithoutRequest()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK);
+        var cut = Render(handler);
+
+        cut.Find("input#join-id").Change("nope");
+        cut.Find("button#join-party").Click();
+
+        cut.Find(".join-error").TextContent.Should().NotBeNullOrWhiteSpace();
+        handler.LastRequest.Should().BeNull();
+    }
+
+    [Fact]
+    public void Join_NotFound_ShowsError()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.NotFound));
+
+        cut.Find("input#join-id").Change(Id.ToString());
+        cut.Find("button#join-party").Click();
+
+        cut.WaitForAssertion(() => cut.Find(".join-error").TextContent.Should().Contain("No party"));
+        _session.HasParty.Should().BeFalse();
+    }
 }

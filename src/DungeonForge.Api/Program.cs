@@ -4,6 +4,7 @@ using DungeonForge.Api.Endpoints;
 using DungeonForge.Api.Features.Parties.CreateParty;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.GetPartyState;
+using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -21,6 +22,16 @@ builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 });
+
+// SignalR does not use the Minimal API JSON options; mirror them here.
+builder.Services.AddSignalR().AddJsonProtocol(o =>
+{
+    o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    o.PayloadSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+    o.PayloadSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+});
+builder.Services.TryAddSingleton<IPartyNotifier, SignalRPartyNotifier>();
 
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CreatePartyHandler>();
@@ -41,7 +52,7 @@ builder.Services.TryAddSingleton<IDungeonNarrator>(sp =>
 const string CorsPolicy = "BlazorClient";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
-    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
@@ -50,6 +61,7 @@ var app = builder.Build();
 app.UseCors(CorsPolicy);
 
 app.MapEndpoints();
+app.MapHub<DungeonHub>("/hubs/dungeon").RequireCors(CorsPolicy);
 
 app.Run();
 

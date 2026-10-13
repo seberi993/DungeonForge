@@ -1,4 +1,5 @@
 @page "/"
+@using DungeonForge.Web.Models
 @using DungeonForge.Web.Services
 @inject DungeonApiClient Api
 @inject GameSession Session
@@ -17,7 +18,50 @@
     }
 </div>
 
+<div class="card">
+    <label for="join-id">Join existing party (party id)</label>
+    <input id="join-id" @bind="_joinId" disabled="@_busy" />
+    <button id="join-party" @onclick="JoinAsync" disabled="@_busy">Join Party</button>
+    @if (_joinError is not null)
+    {
+        <p class="join-error validation-message">@_joinError</p>
+    }
+</div>
+
 @code {
+    private string _joinId = "";
+    private string? _joinError;
+
+    private async Task JoinAsync()
+    {
+        _joinError = null;
+        if (!Guid.TryParse(_joinId.Trim(), out var id))
+        {
+            _joinError = "Enter a valid party id.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Api.GetPartyAsync(id);
+            if (result.IsSuccess)
+            {
+                Session.Join(result.Value!);
+                Nav.NavigateTo("/dungeon");
+                return;
+            }
+
+            _joinError = result.Status == ApiStatus.NotFound
+                ? "No party found with that id."
+                : result.Error ?? "Could not join the party.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private string _name = "";
     private string? _error;
     private bool _busy;

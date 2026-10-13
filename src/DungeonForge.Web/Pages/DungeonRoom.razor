@@ -5,6 +5,8 @@
 @inject GameSession Session
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject IDungeonHubClient Hub
+@implements IAsyncDisposable
 
 @if (Session.HasParty)
 {
@@ -16,7 +18,12 @@
         <span id="stat-turn">Turn: @Session.Turn</span>
     </div>
 
-    <button id="explore" @onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
+    @if (_offline)
+    {
+        <p class="offline">Live updates offline. You can still explore.</p>
+    }
+
+    <button id="explore"@onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
 
     @if (Session.IsDefeated)
     {
@@ -47,9 +54,57 @@
     private string? _error;
     private bool _scroll;
 
-    protected override void OnInitialized()
+    private bool _offline;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
     {
-        if (!Session.HasParty) Nav.NavigateTo("/");
+        if (!Session.HasParty)
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        Hub.TurnResolved += OnTurnResolved;
+        Hub.PartyUpdated += OnPartyUpdated;
+        try
+        {
+            await Hub.ConnectAsync(Session.PartyId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _offline = true;
+        }
+    }
+
+    private void OnTurnResolved(ExploreResponse result)
+    {
+        if (_disposed) return;
+        try
+        {
+            _ = InvokeAsync(() =>
+            {
+                if (_disposed || !Session.ApplyRemote(result)) return;
+                _scroll = true;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void OnPartyUpdated(PartyStateDto state)
+    {
+        // Turn events carry the full state; PartyUpdated is reserved for roster changes.
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        Hub.TurnResolved -= OnTurnResolved;
+        Hub.PartyUpdated -= OnPartyUpdated;
+        await Hub.DisposeAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -69,8 +124,7 @@
             switch (result.Status)
             {
                 case ApiStatus.Success:
-                    Session.Apply(result.Value!);
-                    _scroll = true;
+                    if (Session.Apply(result.Value!)) _scroll = true;
                     break;
                 case ApiStatus.Conflict:
                     Session.MarkDefeated();

@@ -28,6 +28,22 @@ public class DungeonApiClientTests
     }
 
     [Fact]
+    public async Task GetParty_Success_ReturnsState()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A"],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3}""");
+        var sut = new DungeonApiClient(handler.CreateClient());
+
+        var result = await sut.GetPartyAsync(Id);
+
+        result.Status.Should().Be(ApiStatus.Success);
+        result.Value!.Hp.Should().Be(9);
+        result.Value.Turn.Should().Be(3);
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
+        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
+    }
+
+    [Fact]
     public async Task CreateParty_BadRequest_MapsToValidationErrorWithMessage()
     {
         var handler = new FakeHandler(HttpStatusCode.BadRequest,

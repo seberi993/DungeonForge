@@ -25,14 +25,32 @@ public sealed class GameSession
         Hp = StartingHp;
     }
 
-    public void Apply(ExploreResponse result)
+    public bool Apply(ExploreResponse result)
     {
+        if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
         Hp = result.Hp;
         Gold = result.Gold;
         IsDefeated = result.Hp <= 0;
         _log.Add(new LogEntry(result.Turn, result.RoomType, result.HpChange, result.GoldFound, result.FlavorEvent));
+        Changed?.Invoke();
+        return true;
     }
+
+    public event Action? Changed;
+
+    public void Join(PartyStateDto party)
+    {
+        Clear();
+        PartyId = party.PartyId;
+        Name = party.Name;
+        Hp = party.Hp;
+        Gold = party.Gold;
+        Turn = party.Turn;
+        IsDefeated = party.Hp <= 0;
+    }
+
+    public bool ApplyRemote(ExploreResponse result) => Apply(result);
 
     public void MarkDefeated()
     {

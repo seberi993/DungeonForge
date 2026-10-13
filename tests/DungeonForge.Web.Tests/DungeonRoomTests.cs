@@ -20,8 +20,11 @@ public class DungeonRoomTests : TestContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
+    private FakeDungeonHubClient _hub = new();
+
     private IRenderedComponent<DungeonRoom> Render(FakeHandler handler, bool withParty = true)
     {
+        Services.AddSingleton<IDungeonHubClient>(_hub);
         if (withParty) _session.Start(new PartyResponse(Id, "Heroes", ["A"], DateTimeOffset.UtcNow));
         Services.AddSingleton(_session);
         Services.AddSingleton(new DungeonApiClient(handler.CreateClient()));
@@ -70,11 +73,40 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void Explore_Twice_AppendsEntries()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", -1, 0, "First", 19, 0)));
+        var turn = 0;
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, bodyFactory: () => ExploreJson(++turn, "combat", -1, 0, "Step", 19, 0)));
         cut.Find("button#explore").Click();
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
         cut.Find("button#explore").Click();
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(2));
+    }
+
+    [Fact]
+    public void BroadcastThenHttp_SameTurn_LogsOnce()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", 0, 7, "Same", 20, 7)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Same", 20, 7)));
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+
+        cut.Find("button#explore").Click();
+
+        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse());
+        cut.FindAll(".log-entry").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void StaleHttpTurn_DoesNotRegressState()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", -9, 0, "Old", 11, 0)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 2, RoomType.Chest, 0, 5, "New", 20, 5)));
+        cut.WaitForAssertion(() => cut.Find("#stat-turn").TextContent.Should().Contain("2"));
+
+        cut.Find("button#explore").Click();
+
+        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse());
+        _session.Turn.Should().Be(2);
+        _session.Hp.Should().Be(20);
+        cut.FindAll(".log-entry").Should().HaveCount(1);
     }
 
     [Fact]
@@ -134,5 +166,65 @@ public class DungeonRoomTests : TestContext
 
         cut.WaitForAssertion(() => cut.Find(".error").TextContent.Should().NotBeNullOrWhiteSpace());
         cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Connects_HubForParty()
+    {
+        Render(new FakeHandler(HttpStatusCode.OK));
+        _hub.ConnectedParty.Should().Be(Id);
+    }
+
+    [Fact]
+    public void RemoteTurn_UpdatesLogAndStats()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+
+        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Remote loot", 20, 7)));
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        cut.Find("#stat-gold").TextContent.Should().Contain("7");
+        cut.Find("#stat-turn").TextContent.Should().Contain("1");
+        cut.Find(".log-entry").TextContent.Should().Contain("Remote loot");
+    }
+
+    [Fact]
+    public void DuplicateTurn_IsNotAppliedTwice()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", 0, 7, "Mine", 20, 7)));
+        cut.Find("button#explore").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+
+        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Mine", 20, 7)));
+
+        cut.FindAll(".log-entry").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void RemoteTurn_HpZero_ShowsDefeated()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Combat, -20, 0, "Slain", 0, 0)));
+        cut.WaitForAssertion(() => cut.Find(".defeated"));
+        cut.Find("button#explore").HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Fact]
+    public void ConnectFailure_ShowsOfflineNoticeAndExploreStillWorks()
+    {
+        _hub = new FakeDungeonHubClient { FailConnect = true };
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", -1, 0, "Hit", 19, 0)));
+
+        cut.WaitForAssertion(() => cut.Find(".offline").TextContent.Should().Contain("offline"));
+        cut.Find("button#explore").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+    }
+
+    [Fact]
+    public async Task Dispose_DisposesHubClient()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+        await cut.InvokeAsync(() => ((IAsyncDisposable)cut.Instance).DisposeAsync().AsTask());
+        _hub.Disposed.Should().BeTrue();
     }
 }

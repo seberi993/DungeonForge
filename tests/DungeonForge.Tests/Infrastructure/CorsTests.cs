@@ -25,6 +25,17 @@ public class CorsTests(WebApplicationFactory<Program> factory) : IClassFixture<W
         values.Should().ContainSingle().Which.Should().Be(origin);
     }
 
+    [Theory]
+    [InlineData("http://localhost:5200")]
+    [InlineData("https://localhost:7200")]
+    public async Task Preflight_FromAllowedOrigin_AllowsCredentials(string origin)
+    {
+        var response = await factory.CreateClient().SendAsync(Preflight(origin));
+
+        response.Headers.TryGetValues("Access-Control-Allow-Credentials", out var values).Should().BeTrue();
+        values.Should().ContainSingle().Which.Should().Be("true");
+    }
+
     [Fact]
     public async Task Preflight_FromDisallowedOrigin_OmitsAllowOriginHeader()
     {

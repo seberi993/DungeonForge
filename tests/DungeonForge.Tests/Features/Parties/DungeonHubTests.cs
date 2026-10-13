@@ -1,0 +1,169 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Api.Features.Parties.GetPartyState;
+using DungeonForge.Api.Features.Parties.Realtime;
+using FluentAssertions;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DungeonForge.Tests.Features.Parties;
+
+public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
+    : IClassFixture<WebApplicationFactory<Program>>
+{
+    private sealed class FixedRoller(int value) : IRoller
+    {
+        public int Next(int max) => value;
+    }
+
+    private sealed class ThrowingNotifier : IPartyNotifier
+    {
+        public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
+
+        public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
+    }
+
+    private WebApplicationFactory<Program> WithFixedRoller() =>
+        factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0))));
+
+    private static HubConnection Connect(WebApplicationFactory<Program> f) =>
+        new HubConnectionBuilder()
+            .WithUrl(new Uri(f.Server.BaseAddress, "/hubs/dungeon"), o =>
+            {
+                o.Transports = HttpTransportType.LongPolling;
+                o.HttpMessageHandlerFactory = _ => f.Server.CreateHandler();
+            })
+            .AddJsonProtocol(o =>
+            {
+                o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+            })
+            .Build();
+
+    private static async Task<Guid> CreatePartyAsync(HttpClient client)
+    {
+        var created = await client.PostAsJsonAsync("/api/parties", new { name = "Heroes" });
+        using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("partyId").GetGuid();
+    }
+
+    [Fact]
+    public async Task Explore_BroadcastsTurnResolvedAndPartyUpdated_ToEveryConnectionInTheParty()
+    {
+        using var f = WithFixedRoller();
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+
+        await using var a = Connect(f);
+        await using var b = Connect(f);
+        var turnB = new TaskCompletionSource<ExploreResponse>();
+        var stateB = new TaskCompletionSource<GetPartyStateResponse>();
+        b.On<ExploreResponse>("TurnResolved", t => turnB.TrySetResult(t));
+        b.On<GetPartyStateResponse>("PartyUpdated", s => stateB.TrySetResult(s));
+        await a.StartAsync();
+        await b.StartAsync();
+        await a.InvokeAsync("JoinParty", id);
+        await b.InvokeAsync("JoinParty", id);
+
+        var response = await client.PostAsync($"/api/parties/{id}/explore", null);
+        response.EnsureSuccessStatusCode();
+
+        var timeout = TimeSpan.FromSeconds(10);
+        var turn = await turnB.Task.WaitAsync(timeout);
+        turn.PartyId.Should().Be(id);
+        turn.Turn.Should().Be(1);
+        turn.RoomType.Should().Be(RoomType.Combat);
+        turn.HpChange.Should().Be(-2);
+        turn.Hp.Should().Be(18);
+        turn.Gold.Should().Be(0);
+        turn.FlavorEvent.Should().NotBeNullOrWhiteSpace();
+
+        var state = await stateB.Task.WaitAsync(timeout);
+        state.PartyId.Should().Be(id);
+        state.Name.Should().Be("Heroes");
+        state.Hp.Should().Be(18);
+        state.Turn.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Explore_DoesNotNotifyConnectionsOfOtherParties()
+    {
+        using var f = WithFixedRoller();
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+        var otherId = await CreatePartyAsync(client);
+
+        await using var same = Connect(f);
+        await using var other = Connect(f);
+        var sameGot = new TaskCompletionSource<ExploreResponse>();
+        var otherCount = 0;
+        same.On<ExploreResponse>("TurnResolved", t => sameGot.TrySetResult(t));
+        other.On<ExploreResponse>("TurnResolved", _ => Interlocked.Increment(ref otherCount));
+        other.On<GetPartyStateResponse>("PartyUpdated", _ => Interlocked.Increment(ref otherCount));
+        await same.StartAsync();
+        await other.StartAsync();
+        await same.InvokeAsync("JoinParty", id);
+        await other.InvokeAsync("JoinParty", otherId);
+
+        (await client.PostAsync($"/api/parties/{id}/explore", null)).EnsureSuccessStatusCode();
+
+        await sameGot.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.Delay(300);
+        otherCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task JoinParty_WithUnknownParty_Fails()
+    {
+        await using var conn = Connect(factory);
+        await conn.StartAsync();
+
+        var act = () => conn.InvokeAsync("JoinParty", Guid.NewGuid());
+
+        await act.Should().ThrowAsync<HubException>();
+    }
+
+    [Fact]
+    public async Task LeaveParty_StopsDelivery()
+    {
+        using var f = WithFixedRoller();
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+        await using var conn = Connect(f);
+        var count = 0;
+        conn.On<ExploreResponse>("TurnResolved", _ => Interlocked.Increment(ref count));
+        await conn.StartAsync();
+        await conn.InvokeAsync("JoinParty", id);
+        await conn.InvokeAsync("LeaveParty", id);
+
+        (await client.PostAsync($"/api/parties/{id}/explore", null)).EnsureSuccessStatusCode();
+
+        await Task.Delay(300);
+        count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Explore_StillSucceeds_WhenNotifierThrows()
+    {
+        using var f = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
+        {
+            s.AddSingleton<IRoller>(new FixedRoller(0));
+            s.AddSingleton<IPartyNotifier>(new ThrowingNotifier());
+        }));
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+
+        var response = await client.PostAsync($"/api/parties/{id}/explore", null);
+
+        response.IsSuccessStatusCode.Should().BeTrue();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        doc.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
+    }
+}

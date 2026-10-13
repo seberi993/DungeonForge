@@ -1,9 +1,16 @@
+using DungeonForge.Api.Features.Parties.GetPartyState;
+using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
-public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller, IDungeonNarrator narrator)
+public sealed class ExploreDungeonHandler(
+    IMemoryCache cache,
+    IRoller roller,
+    IDungeonNarrator narrator,
+    IPartyNotifier notifier,
+    ILogger<ExploreDungeonHandler> logger)
 {
     // Static: guards the cache read-modify-write regardless of handler lifetime (single-instance host).
     private static readonly Lock Gate = new();
@@ -12,30 +19,59 @@ public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller, ID
 
     public async Task<ExploreResult> HandleAsync(Guid id, CancellationToken ct = default)
     {
-        var (result, context) = Mutate(id);
-        if (result.Response is not { } response || context is null)
+        var (result, context, party) = Mutate(id);
+        if (result.Response is not { } response || context is null || party is null)
         {
             return result;
         }
 
         // Narration is awaited outside the lock; it never influences game state.
         var flavor = await narrator.NarrateAsync(context, ct);
-        return result with { Response = response with { FlavorEvent = flavor } };
+        response = response with { FlavorEvent = flavor };
+
+        await BroadcastAsync(response, party);
+        return result with { Response = response };
     }
 
-    private (ExploreResult Result, NarrationContext? Context) Mutate(Guid id)
+    // Outside the lock; a broadcast failure must never fail the explore request.
+    // CancellationToken.None: an actor disconnect must not drop the broadcast to the rest of the party.
+    // Separate try/catch per message so one failure does not skip the other.
+    private async Task BroadcastAsync(ExploreResponse response, Party party)
+    {
+        try
+        {
+            await notifier.TurnResolvedAsync(response, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to broadcast TurnResolved for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
+        }
+
+        try
+        {
+            await notifier.PartyUpdatedAsync(
+                new GetPartyStateResponse(party.Id, party.Name, party.Members, party.CreatedAt, party.Hp, party.Gold, party.Turn),
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to broadcast PartyUpdated for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
+        }
+    }
+
+    private (ExploreResult Result, NarrationContext? Context, Party? Party) Mutate(Guid id)
     {
         var key = PartyCache.Key(id);
         lock (Gate)
         {
             if (!cache.TryGetValue(key, out Party? party) || party is null)
             {
-                return (new ExploreResult(ExploreStatus.NotFound), null);
+                return (new ExploreResult(ExploreStatus.NotFound), null, null);
             }
 
             if (party.Hp <= 0)
             {
-                return (new ExploreResult(ExploreStatus.Defeated), null);
+                return (new ExploreResult(ExploreStatus.Defeated), null, null);
             }
 
             var room = roller.Next(2) == 0 ? RoomType.Combat : RoomType.Chest;
@@ -52,7 +88,7 @@ public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller, ID
                 FallbackFlavor.Pick(room, party.Turn), updated.Hp, updated.Gold);
             var context = new NarrationContext(room, party.Name, party.Turn, hp <= WoundedHpThreshold);
 
-            return (new ExploreResult(ExploreStatus.Explored, response), context);
+            return (new ExploreResult(ExploreStatus.Explored, response), context, updated);
         }
     }
 }

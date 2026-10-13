@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DungeonForge.Web.Tests;
 
-internal sealed class FakeHandler(HttpStatusCode status, string body = "") : HttpMessageHandler
+internal sealed class FakeHandler(HttpStatusCode status, string body = "", Func<string>? bodyFactory = null) : HttpMessageHandler
 {
     public HttpRequestMessage? LastRequest { get; private set; }
     public string? LastRequestBody { get; private set; }
@@ -14,7 +14,7 @@ internal sealed class FakeHandler(HttpStatusCode status, string body = "") : Htt
         LastRequestBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         return new HttpResponseMessage(status)
         {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
+            Content = new StringContent(bodyFactory?.Invoke() ?? body, Encoding.UTF8, "application/json")
         };
     }
 
