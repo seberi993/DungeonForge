@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+TestResults/
+*.log
+.env
+appsettings.*.local.json
+**/secrets.json
+.claude/settings.local.json
+node_modules/
+publish/

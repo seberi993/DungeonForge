@@ -1,0 +1,27 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using DungeonForge.Api.Endpoints;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Free-tier cap for single-instance host: every cache.Set must specify Size.
+builder.Services.AddMemoryCache(o => o.SizeLimit = 1024);
+
+// JSON contract is camelCase end-to-end (matches Blazor/System.Text.Json defaults).
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    o.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+    o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+});
+
+builder.Services.AddEndpoints(typeof(Program).Assembly);
+
+var app = builder.Build();
+
+app.MapEndpoints();
+
+app.Run();
+
+public partial class Program;
