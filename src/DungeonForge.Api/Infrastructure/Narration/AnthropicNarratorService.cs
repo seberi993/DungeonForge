@@ -54,7 +54,7 @@ public sealed class AnthropicNarratorService(
         {
             throw;
         }
-        catch (Exception ex) when (ex is OperationCanceledException or HttpRequestException or JsonException or NotSupportedException)
+        catch (Exception ex)
         {
             logger.LogWarning("Narration call failed ({Reason}); using fallback.", ex.GetType().Name);
         }
@@ -66,8 +66,43 @@ public sealed class AnthropicNarratorService(
     {
         var room = ctx.Room == RoomType.Combat ? "a combat encounter" : "a treasure chest";
         var mood = ctx.PartyWounded ? "battered and weary" : "healthy and confident";
-        var prompt = $"Party: {ctx.PartyName}. Scene: {room}. Mood: the party is {mood}.";
+        var prompt = $"Party: {SanitizePartyName(ctx.PartyName)}. Scene: {room}. Mood: the party is {mood}.";
         return new MessageRequest(_options.Model, MaxTokens, SystemPrompt, [new RequestMessage("user", prompt)]);
+    }
+
+    private const int MaxPartyNameLength = 40;
+    private const string NeutralPartyName = "the party";
+
+    private static string SanitizePartyName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return NeutralPartyName;
+        }
+
+        var sb = new System.Text.StringBuilder(name.Length);
+        foreach (var c in name)
+        {
+            if (char.IsWhiteSpace(c) || char.IsControl(c))
+            {
+                if (sb.Length > 0 && sb[^1] != ' ')
+                {
+                    sb.Append(' ');
+                }
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+
+        var cleaned = sb.ToString().Trim();
+        if (cleaned.Length > MaxPartyNameLength)
+        {
+            cleaned = cleaned[..MaxPartyNameLength].TrimEnd();
+        }
+
+        return cleaned.Length == 0 ? NeutralPartyName : cleaned;
     }
 
     private sealed record MessageRequest(
