@@ -2,8 +2,6 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.CreateParty;
 
-internal sealed record Party(Guid Id, string Name, IReadOnlyList<string> Members, DateTimeOffset CreatedAt);
-
 public sealed class CreatePartyHandler(IMemoryCache cache, TimeProvider time)
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromHours(2);
