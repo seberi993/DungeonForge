@@ -10,7 +10,7 @@ public class JoinByCodeTests(WebApplicationFactory<Program> factory) : IClassFix
 {
     private async Task<(Guid Id, string Code)> CreateAsync(HttpClient client, string name = "Heroes")
     {
-        var created = await client.PostAsJsonAsync("/api/parties", new { name });
+        var created = await PartyTestData.PostPartyAsync(client, name);
         using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
         return (doc.RootElement.GetProperty("partyId").GetGuid(), doc.RootElement.GetProperty("inviteCode").GetString()!);
     }

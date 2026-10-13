@@ -13,10 +13,20 @@
     <h1>Dungeon</h1>
     <div class="stats">
         <span id="stat-name">Party: @Session.Name</span>
-        <span id="stat-hp">HP: @Session.Hp</span>
+        <span id="stat-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
         <span id="stat-gold">Gold: @Session.Gold</span>
         <span id="stat-turn">Turn: @Session.Turn</span>
     </div>
+
+    <ul id="members" class="members">
+        @for (var i = 0; i < Session.Members.Count; i++)
+        {
+            var member = Session.Members[i];
+            <li id="member-@i" class="member@(member.IsDefeated ? " defeated-member" : "")">
+                <span class="member-name">@member.Name</span> (@member.Class) <span class="member-hp">@member.Hp/@member.MaxHp</span>
+            </li>
+        }
+    </ul>
 
     <div class="card invite">
         <label for="invite-code">Invite code (share with friends so they can join)</label>
@@ -50,7 +60,7 @@
         @foreach (var entry in Session.Log)
         {
             <div class="log-entry">
-                <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) HP @Signed(entry.HpChange), Gold +@entry.GoldFound
+                <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) @Describe(entry)
                 <div>@entry.FlavorEvent</div>
             </div>
         }
@@ -180,5 +190,7 @@
 
     private static string RoomLabel(RoomType type) => type == RoomType.Chest ? "chest" : "combat";
 
-    private static string Signed(int value) => value > 0 ? $"+{value}" : value.ToString();
+    private static string Describe(LogEntry entry) => entry.RoomType == RoomType.Combat
+        ? (entry.TargetName is null ? "No damage" : $"{entry.TargetName} took {entry.Damage} damage")
+        : $"Gold +{entry.GoldFound}";
 }

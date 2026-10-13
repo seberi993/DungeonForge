@@ -30,10 +30,42 @@ public class PartyLobbyTests : TestContext
     }
 
     [Fact]
+    public void Create_PostsRosterRowsWithChosenClasses()
+    {
+        var handler = new FakeHandler(HttpStatusCode.Created,
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[],"createdAt":"2026-01-01T00:00:00+00:00"}""");
+        var cut = Render(handler);
+
+        cut.Find("input#party-name").Change("Heroes");
+        cut.Find("input#member-name-0").Change("Conan");
+        cut.Find("button#add-member").Click();
+        cut.Find("input#member-name-1").Change("Merlin");
+        cut.Find("select#member-class-1").Change("Mage");
+        cut.Find("button#create-party").Click();
+
+        cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
+        handler.LastRequestBody.Should().Contain("\"members\":[{\"name\":\"Conan\",\"class\":\"warrior\"},{\"name\":\"Merlin\",\"class\":\"mage\"}]");
+    }
+
+    [Fact]
+    public void RosterButtons_AddAndRemoveRows()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.Created));
+        cut.FindAll(".roster-row").Should().HaveCount(1);
+        cut.Find("button#remove-member").HasAttribute("disabled").Should().BeTrue();
+
+        cut.Find("button#add-member").Click();
+        cut.FindAll(".roster-row").Should().HaveCount(2);
+
+        cut.Find("button#remove-member").Click();
+        cut.FindAll(".roster-row").Should().HaveCount(1);
+    }
+
+    [Fact]
     public void Create_Success_StoresSessionAndNavigatesToDungeon()
     {
         var cut = Render(new FakeHandler(HttpStatusCode.Created,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A"],"createdAt":"2026-01-01T00:00:00+00:00"}"""));
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":30,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00"}"""));
 
         cut.Find("input#party-name").Change("Heroes");
         cut.Find("button#create-party").Click();
@@ -70,7 +102,7 @@ public class PartyLobbyTests : TestContext
     public void Join_Success_LoadsStateAndNavigatesToDungeon()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A"],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3}""");
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false}""");
         var cut = Render(handler);
 
         cut.Find("input#join-id").Change(Id.ToString());
@@ -79,7 +111,7 @@ public class PartyLobbyTests : TestContext
         cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
         _session.PartyId.Should().Be(Id);
-        _session.Hp.Should().Be(9);
+        _session.TotalHp.Should().Be(9);
         _session.Turn.Should().Be(3);
     }
 
@@ -87,7 +119,7 @@ public class PartyLobbyTests : TestContext
     public void Join_ByInviteCode_UsesCodeEndpointAndStoresCode()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3,"inviteCode":"K7F2-9QXM"}""");
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false,"inviteCode":"K7F2-9QXM"}""");
         var cut = Render(handler);
 
         cut.Find("input#join-id").Change(" k7f2-9qxm ");

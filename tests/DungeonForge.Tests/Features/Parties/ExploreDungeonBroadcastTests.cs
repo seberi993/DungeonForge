@@ -52,9 +52,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
     {
         var derived = factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0))));
         var client = derived.CreateClient();
-        var created = await client.PostAsJsonAsync("/api/parties", new { name = "Heroes" });
-        using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        var id = doc.RootElement.GetProperty("partyId").GetGuid();
+        var id = await PartyTestData.CreatePartyAsync(client);
         var handler = new ExploreDungeonHandler(
             derived.Services.GetRequiredService<IMemoryCache>(),
             new FixedRoller(0),

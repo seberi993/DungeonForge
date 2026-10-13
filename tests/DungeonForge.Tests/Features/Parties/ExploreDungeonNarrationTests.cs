@@ -37,9 +37,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
             s.AddSingleton<IDungeonNarrator>(narrator);
         }));
         var client = derived.CreateClient();
-        var created = await client.PostAsJsonAsync("/api/parties", new { name = "Heroes" });
-        using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        var id = createdDoc.RootElement.GetProperty("partyId").GetGuid();
+        var id = await PartyTestData.CreatePartyAsync(client);
 
         var response = await client.PostAsync($"/api/parties/{id}/explore", null);
 
@@ -47,8 +45,9 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var root = doc.RootElement;
         root.GetProperty("flavorEvent").GetString().Should().Be("The dark hums. Something watches.");
         root.GetProperty("roomType").GetString().Should().Be("combat");
-        root.GetProperty("hpChange").GetInt32().Should().Be(-2);
-        root.GetProperty("hp").GetInt32().Should().Be(18);
+        root.GetProperty("targetName").GetString().Should().Be("Conan");
+        root.GetProperty("damage").GetInt32().Should().Be(2);
+        root.GetProperty("isPartyDefeated").GetBoolean().Should().BeFalse();
         root.GetProperty("gold").GetInt32().Should().Be(0);
         narrator.Seen.Should().NotBeNull();
         narrator.Seen!.Room.Should().Be(RoomType.Combat);

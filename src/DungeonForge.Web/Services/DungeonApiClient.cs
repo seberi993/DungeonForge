@@ -13,8 +13,8 @@ public sealed class DungeonApiClient(HttpClient http)
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
-    public Task<ApiResult<PartyResponse>> CreatePartyAsync(string name, CancellationToken ct = default) =>
-        SendAsync<PartyResponse>(() => http.PostAsJsonAsync("/api/parties", new CreatePartyRequest(name), Json, ct), ct);
+    public Task<ApiResult<PartyResponse>> CreatePartyAsync(string name, IReadOnlyList<MemberRequest> members, CancellationToken ct = default) =>
+        SendAsync<PartyResponse>(() => http.PostAsJsonAsync("/api/parties", new CreatePartyRequest(name, members), Json, ct), ct);
 
     public Task<ApiResult<PartyStateDto>> GetPartyAsync(Guid partyId, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/{partyId}", ct), ct);

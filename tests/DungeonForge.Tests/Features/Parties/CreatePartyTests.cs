@@ -14,17 +14,38 @@ public class CreatePartyTests(WebApplicationFactory<Program> factory) : IClassFi
         JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
     [Fact]
-    public async Task Post_ValidName_ReturnsOkWithParty()
+    public async Task Post_ValidNameAndMembers_ReturnsOkWithPartyAndMemberDetails()
     {
-        var response = await factory.CreateClient().PostAsJsonAsync("/api/parties", new { name = "Heroes" });
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient());
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = await ReadJson(response);
         var root = doc.RootElement;
         root.GetProperty("partyId").GetGuid().Should().NotBeEmpty();
         root.GetProperty("name").GetString().Should().Be("Heroes");
-        root.GetProperty("members").GetArrayLength().Should().Be(0);
         root.GetProperty("createdAt").GetDateTimeOffset().Should().NotBe(default);
+
+        var members = root.GetProperty("members");
+        members.GetArrayLength().Should().Be(3);
+        var warrior = members[0];
+        warrior.GetProperty("name").GetString().Should().Be("Conan");
+        warrior.GetProperty("class").GetString().Should().Be("warrior");
+        warrior.GetProperty("hp").GetInt32().Should().Be(30);
+        warrior.GetProperty("maxHp").GetInt32().Should().Be(30);
+        warrior.GetProperty("isDefeated").GetBoolean().Should().BeFalse();
+        members[1].GetProperty("class").GetString().Should().Be("mage");
+        members[1].GetProperty("maxHp").GetInt32().Should().Be(16);
+        members[2].GetProperty("class").GetString().Should().Be("priest");
+        members[2].GetProperty("maxHp").GetInt32().Should().Be(20);
+    }
+
+    [Fact]
+    public async Task Post_ValidParty_DoesNotExposePartyLevelHp()
+    {
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient());
+
+        using var doc = await ReadJson(response);
+        doc.RootElement.TryGetProperty("hp", out _).Should().BeFalse();
     }
 
     [Fact]
@@ -32,17 +53,17 @@ public class CreatePartyTests(WebApplicationFactory<Program> factory) : IClassFi
     {
         var client = factory.CreateClient();
 
-        using var first = await ReadJson(await client.PostAsJsonAsync("/api/parties", new { name = "A" }));
-        using var second = await ReadJson(await client.PostAsJsonAsync("/api/parties", new { name = "B" }));
+        using var first = await ReadJson(await PartyTestData.PostPartyAsync(client, "A"));
+        using var second = await ReadJson(await PartyTestData.PostPartyAsync(client, "B"));
 
         first.RootElement.GetProperty("partyId").GetGuid()
             .Should().NotBe(second.RootElement.GetProperty("partyId").GetGuid());
     }
 
     [Fact]
-    public async Task Post_ValidName_StoresPartyInMemoryCache()
+    public async Task Post_ValidParty_StoresPartyInMemoryCache()
     {
-        var response = await factory.CreateClient().PostAsJsonAsync("/api/parties", new { name = "Heroes" });
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient());
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = await ReadJson(response);
@@ -60,9 +81,73 @@ public class CreatePartyTests(WebApplicationFactory<Program> factory) : IClassFi
         var cache = factory.Services.GetRequiredService<IMemoryCache>();
         var before = (cache as MemoryCache)?.Count ?? 0;
 
-        var response = await factory.CreateClient().PostAsJsonAsync("/api/parties", new { name });
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient(), name);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         ((cache as MemoryCache)?.Count ?? 0).Should().Be(before);
+    }
+
+    [Fact]
+    public async Task Post_MembersMissing_ReturnsBadRequestAndCachesNothing()
+    {
+        var cache = factory.Services.GetRequiredService<IMemoryCache>();
+        var before = (cache as MemoryCache)?.Count ?? 0;
+
+        var response = await factory.CreateClient().PostAsJsonAsync("/api/parties", new { name = "Heroes" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        ((cache as MemoryCache)?.Count ?? 0).Should().Be(before);
+    }
+
+    [Fact]
+    public async Task Post_EmptyMembers_ReturnsBadRequestAndCachesNothing()
+    {
+        var cache = factory.Services.GetRequiredService<IMemoryCache>();
+        var before = (cache as MemoryCache)?.Count ?? 0;
+
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient(), members: []);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        ((cache as MemoryCache)?.Count ?? 0).Should().Be(before);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Post_BlankMemberName_ReturnsBadRequest(string memberName)
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = memberName, @class = "warrior" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Post_MemberNameMissing_ReturnsBadRequest()
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { @class = "warrior" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Post_MemberClassMissing_ReturnsBadRequest()
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = "Conan" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("dragon")]
+    [InlineData("")]
+    public async Task Post_UnknownMemberClass_ReturnsBadRequest(string cls)
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = "Conan", @class = cls }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

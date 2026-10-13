@@ -11,6 +11,23 @@
 <div class="card">
     <label for="party-name">Party name</label>
     <input id="party-name" @bind="_name" maxlength="50" disabled="@_busy" />
+    <div id="roster" class="roster">
+        @for (var i = 0; i < _roster.Count; i++)
+        {
+            var row = _roster[i];
+            <div class="roster-row">
+                <input id="member-name-@i" @bind="row.Name" maxlength="30" placeholder="Hero name" disabled="@_busy" />
+                <select id="member-class-@i" @bind="row.Class" disabled="@_busy">
+                    @foreach (var c in Enum.GetValues<CharacterClass>())
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+        }
+        <button id="add-member" type="button" @onclick="AddMember" disabled="@(_busy || _roster.Count >= MaxRoster)">Add Member</button>
+        <button id="remove-member" type="button" @onclick="RemoveMember" disabled="@(_busy || _roster.Count <= 1)">Remove Member</button>
+    </div>
     <button id="create-party" @onclick="CreateAsync" disabled="@_busy">Create Party</button>
     @if (_error is not null)
     {
@@ -66,6 +83,20 @@
         }
     }
 
+    private const int MaxRoster = 6;
+
+    private sealed class RosterRow
+    {
+        public string Name { get; set; } = "";
+        public CharacterClass Class { get; set; } = CharacterClass.Warrior;
+    }
+
+    private readonly List<RosterRow> _roster = [new()];
+
+    private void AddMember() { if (_roster.Count < MaxRoster) _roster.Add(new()); }
+
+    private void RemoveMember() { if (_roster.Count > 1) _roster.RemoveAt(_roster.Count - 1); }
+
     private string _name = "";
     private string? _error;
     private bool _busy;
@@ -76,7 +107,7 @@
         _error = null;
         try
         {
-            var result = await Api.CreatePartyAsync(_name);
+            var result = await Api.CreatePartyAsync(_name, _roster.Select(r => new MemberRequest(r.Name, r.Class)).ToList());
             if (result.IsSuccess)
             {
                 Session.Start(result.Value!);

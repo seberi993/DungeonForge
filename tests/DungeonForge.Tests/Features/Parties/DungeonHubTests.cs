@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -47,12 +48,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
             })
             .Build();
 
-    private static async Task<Guid> CreatePartyAsync(HttpClient client)
-    {
-        var created = await client.PostAsJsonAsync("/api/parties", new { name = "Heroes" });
-        using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        return doc.RootElement.GetProperty("partyId").GetGuid();
-    }
+    private static Task<Guid> CreatePartyAsync(HttpClient client) => PartyTestData.CreatePartyAsync(client);
 
     [Fact]
     public async Task Explore_BroadcastsTurnResolvedAndPartyUpdated_ToEveryConnectionInTheParty()
@@ -80,16 +76,23 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         turn.PartyId.Should().Be(id);
         turn.Turn.Should().Be(1);
         turn.RoomType.Should().Be(RoomType.Combat);
-        turn.HpChange.Should().Be(-2);
-        turn.Hp.Should().Be(18);
+        turn.TargetName.Should().Be("Conan");
+        turn.Damage.Should().Be(2);
+        turn.IsPartyDefeated.Should().BeFalse();
         turn.Gold.Should().Be(0);
         turn.FlavorEvent.Should().NotBeNullOrWhiteSpace();
 
         var state = await stateB.Task.WaitAsync(timeout);
         state.PartyId.Should().Be(id);
         state.Name.Should().Be("Heroes");
-        state.Hp.Should().Be(18);
         state.Turn.Should().Be(1);
+        state.IsPartyDefeated.Should().BeFalse();
+        state.Members.Should().HaveCount(3);
+        state.Members[0].Name.Should().Be("Conan");
+        state.Members[0].Class.Should().Be(CharacterClass.Warrior);
+        state.Members[0].Hp.Should().Be(28);
+        state.Members[0].MaxHp.Should().Be(30);
+        state.Members[0].IsDefeated.Should().BeFalse();
     }
 
     [Fact]

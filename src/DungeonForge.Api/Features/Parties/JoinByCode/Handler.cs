@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -10,6 +11,6 @@ public sealed class JoinByCodeHandler(IMemoryCache cache)
         && cache.TryGetValue(PartyCache.InviteKey(normalized), out Guid id)
         && cache.TryGetValue(PartyCache.Key(id), out Party? party)
         && party is not null
-            ? GetPartyStateHandler.ToResponse(party)
+            ? PartyMapping.ToResponse(party.Snapshot())
             : null;
 }

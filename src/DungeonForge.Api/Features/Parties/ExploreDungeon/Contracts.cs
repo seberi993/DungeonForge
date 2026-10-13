@@ -10,11 +10,12 @@ public sealed record ExploreResponse(
     Guid PartyId,
     int Turn,
     RoomType RoomType,
-    int HpChange,
+    string? TargetName,
+    int Damage,
     int GoldFound,
     string FlavorEvent,
-    int Hp,
-    int Gold);
+    int Gold,
+    bool IsPartyDefeated);
 
 public enum ExploreStatus
 {

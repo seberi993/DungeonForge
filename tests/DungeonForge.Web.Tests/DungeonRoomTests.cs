@@ -25,14 +25,19 @@ public class DungeonRoomTests : TestContext
     private IRenderedComponent<DungeonRoom> Render(FakeHandler handler, bool withParty = true)
     {
         Services.AddSingleton<IDungeonHubClient>(_hub);
-        if (withParty) _session.Start(new PartyResponse(Id, "Heroes", ["A"], DateTimeOffset.UtcNow, "K7F2-9QXM"));
+        if (withParty) _session.Start(new PartyResponse(Id, "Heroes",
+            [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
+            DateTimeOffset.UtcNow, "K7F2-9QXM"));
         Services.AddSingleton(_session);
         Services.AddSingleton(new DungeonApiClient(handler.CreateClient()));
         return RenderComponent<DungeonRoom>();
     }
 
-    private static string ExploreJson(int turn, string room, int hpChange, int gold, string flavor, int hp, int totalGold) =>
-        $$"""{"partyId":"{{Id}}","turn":{{turn}},"roomType":"{{room}}","hpChange":{{hpChange}},"goldFound":{{gold}},"flavorEvent":"{{flavor}}","hp":{{hp}},"gold":{{totalGold}}}""";
+    private static string ExploreJson(int turn, string room, string? target, int damage, int gold, string flavor, int totalGold, bool defeated = false) =>
+        $$"""{"partyId":"{{Id}}","turn":{{turn}},"roomType":"{{room}}","targetName":{{(target is null ? "null" : $"\"{target}\"")}},"damage":{{damage}},"goldFound":{{gold}},"flavorEvent":"{{flavor}}","gold":{{totalGold}},"isPartyDefeated":{{(defeated ? "true" : "false")}}}""";
+
+    private static ExploreResponse Turn(int turn, RoomType room, string? target, int damage, int gold, string flavor, int totalGold, bool defeated = false) =>
+        new(Id, turn, room, target, damage, gold, flavor, totalGold, defeated);
 
     [Fact]
     public void NoSession_RedirectsToLobby()
@@ -46,7 +51,10 @@ public class DungeonRoomTests : TestContext
     {
         var cut = Render(new FakeHandler(HttpStatusCode.OK));
         cut.Find("#stat-name").TextContent.Should().Contain("Heroes");
-        cut.Find("#stat-hp").TextContent.Should().Contain(GameSession.StartingHp.ToString());
+        cut.Find("#stat-hp").TextContent.Should().Contain("46/46");
+        cut.FindAll("#members li").Should().HaveCount(2);
+        cut.Find("#member-0").TextContent.Should().Contain("Conan").And.Contain("30/30");
+        cut.Find("#member-1").TextContent.Should().Contain("Merlin").And.Contain("16/16");
         cut.Find("#stat-gold").TextContent.Should().Contain("0");
         cut.Find("#stat-turn").TextContent.Should().Contain("0");
         var button = cut.Find("button#explore");
@@ -72,23 +80,35 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void Explore_Success_UpdatesStatsAndAppendsLogEntry()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", -2, 15, "Shiny chest", 18, 15)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 15, "Shiny chest", 15)));
 
         cut.Find("button#explore").Click();
 
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-        cut.Find("#stat-hp").TextContent.Should().Contain("18");
-        cut.Find("#stat-gold").TextContent.Should().Contain("15");
+                cut.Find("#stat-gold").TextContent.Should().Contain("15");
         cut.Find("#stat-turn").TextContent.Should().Contain("1");
         var entry = cut.Find(".log-entry").TextContent;
-        entry.Should().Contain("Shiny chest").And.Contain("chest").And.Contain("-2").And.Contain("15");
+        entry.Should().Contain("Shiny chest").And.Contain("chest").And.Contain("15");
+    }
+
+    [Fact]
+    public void Explore_Combat_ReducesTargetMemberHpAndLogsDamage()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 4, 0, "Clash", 0)));
+
+        cut.Find("button#explore").Click();
+
+        cut.WaitForAssertion(() => cut.Find("#member-0").TextContent.Should().Contain("26/30"));
+        cut.Find("#member-1").TextContent.Should().Contain("16/16");
+        cut.Find("#stat-hp").TextContent.Should().Contain("42/46");
+        cut.Find(".log-entry").TextContent.Should().Contain("Conan took 4 damage");
     }
 
     [Fact]
     public void Explore_Twice_AppendsEntries()
     {
         var turn = 0;
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, bodyFactory: () => ExploreJson(++turn, "combat", -1, 0, "Step", 19, 0)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, bodyFactory: () => ExploreJson(++turn, "combat", "Conan", 1, 0, "Step", 0)));
         cut.Find("button#explore").Click();
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
         cut.Find("button#explore").Click();
@@ -98,8 +118,8 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void BroadcastThenHttp_SameTurn_LogsOnce()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", 0, 7, "Same", 20, 7)));
-        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Same", 20, 7)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 7, "Same", 7)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Same", 7)));
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
 
         cut.Find("button#explore").Click();
@@ -111,22 +131,22 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void StaleHttpTurn_DoesNotRegressState()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", -9, 0, "Old", 11, 0)));
-        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 2, RoomType.Chest, 0, 5, "New", 20, 5)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 9, 0, "Old", 0)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(2, RoomType.Chest, null, 0, 5, "New", 5)));
         cut.WaitForAssertion(() => cut.Find("#stat-turn").TextContent.Should().Contain("2"));
 
         cut.Find("button#explore").Click();
 
         cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse());
         _session.Turn.Should().Be(2);
-        _session.Hp.Should().Be(20);
+        _session.TotalHp.Should().Be(46);
         cut.FindAll(".log-entry").Should().HaveCount(1);
     }
 
     [Fact]
-    public void Explore_HpZero_ShowsDefeatedAndDisablesExplore()
+    public void Explore_PartyDefeated_ShowsDefeatedAndDisablesExplore()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(3, "combat", -5, 0, "Slain", 0, 4)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(3, "combat", "Merlin", 5, 0, "Slain", 4, defeated: true)));
 
         cut.Find("button#explore").Click();
 
@@ -194,7 +214,7 @@ public class DungeonRoomTests : TestContext
     {
         var cut = Render(new FakeHandler(HttpStatusCode.OK));
 
-        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Remote loot", 20, 7)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote loot", 7)));
 
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
         cut.Find("#stat-gold").TextContent.Should().Contain("7");
@@ -205,20 +225,20 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void DuplicateTurn_IsNotAppliedTwice()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", 0, 7, "Mine", 20, 7)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 7, "Mine", 7)));
         cut.Find("button#explore").Click();
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
 
-        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Chest, 0, 7, "Mine", 20, 7)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Mine", 7)));
 
         cut.FindAll(".log-entry").Should().HaveCount(1);
     }
 
     [Fact]
-    public void RemoteTurn_HpZero_ShowsDefeated()
+    public void RemoteTurn_PartyDefeated_ShowsDefeated()
     {
         var cut = Render(new FakeHandler(HttpStatusCode.OK));
-        cut.InvokeAsync(() => _hub.RaiseTurn(new ExploreResponse(Id, 1, RoomType.Combat, -20, 0, "Slain", 0, 0)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Combat, "Conan", 20, 0, "Slain", 0, defeated: true)));
         cut.WaitForAssertion(() => cut.Find(".defeated"));
         cut.Find("button#explore").HasAttribute("disabled").Should().BeTrue();
     }
@@ -227,7 +247,7 @@ public class DungeonRoomTests : TestContext
     public void ConnectFailure_ShowsOfflineNoticeAndExploreStillWorks()
     {
         _hub = new FakeDungeonHubClient { FailConnect = true };
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", -1, 0, "Hit", 19, 0)));
+        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 1, 0, "Hit", 0)));
 
         cut.WaitForAssertion(() => cut.Find(".offline").TextContent.Should().Contain("offline"));
         cut.Find("button#explore").Click();

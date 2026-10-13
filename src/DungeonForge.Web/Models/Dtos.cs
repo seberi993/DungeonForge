@@ -6,28 +6,44 @@ public enum RoomType
     Chest
 }
 
-public sealed record CreatePartyRequest(string Name);
+public enum CharacterClass
+{
+    Warrior,
+    Mage,
+    Druid,
+    Paladin,
+    Priest,
+    Necromancer,
+    Bard
+}
 
-public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<string> Members, DateTimeOffset CreatedAt, string InviteCode = "");
+public sealed record MemberRequest(string Name, CharacterClass Class);
+
+public sealed record CreatePartyRequest(string Name, IReadOnlyList<MemberRequest> Members);
+
+public sealed record MemberDto(string Name, CharacterClass Class, int Hp, int MaxHp, bool IsDefeated);
+
+public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<MemberDto> Members, DateTimeOffset CreatedAt, string InviteCode = "");
 
 public sealed record ExploreResponse(
     Guid PartyId,
     int Turn,
     RoomType RoomType,
-    int HpChange,
+    string? TargetName,
+    int Damage,
     int GoldFound,
     string FlavorEvent,
-    int Hp,
-    int Gold);
+    int Gold,
+    bool IsPartyDefeated);
 
-public sealed record LogEntry(int Turn, RoomType RoomType, int HpChange, int GoldFound, string FlavorEvent);
+public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent);
 
 public sealed record PartyStateDto(
     Guid PartyId,
     string Name,
-    IReadOnlyList<string> Members,
+    IReadOnlyList<MemberDto> Members,
     DateTimeOffset CreatedAt,
-    int Hp,
     int Gold,
     int Turn,
+    bool IsPartyDefeated,
     string InviteCode = "");

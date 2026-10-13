@@ -8,36 +8,39 @@ namespace DungeonForge.Web.Tests;
 public class DungeonApiClientTests
 {
     private static readonly Guid Id = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly IReadOnlyList<MemberRequest> Roster = [new("Conan", CharacterClass.Warrior)];
 
     [Fact]
     public async Task CreateParty_Success_ReturnsPartyAndPostsCamelCaseBody()
     {
         var handler = new FakeHandler(HttpStatusCode.Created,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A","B"],"createdAt":"2026-01-01T00:00:00+00:00"}""");
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":30,"maxHp":30,"isDefeated":false},{"name":"B","class":"mage","hp":16,"maxHp":16,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00"}""");
         var sut = new DungeonApiClient(handler.CreateClient());
 
-        var result = await sut.CreatePartyAsync("Heroes");
+        var result = await sut.CreatePartyAsync("Heroes", Roster);
 
         result.Status.Should().Be(ApiStatus.Success);
         result.Value!.PartyId.Should().Be(Id);
         result.Value.Name.Should().Be("Heroes");
-        result.Value.Members.Should().Equal("A", "B");
+        result.Value.Members.Select(m => m.Name).Should().Equal("A", "B");
+        result.Value.Members[1].Class.Should().Be(CharacterClass.Mage);
+        result.Value.Members[1].MaxHp.Should().Be(16);
         handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/api/parties");
-        handler.LastRequestBody.Should().Contain("\"name\":\"Heroes\"");
+        handler.LastRequestBody.Should().Contain("\"name\":\"Heroes\"").And.Contain("\"members\":[{\"name\":\"Conan\",\"class\":\"warrior\"}]");
     }
 
     [Fact]
     public async Task GetParty_Success_ReturnsState()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":["A"],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3}""");
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false}""");
         var sut = new DungeonApiClient(handler.CreateClient());
 
         var result = await sut.GetPartyAsync(Id);
 
         result.Status.Should().Be(ApiStatus.Success);
-        result.Value!.Hp.Should().Be(9);
+        result.Value!.Members[0].Hp.Should().Be(9);
         result.Value.Turn.Should().Be(3);
         handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
@@ -50,7 +53,7 @@ public class DungeonApiClientTests
             """{"title":"One or more validation errors occurred.","errors":{"name":["Name is required."]}}""");
         var sut = new DungeonApiClient(handler.CreateClient());
 
-        var result = await sut.CreatePartyAsync("");
+        var result = await sut.CreatePartyAsync("", Roster);
 
         result.Status.Should().Be(ApiStatus.ValidationError);
         result.Value.Should().BeNull();
@@ -62,7 +65,7 @@ public class DungeonApiClientTests
     {
         var sut = new DungeonApiClient(new FakeHandler(HttpStatusCode.BadRequest, "nope").CreateClient());
 
-        var result = await sut.CreatePartyAsync("");
+        var result = await sut.CreatePartyAsync("", Roster);
 
         result.Status.Should().Be(ApiStatus.ValidationError);
         result.Error.Should().NotBeNullOrWhiteSpace();
@@ -72,17 +75,18 @@ public class DungeonApiClientTests
     public async Task Explore_Success_DeserializesCamelCaseEnum()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":1,"roomType":"chest","hpChange":-3,"goldFound":12,"flavorEvent":"A chest!","hp":17,"gold":12}""");
+            $$"""{"partyId":"{{Id}}","turn":1,"roomType":"chest","targetName":"A","damage":3,"goldFound":12,"flavorEvent":"A chest!","gold":12,"isPartyDefeated":false}""");
         var sut = new DungeonApiClient(handler.CreateClient());
 
         var result = await sut.ExploreAsync(Id);
 
         result.Status.Should().Be(ApiStatus.Success);
         result.Value!.RoomType.Should().Be(RoomType.Chest);
-        result.Value.HpChange.Should().Be(-3);
+        result.Value.TargetName.Should().Be("A");
+        result.Value.Damage.Should().Be(3);
         result.Value.GoldFound.Should().Be(12);
         result.Value.FlavorEvent.Should().Be("A chest!");
-        result.Value.Hp.Should().Be(17);
+        result.Value.IsPartyDefeated.Should().BeFalse();
         handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
         handler.LastRequest.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}/explore");
     }
@@ -91,7 +95,7 @@ public class DungeonApiClientTests
     public async Task Explore_Combat_DeserializesCombatRoom()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":2,"roomType":"combat","hpChange":-5,"goldFound":0,"flavorEvent":"Fight","hp":12,"gold":0}""");
+            $$"""{"partyId":"{{Id}}","turn":2,"roomType":"combat","targetName":"A","damage":5,"goldFound":0,"flavorEvent":"Fight","gold":0,"isPartyDefeated":false}""");
         var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id);
 
         result.Value!.RoomType.Should().Be(RoomType.Combat);
