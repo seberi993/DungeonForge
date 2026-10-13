@@ -13,6 +13,40 @@ public class GameSessionTests
         new(Id, turn, room, target, damage, gold, flavor, totalGold, defeated);
 
     [Fact]
+    public void ApplyPartyState_NewerTurn_ReplacesStateAndRaisesChanged()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        var changed = 0;
+        sut.Changed += () => changed++;
+
+        var applied = sut.ApplyPartyState(new PartyStateDto(Id, "Heroes", [Member("A", CharacterClass.Warrior, 7, 30)], DateTimeOffset.UtcNow, 12, 3, false));
+
+        applied.Should().BeTrue();
+        sut.Turn.Should().Be(3);
+        sut.Gold.Should().Be(12);
+        sut.Members[0].Hp.Should().Be(7);
+        changed.Should().Be(1);
+    }
+
+    [Fact]
+    public void ApplyPartyState_StaleOrEqualTurnOrOtherParty_IsIgnored()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 5));
+        var stale = new PartyStateDto(Id, "Heroes", [Member("A", CharacterClass.Warrior, 1, 30)], DateTimeOffset.UtcNow, 0, 1, false);
+
+        sut.ApplyPartyState(stale).Should().BeFalse();
+        sut.ApplyPartyState(stale with { Turn = 2 }).Should().BeFalse();
+        sut.ApplyPartyState(stale with { Turn = 9, PartyId = Guid.NewGuid() }).Should().BeFalse();
+
+        sut.Turn.Should().Be(2);
+        sut.Gold.Should().Be(5);
+        sut.Members[0].Hp.Should().Be(30);
+    }
+
+    [Fact]
     public void New_HasNoParty()
     {
         var sut = new GameSession();

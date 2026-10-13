@@ -54,6 +54,18 @@ public sealed class GameSession
         IsDefeated = party.IsPartyDefeated;
     }
 
+    // Ignores broadcasts that are not strictly newer than what we already show (out-of-order delivery).
+    public bool ApplyPartyState(PartyStateDto party)
+    {
+        if (party.PartyId != PartyId || party.Turn <= Turn) return false;
+        _members = [.. party.Members];
+        Gold = party.Gold;
+        Turn = party.Turn;
+        IsDefeated = party.IsPartyDefeated;
+        Changed?.Invoke();
+        return true;
+    }
+
     public bool ApplyRemote(ExploreResponse result) => Apply(result);
 
     public void MarkDefeated()

@@ -1,7 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.GetPartyState;
+using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
 using FluentAssertions;

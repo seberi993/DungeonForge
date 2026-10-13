@@ -1,9 +1,6 @@
 using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.GetPartyState;
 
 namespace DungeonForge.Api.Features.Parties;
-
-public sealed record MemberDto(string Name, CharacterClass Class, int Hp, int MaxHp, bool IsDefeated);
 
 // Maps from immutable snapshots only, so readers never observe a half-applied turn.
 internal static class PartyMapping

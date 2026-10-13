@@ -150,4 +150,60 @@ public class CreatePartyTests(WebApplicationFactory<Program> factory) : IClassFi
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
+
+    [Fact]
+    public async Task Post_DuplicateMemberNames_CaseInsensitiveAfterTrim_ReturnsBadRequest()
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = "Conan", @class = "warrior" }, new { name = "  conan ", @class = "mage" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("members");
+    }
+
+    [Fact]
+    public async Task Post_MemberNameTooLong_ReturnsBadRequest()
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = new string('a', 33), @class = "warrior" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Post_MemberNameAtLimit_ReturnsOk()
+    {
+        var response = await PartyTestData.PostPartyAsync(
+            factory.CreateClient(), members: [new { name = new string('a', 32), @class = "warrior" }]);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Post_PartyNameTooLong_ReturnsBadRequest()
+    {
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient(), name: new string('p', 41));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Post_TooManyMembers_ReturnsBadRequest()
+    {
+        object[] members = [.. Enumerable.Range(1, 9).Select(i => (object)new { name = $"Hero{i}", @class = "warrior" })];
+
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient(), members: members);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Post_EightMembers_ReturnsOk()
+    {
+        object[] members = [.. Enumerable.Range(1, 8).Select(i => (object)new { name = $"Hero{i}", @class = "warrior" })];
+
+        var response = await PartyTestData.PostPartyAsync(factory.CreateClient(), members: members);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }

@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.GetPartyState;
+using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.Realtime;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http.Connections;

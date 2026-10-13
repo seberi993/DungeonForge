@@ -134,7 +134,18 @@
 
     private void OnPartyUpdated(PartyStateDto state)
     {
-        // Turn events carry the full state; PartyUpdated is reserved for roster changes.
+        if (_disposed) return;
+        try
+        {
+            _ = InvokeAsync(() =>
+            {
+                if (_disposed || !Session.ApplyPartyState(state)) return;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     public async ValueTask DisposeAsync()

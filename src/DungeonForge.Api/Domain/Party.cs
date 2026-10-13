@@ -1,6 +1,7 @@
 namespace DungeonForge.Api.Domain;
 
-// Mutable aggregate shared via cache: mutate under SyncRoot; read via Snapshot() (which takes the same lock).
+// Mutable aggregate shared via cache. Mutators and Snapshot() lock SyncRoot internally (re-entrant, so handlers may hold it
+// across a multi-step turn). Members can only be mutated through Party.
 public sealed class Party
 {
     private Party(Guid id, string name, PartyMember[] members, DateTimeOffset createdAt, string inviteCode)
@@ -12,6 +13,9 @@ public sealed class Party
         InviteCode = inviteCode;
     }
 
+    private int _gold;
+    private int _turn;
+
     public Lock SyncRoot { get; } = new();
 
     public Guid Id { get; }
@@ -22,13 +26,13 @@ public sealed class Party
 
     public string InviteCode { get; }
 
-    public int Gold { get; private set; }
+    public int Gold { get { lock (SyncRoot) { return _gold; } } }
 
-    public int Turn { get; private set; }
+    public int Turn { get { lock (SyncRoot) { return _turn; } } }
 
     public IReadOnlyList<PartyMember> Members { get; }
 
-    public bool IsPartyDefeated => Members.All(m => m.IsDefeated);
+    public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => m.IsDefeated); } } }
 
     public static Party Create(Guid id, string name, IReadOnlyList<PartyMember> members, DateTimeOffset createdAt, string inviteCode = "")
     {
@@ -47,32 +51,41 @@ public sealed class Party
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
 
-        // First max in roster order wins ties.
-        PartyMember? target = null;
-        foreach (var m in Members)
+        lock (SyncRoot)
         {
-            if (!m.IsDefeated && (target is null || m.Threat > target.Threat))
+            // First max in roster order wins ties.
+            PartyMember? target = null;
+            foreach (var m in Members)
             {
-                target = m;
+                if (!m.IsDefeated && (target is null || m.Threat > target.Threat))
+                {
+                    target = m;
+                }
             }
-        }
 
-        return target is null
-            ? new DamageResult(string.Empty, 0)
-            : new DamageResult(target.Name, target.TakeDamage(amount));
+            return target is null
+                ? new DamageResult(string.Empty, 0)
+                : new DamageResult(target.Name, target.TakeDamage(amount));
+        }
     }
 
     public int Heal(string memberName, int amount)
     {
         var member = Members.FirstOrDefault(m => m.Name == memberName)
             ?? throw new ArgumentException($"No party member named '{memberName}'.", nameof(memberName));
-        return member.Heal(amount);
+        lock (SyncRoot)
+        {
+            return member.Heal(amount);
+        }
     }
 
     public void AdvanceTurn(int goldFound = 0)
     {
-        Turn++;
-        Gold += goldFound;
+        lock (SyncRoot)
+        {
+            _turn++;
+            _gold += goldFound;
+        }
     }
 
     public PartySnapshot Snapshot()
@@ -80,7 +93,7 @@ public sealed class Party
         lock (SyncRoot)
         {
             return new PartySnapshot(
-                Id, Name, CreatedAt, InviteCode, Gold, Turn, IsPartyDefeated,
+                Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
                 Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated)).ToArray());
         }
     }

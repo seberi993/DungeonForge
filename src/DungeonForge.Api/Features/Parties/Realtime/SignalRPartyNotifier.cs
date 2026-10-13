@@ -1,5 +1,4 @@
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.GetPartyState;
 using Microsoft.AspNetCore.SignalR;
 
 namespace DungeonForge.Api.Features.Parties.Realtime;

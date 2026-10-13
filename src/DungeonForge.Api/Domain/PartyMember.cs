@@ -24,7 +24,7 @@ public sealed class PartyMember
     // Higher threat is targeted first; ties are resolved by roster order in Party.
     internal int Threat => Class is CharacterClass.Warrior or CharacterClass.Paladin ? 1 : 0;
 
-    public int TakeDamage(int amount)
+    internal int TakeDamage(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         var applied = Math.Min(amount, Hp);
@@ -32,7 +32,7 @@ public sealed class PartyMember
         return applied;
     }
 
-    public int Heal(int amount)
+    internal int Heal(int amount)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(amount);
         if (IsDefeated)
