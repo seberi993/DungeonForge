@@ -9,6 +9,7 @@ public sealed class GameSession
     private readonly List<LogEntry> _log = [];
 
     public Guid PartyId { get; private set; }
+    public string InviteCode { get; private set; } = "";
     public string Name { get; private set; } = "";
     public int Hp { get; private set; }
     public int Gold { get; private set; }
@@ -21,6 +22,7 @@ public sealed class GameSession
     {
         Clear();
         PartyId = party.PartyId;
+        InviteCode = party.InviteCode;
         Name = party.Name;
         Hp = StartingHp;
     }
@@ -43,6 +45,7 @@ public sealed class GameSession
     {
         Clear();
         PartyId = party.PartyId;
+        InviteCode = party.InviteCode;
         Name = party.Name;
         Hp = party.Hp;
         Gold = party.Gold;
@@ -61,6 +64,7 @@ public sealed class GameSession
     public void Clear()
     {
         PartyId = Guid.Empty;
+        InviteCode = "";
         Name = "";
         Hp = 0;
         Gold = 0;

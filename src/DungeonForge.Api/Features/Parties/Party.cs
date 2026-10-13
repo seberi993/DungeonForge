@@ -7,4 +7,5 @@ internal sealed record Party(
     DateTimeOffset CreatedAt,
     int Hp = 20,
     int Gold = 0,
-    int Turn = 0);
+    int Turn = 0,
+    string InviteCode = "");

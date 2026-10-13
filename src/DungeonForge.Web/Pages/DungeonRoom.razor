@@ -18,6 +18,14 @@
         <span id="stat-turn">Turn: @Session.Turn</span>
     </div>
 
+    <div class="card invite">
+        <label for="invite-code">Invite code (share with friends so they can join)</label>
+        <div class="invite-row">
+            <input id="invite-code" class="invite-code" readonly value="@Session.InviteCode" @onfocus="SelectInvite" />
+            <button id="copy-invite" @onclick="CopyInviteAsync">@(_copied ? "Copied!" : "Copy")</button>
+        </div>
+    </div>
+
     @if (_offline)
     {
         <p class="offline">Live updates offline. You can still explore.</p>
@@ -56,6 +64,26 @@
 
     private bool _offline;
     private bool _disposed;
+    private bool _copied;
+
+    private async Task CopyInviteAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("dungeonForge.copyText", Session.InviteCode);
+            _copied = true;
+        }
+        catch (JSException)
+        {
+            await SelectInvite();
+        }
+    }
+
+    private async Task SelectInvite()
+    {
+        try { await JS.InvokeVoidAsync("dungeonForge.selectText", "invite-code"); }
+        catch (JSException) { }
+    }
 
     protected override async Task OnInitializedAsync()
     {

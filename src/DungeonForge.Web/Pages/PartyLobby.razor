@@ -19,8 +19,8 @@
 </div>
 
 <div class="card">
-    <label for="join-id">Join existing party (party id)</label>
-    <input id="join-id" @bind="_joinId" disabled="@_busy" />
+    <label for="join-id">Join a friend's party (paste their invite code)</label>
+    <input id="join-id" @bind="_joinId" placeholder="XXXX-XXXX" maxlength="40" disabled="@_busy" />
     <button id="join-party" @onclick="JoinAsync" disabled="@_busy">Join Party</button>
     @if (_joinError is not null)
     {
@@ -35,16 +35,20 @@
     private async Task JoinAsync()
     {
         _joinError = null;
-        if (!Guid.TryParse(_joinId.Trim(), out var id))
+        var input = _joinId.Trim();
+        if (input.Length == 0)
         {
-            _joinError = "Enter a valid party id.";
+            _joinError = "Enter an invite code.";
             return;
         }
 
         _busy = true;
         try
         {
-            var result = await Api.GetPartyAsync(id);
+            // Short invite codes are the norm; a full party id (GUID) still works.
+            var result = Guid.TryParse(input, out var id)
+                ? await Api.GetPartyAsync(id)
+                : await Api.GetPartyByCodeAsync(input);
             if (result.IsSuccess)
             {
                 Session.Join(result.Value!);
@@ -53,7 +57,7 @@
             }
 
             _joinError = result.Status == ApiStatus.NotFound
-                ? "No party found with that id."
+                ? "No party found with that invite code."
                 : result.Error ?? "Could not join the party.";
         }
         finally

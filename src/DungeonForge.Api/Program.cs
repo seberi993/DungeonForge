@@ -36,6 +36,7 @@ builder.Services.TryAddSingleton<IPartyNotifier, SignalRPartyNotifier>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CreatePartyHandler>();
 builder.Services.AddSingleton<GetPartyStateHandler>();
+builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinByCode.JoinByCodeHandler>();
 builder.Services.TryAddSingleton<IRoller, RandomRoller>();
 builder.Services.AddSingleton<ExploreDungeonHandler>();
 builder.Services.AddOptions<NarrationOptions>().Bind(builder.Configuration.GetSection("Narration"));

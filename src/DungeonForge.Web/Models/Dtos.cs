@@ -8,7 +8,7 @@ public enum RoomType
 
 public sealed record CreatePartyRequest(string Name);
 
-public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<string> Members, DateTimeOffset CreatedAt);
+public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<string> Members, DateTimeOffset CreatedAt, string InviteCode = "");
 
 public sealed record ExploreResponse(
     Guid PartyId,
@@ -29,4 +29,5 @@ public sealed record PartyStateDto(
     DateTimeOffset CreatedAt,
     int Hp,
     int Gold,
-    int Turn);
+    int Turn,
+    string InviteCode = "");

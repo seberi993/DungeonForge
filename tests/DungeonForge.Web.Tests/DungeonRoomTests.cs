@@ -25,7 +25,7 @@ public class DungeonRoomTests : TestContext
     private IRenderedComponent<DungeonRoom> Render(FakeHandler handler, bool withParty = true)
     {
         Services.AddSingleton<IDungeonHubClient>(_hub);
-        if (withParty) _session.Start(new PartyResponse(Id, "Heroes", ["A"], DateTimeOffset.UtcNow));
+        if (withParty) _session.Start(new PartyResponse(Id, "Heroes", ["A"], DateTimeOffset.UtcNow, "K7F2-9QXM"));
         Services.AddSingleton(_session);
         Services.AddSingleton(new DungeonApiClient(handler.CreateClient()));
         return RenderComponent<DungeonRoom>();
@@ -53,6 +53,20 @@ public class DungeonRoomTests : TestContext
         button.TextContent.Should().Contain("Explore Room");
         button.HasAttribute("disabled").Should().BeFalse();
         cut.Find(".log").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ShowsInviteCode_AndCopyButtonCopiesPartyId()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+        cut.Find("#invite-code").GetAttribute("value").Should().Be("K7F2-9QXM");
+
+        var invocation = JSInterop.SetupVoid("dungeonForge.copyText", "K7F2-9QXM");
+        invocation.SetVoidResult();
+        cut.Find("#copy-invite").Click();
+
+        invocation.Invocations.Should().ContainSingle();
+        cut.Find("#copy-invite").TextContent.Should().Be("Copied!");
     }
 
     [Fact]

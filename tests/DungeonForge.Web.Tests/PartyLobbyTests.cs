@@ -84,12 +84,28 @@ public class PartyLobbyTests : TestContext
     }
 
     [Fact]
-    public void Join_InvalidGuid_ShowsErrorWithoutRequest()
+    public void Join_ByInviteCode_UsesCodeEndpointAndStoresCode()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[],"createdAt":"2026-01-01T00:00:00+00:00","hp":9,"gold":12,"turn":3,"inviteCode":"K7F2-9QXM"}""");
+        var cut = Render(handler);
+
+        cut.Find("input#join-id").Change(" k7f2-9qxm ");
+        cut.Find("button#join-party").Click();
+
+        cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/parties/by-code/k7f2-9qxm");
+        _session.PartyId.Should().Be(Id);
+        _session.InviteCode.Should().Be("K7F2-9QXM");
+    }
+
+    [Fact]
+    public void Join_EmptyInput_ShowsErrorWithoutRequest()
     {
         var handler = new FakeHandler(HttpStatusCode.OK);
         var cut = Render(handler);
 
-        cut.Find("input#join-id").Change("nope");
+        cut.Find("input#join-id").Change("   ");
         cut.Find("button#join-party").Click();
 
         cut.Find(".join-error").TextContent.Should().NotBeNullOrWhiteSpace();

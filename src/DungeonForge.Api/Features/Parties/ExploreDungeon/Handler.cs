@@ -49,9 +49,7 @@ public sealed class ExploreDungeonHandler(
 
         try
         {
-            await notifier.PartyUpdatedAsync(
-                new GetPartyStateResponse(party.Id, party.Name, party.Members, party.CreatedAt, party.Hp, party.Gold, party.Turn),
-                CancellationToken.None);
+            await notifier.PartyUpdatedAsync(GetPartyStateHandler.ToResponse(party), CancellationToken.None);
         }
         catch (Exception ex)
         {
@@ -82,6 +80,9 @@ public sealed class ExploreDungeonHandler(
             var updated = party with { Hp = hp, Gold = party.Gold + goldFound, Turn = party.Turn + 1 };
 
             cache.Set(key, updated, PartyCache.EntryOptions());
+
+            // Touch the invite entry so its sliding expiry keeps pace with an active party.
+            if (updated.InviteCode.Length > 0) cache.TryGetValue(PartyCache.InviteKey(updated.InviteCode), out _);
 
             var response = new ExploreResponse(
                 updated.Id, updated.Turn, room, hp - party.Hp, goldFound,

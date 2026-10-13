@@ -19,6 +19,9 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyAsync(Guid partyId, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/{partyId}", ct), ct);
 
+    public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
+        SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
+
     public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, CancellationToken ct = default) =>
         SendAsync<ExploreResponse>(() => http.PostAsync($"/api/parties/{partyId}/explore", null, ct), ct);
 
