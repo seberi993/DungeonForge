@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Endpoints;
+using DungeonForge.Api.Features.Parties.CreateParty;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +17,9 @@ builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 });
+
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<CreatePartyHandler>();
 
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
