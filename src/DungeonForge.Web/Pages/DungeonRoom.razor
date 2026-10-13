@@ -1,0 +1,102 @@
+@page "/dungeon"
+@using DungeonForge.Web.Models
+@using DungeonForge.Web.Services
+@inject DungeonApiClient Api
+@inject GameSession Session
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@if (Session.HasParty)
+{
+    <h1>Dungeon</h1>
+    <div class="stats">
+        <span id="stat-name">Party: @Session.Name</span>
+        <span id="stat-hp">HP: @Session.Hp</span>
+        <span id="stat-gold">Gold: @Session.Gold</span>
+        <span id="stat-turn">Turn: @Session.Turn</span>
+    </div>
+
+    <button id="explore" @onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
+
+    @if (Session.IsDefeated)
+    {
+        <div class="defeated">
+            <p>Your party has been defeated.</p>
+            <button id="new-party" @onclick="NewParty">New Party</button>
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="error">@_error</p>
+    }
+
+    <div id="log" class="log">
+        @foreach (var entry in Session.Log)
+        {
+            <div class="log-entry">
+                <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) HP @Signed(entry.HpChange), Gold +@entry.GoldFound
+                <div>@entry.FlavorEvent</div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _busy;
+    private string? _error;
+    private bool _scroll;
+
+    protected override void OnInitialized()
+    {
+        if (!Session.HasParty) Nav.NavigateTo("/");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scroll) return;
+        _scroll = false;
+        await JS.InvokeVoidAsync("dungeonForge.scrollToBottom", "log");
+    }
+
+    private async Task ExploreAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.ExploreAsync(Session.PartyId);
+            switch (result.Status)
+            {
+                case ApiStatus.Success:
+                    Session.Apply(result.Value!);
+                    _scroll = true;
+                    break;
+                case ApiStatus.Conflict:
+                    Session.MarkDefeated();
+                    break;
+                case ApiStatus.NotFound:
+                    Session.Clear();
+                    Nav.NavigateTo("/");
+                    break;
+                default:
+                    _error = result.Error ?? "Something went wrong. Try again.";
+                    break;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void NewParty()
+    {
+        Session.Clear();
+        Nav.NavigateTo("/");
+    }
+
+    private static string RoomLabel(RoomType type) => type == RoomType.Chest ? "chest" : "combat";
+
+    private static string Signed(int value) => value > 0 ? $"+{value}" : value.ToString();
+}

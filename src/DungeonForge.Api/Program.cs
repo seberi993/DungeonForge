@@ -38,9 +38,16 @@ builder.Services.TryAddSingleton<IDungeonNarrator>(sp =>
         : new StaticDungeonNarrator();
 });
 
+const string CorsPolicy = "BlazorClient";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
+    p.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
+
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
 var app = builder.Build();
+
+app.UseCors(CorsPolicy);
 
 app.MapEndpoints();
 

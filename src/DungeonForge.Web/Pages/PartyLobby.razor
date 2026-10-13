@@ -1,0 +1,46 @@
+@page "/"
+@using DungeonForge.Web.Services
+@inject DungeonApiClient Api
+@inject GameSession Session
+@inject NavigationManager Nav
+
+<h1>DungeonForge</h1>
+<p>Name your party and descend into the dungeon.</p>
+
+<div class="card">
+    <label for="party-name">Party name</label>
+    <input id="party-name" @bind="_name" maxlength="50" disabled="@_busy" />
+    <button id="create-party" @onclick="CreateAsync" disabled="@_busy">Create Party</button>
+    @if (_error is not null)
+    {
+        <p class="validation-message">@_error</p>
+    }
+</div>
+
+@code {
+    private string _name = "";
+    private string? _error;
+    private bool _busy;
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.CreatePartyAsync(_name);
+            if (result.IsSuccess)
+            {
+                Session.Start(result.Value!);
+                Nav.NavigateTo("/dungeon");
+                return;
+            }
+
+            _error = result.Error ?? "Could not create the party.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
