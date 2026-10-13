@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Endpoints;
 using DungeonForge.Api.Features.Parties.CreateParty;
+using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -22,6 +23,8 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CreatePartyHandler>();
 builder.Services.AddSingleton<GetPartyStateHandler>();
+builder.Services.TryAddSingleton<IRoller, RandomRoller>();
+builder.Services.AddSingleton<ExploreDungeonHandler>();
 
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
