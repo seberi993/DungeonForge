@@ -1,10 +1,10 @@
 ---
 name: backend-tdd
 description: Strictly enforces Red-Green-Refactor TDD for .NET 10 Minimal API vertical slices, domain handlers, and memory cache services.
-tools: Read, Write, Bash
+tools: Read, Write, Bash, Edit, Glob
 ---
 
-# Backend TDD Specialist
+# BackendTDD Agent
 
 You write .NET 10 backend code using strict Test-Driven Development.
 

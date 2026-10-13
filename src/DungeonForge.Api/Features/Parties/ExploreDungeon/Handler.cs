@@ -4,7 +4,6 @@ namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller)
 {
-    private static readonly TimeSpan Ttl = TimeSpan.FromHours(2);
     private static readonly string[] CombatFlavor =
     [
         "A goblin ambush springs from the shadows.",
@@ -18,16 +17,22 @@ public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller)
         "A gilded coffer glimmers in the torchlight.",
     ];
 
-    private readonly Lock _gate = new();
+    // Static: guards the cache read-modify-write regardless of handler lifetime (single-instance host).
+    private static readonly Lock Gate = new();
 
-    public ExploreResponse? Handle(Guid id)
+    public ExploreResult Handle(Guid id)
     {
-        var key = $"party:{id}";
-        lock (_gate)
+        var key = PartyCache.Key(id);
+        lock (Gate)
         {
             if (!cache.TryGetValue(key, out Party? party) || party is null)
             {
-                return null;
+                return new ExploreResult(ExploreStatus.NotFound);
+            }
+
+            if (party.Hp <= 0)
+            {
+                return new ExploreResult(ExploreStatus.Defeated);
             }
 
             var room = roller.Next(2) == 0 ? RoomType.Combat : RoomType.Chest;
@@ -38,11 +43,11 @@ public sealed class ExploreDungeonHandler(IMemoryCache cache, IRoller roller)
             var hp = Math.Max(0, party.Hp + hpChange);
             var updated = party with { Hp = hp, Gold = party.Gold + goldFound, Turn = party.Turn + 1 };
 
-            cache.Set(key, updated, new MemoryCacheEntryOptions { Size = 1, SlidingExpiration = Ttl });
+            cache.Set(key, updated, PartyCache.EntryOptions());
 
-            return new ExploreResponse(
+            return new ExploreResult(ExploreStatus.Explored, new ExploreResponse(
                 updated.Id, updated.Turn, room, hp - party.Hp, goldFound,
-                flavors[party.Turn % flavors.Length], updated.Hp, updated.Gold);
+                flavors[party.Turn % flavors.Length], updated.Hp, updated.Gold));
         }
     }
 }

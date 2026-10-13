@@ -6,8 +6,6 @@ public enum RoomType
     Chest,
 }
 
-public sealed record ExploreRequest();
-
 public sealed record ExploreResponse(
     Guid PartyId,
     int Turn,
@@ -17,3 +15,12 @@ public sealed record ExploreResponse(
     string FlavorEvent,
     int Hp,
     int Gold);
+
+public enum ExploreStatus
+{
+    Explored,
+    NotFound,
+    Defeated,
+}
+
+public readonly record struct ExploreResult(ExploreStatus Status, ExploreResponse? Response = null);

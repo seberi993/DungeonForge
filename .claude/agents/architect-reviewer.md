@@ -1,7 +1,7 @@
 ---
 name: architect-reviewer
 description: Reviews C# backend code against Clean Architecture, Vertical Slice CQRS patterns, and Minimal API conventions.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, Bash
 ---
 
 # Architecture Reviewer Subagent
