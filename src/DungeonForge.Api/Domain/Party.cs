@@ -13,6 +13,8 @@ public sealed class Party
         InviteCode = inviteCode;
     }
 
+    public const int MaxDiscussionEntries = 8;
+
     private int _gold;
     private int _turn;
     private PendingEncounter? _pending;
@@ -97,6 +99,51 @@ public sealed class Party
         lock (SyncRoot)
         {
             return _pending ??= encounter;
+        }
+    }
+
+    // One action per member per turn: a resubmit replaces the earlier one in place. False when no encounter is pending.
+    public bool TrySubmitAction(PlayerAction action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        lock (SyncRoot)
+        {
+            if (_pending is null)
+            {
+                return false;
+            }
+
+            var list = _pending.Discussion?.ToList() ?? [];
+            var at = list.FindIndex(a => a.MemberId == action.MemberId);
+            if (at >= 0)
+            {
+                list[at] = action;
+            }
+            else if (list.Count >= MaxDiscussionEntries)
+            {
+                return false;
+            }
+            else
+            {
+                list.Add(action);
+            }
+
+            _pending = _pending with { Discussion = list };
+            return true;
+        }
+    }
+
+    // Distinct acting members in the pending discussion, capped at the roster size (bonus basis).
+    public int ActionBonusCount
+    {
+        get
+        {
+            lock (SyncRoot)
+            {
+                var distinct = _pending?.Discussion?.Select(a => a.MemberId).Distinct().Count() ?? 0;
+                return Math.Min(distinct, Members.Count);
+            }
         }
     }
 

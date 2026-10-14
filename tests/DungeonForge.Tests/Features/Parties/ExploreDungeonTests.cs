@@ -81,7 +81,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     private sealed class FlippingRoomRoller : DungeonForge.Api.Features.Parties.ExploreDungeon.IRoller
     {
         private int _calls;
-        public int Next(int max) => max == 2 ? Interlocked.Increment(ref _calls) % 2 : 0;
+        public int Next(int max) => max == 3 ? Interlocked.Increment(ref _calls) % 2 : 0;
     }
 
     [Fact]
@@ -175,7 +175,9 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         t1.RootElement.GetProperty("roomType").GetString().Should().Be("combat");
         t1.RootElement.GetProperty("damage").GetInt32().Should().Be(0);
         t1.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0);
-        t1.RootElement.GetProperty("lastOutcome").GetString().Should().NotBeNullOrWhiteSpace();
+        // Two-phase contract: mechanics return immediately; narration arrives later via NarrationReady.
+        t1.RootElement.TryGetProperty("lastOutcome", out _).Should().BeFalse();
+        t1.RootElement.GetProperty("narrationPending").GetBoolean().Should().BeTrue();
         // Nulls are omitted on the wire: a resolved turn carries no choices/prompt.
         t1.RootElement.TryGetProperty("choices", out _).Should().BeFalse();
         t1.RootElement.TryGetProperty("choicePrompt", out _).Should().BeFalse();

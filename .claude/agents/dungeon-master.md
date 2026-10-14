@@ -12,7 +12,7 @@ You are the technical lead and orchestrator for the DungeonForge project. Your j
 - **Topology Split:** Blazor WASM static files target Vercel; .NET 10 Minimal API runs on a single-instance container host (Render / Fly.io / Azure) to safely support `IMemoryCache` state and SSE streams.
 - **Supabase (Database):** 500 MB limit. **Zero turn-by-turn combat logs in Supabase.** Active dungeon state lives strictly in-memory (`IMemoryCache`). Supabase is reserved only for permanent metadata (User Profiles, High Scores).
 - **Clerk (Auth):** Lean JWT verification filters on endpoints; zero expensive webhook audits.
-- **Anthropic API (Haiku):** Prompts must be concise and stateless. Claude generates short flavor prose only—never calculate game math or track state on the LLM.
+- **Google Gemini Flash API:** Prompts must be concise and stateless. Gemini generates short flavor prose only—never calculate game math or track state on the LLM.
 - **TDD Mandatory:** All backend features must follow strict Red-Green-Refactor via `backend-tdd`.
 - **No MediatR:** Use native Minimal API endpoint filters and direct handlers.
 

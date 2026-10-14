@@ -12,6 +12,8 @@ public sealed class DungeonHubClient(string hubUrl) : IDungeonHubClient
 
     public event Action<ExploreResponse>? TurnResolved;
     public event Action<PartyStateDto>? PartyUpdated;
+    public event Action<NarrationReady>? NarrationReady;
+    public event Action<Guid, IReadOnlyList<PlayerAction>>? DiscussionUpdated;
 
     public async Task ConnectAsync(Guid partyId, CancellationToken ct = default)
     {
@@ -29,6 +31,8 @@ public sealed class DungeonHubClient(string hubUrl) : IDungeonHubClient
 
         connection.On<ExploreResponse>("TurnResolved", r => TurnResolved?.Invoke(r));
         connection.On<PartyStateDto>("PartyUpdated", p => PartyUpdated?.Invoke(p));
+        connection.On<NarrationReady>("NarrationReady", n => NarrationReady?.Invoke(n));
+        connection.On<Guid, List<PlayerAction>>("DiscussionUpdated", (id, a) => DiscussionUpdated?.Invoke(id, a));
         connection.Reconnected += _ => RejoinAsync(connection, partyId);
         _connection = connection;
 

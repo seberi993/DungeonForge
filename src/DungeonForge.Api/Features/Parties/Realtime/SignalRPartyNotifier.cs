@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using Microsoft.AspNetCore.SignalR;
 
@@ -10,4 +11,10 @@ public sealed class SignalRPartyNotifier(IHubContext<DungeonHub> hub) : IPartyNo
 
     public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) =>
         hub.Clients.Group(turn.PartyId.ToString()).SendAsync("TurnResolved", turn, ct);
+
+    public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) =>
+        hub.Clients.Group(narration.PartyId.ToString()).SendAsync("NarrationReady", narration, ct);
+
+    public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
+        hub.Clients.Group(partyId.ToString()).SendAsync("DiscussionUpdated", partyId, actions, ct);
 }

@@ -11,6 +11,8 @@ internal sealed class FakeDungeonHubClient : IDungeonHubClient
 
     public event Action<ExploreResponse>? TurnResolved;
     public event Action<PartyStateDto>? PartyUpdated;
+    public event Action<NarrationReady>? NarrationReady;
+    public event Action<Guid, IReadOnlyList<PlayerAction>>? DiscussionUpdated;
 
     public Task ConnectAsync(Guid partyId, CancellationToken ct = default)
     {
@@ -21,6 +23,8 @@ internal sealed class FakeDungeonHubClient : IDungeonHubClient
 
     public void RaiseTurn(ExploreResponse r) => TurnResolved?.Invoke(r);
     public void RaiseParty(PartyStateDto p) => PartyUpdated?.Invoke(p);
+    public void RaiseNarration(NarrationReady n) => NarrationReady?.Invoke(n);
+    public void RaiseDiscussion(Guid id, IReadOnlyList<PlayerAction> a) => DiscussionUpdated?.Invoke(id, a);
 
     public ValueTask DisposeAsync()
     {

@@ -12,6 +12,118 @@ public class GameSessionTests
     private static ExploreResponse Turn(int turn, RoomType room, string? target, int damage, int gold, int totalGold, bool defeated = false, string flavor = "x") =>
         new(Id, turn, room, target, damage, gold, flavor, totalGold, defeated);
 
+    private static ExploreResponse Pending(int turn) =>
+        new(Id, turn, RoomType.Combat, "A", 4, 0, "Clash", 0, false, NarrationPending: true);
+
+    [Fact]
+    public void Apply_NarrationPending_AppliesMechanicsAndMarksPending()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+
+        sut.Apply(Pending(1)).Should().BeTrue();
+
+        sut.Members[0].Hp.Should().Be(26);
+        sut.Turn.Should().Be(1);
+        sut.NarrationPending.Should().BeTrue();
+        sut.LastOutcome.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyNarration_MatchingTurn_SetsOutcomeAndLogEntry()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ApplyNarration(Id, 1, "You win.").Should().BeTrue();
+
+        sut.NarrationPending.Should().BeFalse();
+        sut.LastOutcome.Should().Be("You win.");
+        sut.Log[0].Outcome.Should().Be("You win.");
+    }
+
+    [Fact]
+    public void ApplyNarration_OtherTurnOrParty_IsIgnored()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(2));
+
+        sut.ApplyNarration(Id, 1, "old").Should().BeFalse();
+        sut.ApplyNarration(Guid.NewGuid(), 2, "x").Should().BeFalse();
+
+        sut.NarrationPending.Should().BeTrue();
+        sut.LastOutcome.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyNarration_ArrivingBeforeResponse_IsAppliedWhenTurnLands()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+
+        sut.ApplyNarration(Id, 1, "early");
+        sut.Apply(Pending(1));
+
+        sut.NarrationPending.Should().BeFalse();
+        sut.LastOutcome.Should().Be("early");
+        sut.Log[0].Outcome.Should().Be("early");
+    }
+
+    [Fact]
+    public void ExpireNarration_UsesPlaceholderOnlyIfStillPending_AndLateNarrationStillWins()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ExpireNarration(1).Should().BeTrue();
+        sut.NarrationPending.Should().BeFalse();
+        sut.LastOutcome.Should().NotBeNullOrWhiteSpace();
+
+        sut.ApplyNarration(Id, 1, "late").Should().BeTrue();
+        sut.LastOutcome.Should().Be("late");
+        sut.ExpireNarration(1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyDiscussion_ReplacesList_ClearedWhenTurnResolves()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        var p = new PlayerAction(Guid.NewGuid(), "A", "hit it");
+
+        sut.ApplyDiscussion(Id, [p]).Should().BeTrue();
+        sut.Discussion.Should().Equal(p);
+        sut.ApplyDiscussion(Guid.NewGuid(), []).Should().BeFalse();
+
+        sut.Apply(Turn(1, RoomType.Chest, null, 0, 1, 1));
+        sut.Discussion.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ApplyPrompt_WithDiscussion_StoresIt()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        var p = new PlayerAction(Guid.NewGuid(), "A", "hit it");
+
+        sut.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Puzzle, null, 0, 0, "r", 0, false, "r", ["a", "b", "c"], Discussion: [p]));
+
+        sut.Discussion.Should().Equal(p);
+    }
+
+    [Fact]
+    public void PlayerId_IsStableAcrossClear()
+    {
+        var sut = new GameSession();
+        var id = sut.PlayerId;
+        sut.Start(Party());
+        sut.Clear();
+        sut.PlayerId.Should().Be(id).And.NotBe(Guid.Empty);
+    }
+
     [Fact]
     public void ApplyPartyState_NewerTurn_ReplacesStateAndRaisesChanged()
     {

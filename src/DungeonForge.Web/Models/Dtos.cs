@@ -3,7 +3,8 @@ namespace DungeonForge.Web.Models;
 public enum RoomType
 {
     Combat,
-    Chest
+    Chest,
+    Puzzle
 }
 
 public enum CharacterClass
@@ -37,9 +38,15 @@ public sealed record ExploreResponse(
     bool IsPartyDefeated,
     string? ChoicePrompt = null,
     IReadOnlyList<string>? Choices = null,
-    string? LastOutcome = null);
+    string? LastOutcome = null,
+    IReadOnlyList<PlayerAction>? Discussion = null,
+    bool NarrationPending = false);
 
-public sealed record ExploreRequest(int? SelectedChoiceIndex);
+public sealed record PlayerAction(Guid MemberId, string Name, string Text);
+
+public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome);
+
+public sealed record ExploreRequest(int? SelectedChoiceIndex, IReadOnlyList<PlayerAction>? Actions = null);
 
 public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null);
 

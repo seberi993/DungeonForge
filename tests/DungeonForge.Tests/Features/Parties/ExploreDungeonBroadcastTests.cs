@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -43,6 +44,10 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
             ct.ThrowIfCancellationRequested();
             return failTurnResolved ? throw new InvalidOperationException("boom") : Task.CompletedTask;
         }
+
+        public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private async Task<(ExploreDungeonHandler Handler, Guid Id, IDisposable Scope)> ArrangeAsync(RecordingNotifier notifier)

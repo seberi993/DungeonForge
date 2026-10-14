@@ -39,14 +39,22 @@ builder.Services.AddSingleton<GetPartyStateHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinByCode.JoinByCodeHandler>();
 builder.Services.TryAddSingleton<IRoller, RandomRoller>();
 builder.Services.AddSingleton<ExploreDungeonHandler>();
-builder.Services.AddOptions<NarrationOptions>().Bind(builder.Configuration.GetSection("Narration"));
-builder.Services.AddHttpClient<AnthropicNarratorService>((sp, http) =>
+builder.Services.AddOptions<NarrationOptions>()
+    .Bind(builder.Configuration.GetSection("Narration"))
+    .PostConfigure(o =>
+    {
+        o.ApiKeys = NarrationKeyResolver.Resolve(builder.Configuration);
+        o.ApiKey = o.ApiKeys.FirstOrDefault();
+    });
+builder.Services.AddHttpClient<GeminiNarratorService>((sp, http) =>
     http.BaseAddress = new Uri(sp.GetRequiredService<IOptions<NarrationOptions>>().Value.BaseUrl));
+builder.Services.TryAddSingleton<IKeyPool, KeyPool>();
+builder.Services.TryAddSingleton<KeyPoolGeminiNarrator>();
 builder.Services.TryAddSingleton<IDungeonNarrator>(sp =>
 {
     var o = sp.GetRequiredService<IOptions<NarrationOptions>>().Value;
-    return o.Enabled && !string.IsNullOrWhiteSpace(o.ApiKey)
-        ? sp.GetRequiredService<AnthropicNarratorService>()
+    return o.Enabled && o.ApiKeys.Length > 0
+        ? sp.GetRequiredService<KeyPoolGeminiNarrator>()
         : new StaticDungeonNarrator();
 });
 

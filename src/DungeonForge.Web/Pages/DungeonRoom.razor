@@ -50,6 +50,20 @@
                 var index = i;
                 <button id="choice-@index" disabled="@_busy" @onclick="() => ChooseAsync(index)">@Session.PendingChoices[index]</button>
             }
+            <div id="action-box" class="action-box">
+                <label for="action-text">Your tactical idea</label>
+                <textarea id="action-text" maxlength="200" @bind="_actionText" @bind:event="oninput"></textarea>
+                <button id="submit-action" disabled="@(_busy || string.IsNullOrWhiteSpace(_actionText))" @onclick="SubmitActionAsync">Submit action</button>
+            </div>
+            @if (Session.Discussion.Count > 0)
+            {
+                <ul id="discussion" class="discussion">
+                    @foreach (var action in Session.Discussion)
+                    {
+                        <li><strong>@action.Name</strong>: @action.Text</li>
+                    }
+                </ul>
+            }
         </div>
     }
     else
@@ -57,7 +71,11 @@
         <button id="explore" @onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
     }
 
-    @if (Session.LastOutcome is not null)
+    @if (Session.NarrationPending)
+    {
+        <p id="narration-loading" class="outcome loading">The dungeon master is narrating...</p>
+    }
+    else if (Session.LastOutcome is not null)
     {
         <p id="last-outcome" class="outcome">@Session.LastOutcome</p>
     }
@@ -98,6 +116,10 @@
     private bool _offline;
     private bool _disposed;
     private bool _copied;
+    private string _actionText = "";
+    private CancellationTokenSource? _narrationCts;
+
+    [Parameter] public TimeSpan NarrationTimeout { get; set; } = TimeSpan.FromSeconds(20);
 
     private async Task CopyInviteAsync()
     {
@@ -128,6 +150,8 @@
 
         Hub.TurnResolved += OnTurnResolved;
         Hub.PartyUpdated += OnPartyUpdated;
+        Hub.NarrationReady += OnNarrationReady;
+        Hub.DiscussionUpdated += OnDiscussionUpdated;
         try
         {
             await Hub.ConnectAsync(Session.PartyId);
@@ -147,10 +171,62 @@
             {
                 if (_disposed || !Session.ApplyRemote(result)) return;
                 _scroll = true;
+                WatchNarration();
                 StateHasChanged();
             });
         }
         catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void OnNarrationReady(NarrationReady narration) =>
+        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome));
+
+    private void OnDiscussionUpdated(Guid partyId, IReadOnlyList<PlayerAction> actions) =>
+        Dispatch(() => Session.ApplyDiscussion(partyId, actions));
+
+    // Session raises Changed itself, so the callback only needs to re-render.
+    private void Dispatch(Func<bool> apply)
+    {
+        if (_disposed) return;
+        try
+        {
+            _ = InvokeAsync(() =>
+            {
+                if (_disposed || !apply()) return;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private void WatchNarration()
+    {
+        _narrationCts?.Cancel();
+        _narrationCts?.Dispose();
+        _narrationCts = null;
+        if (!Session.NarrationPending) return;
+
+        var cts = _narrationCts = new CancellationTokenSource();
+        var turn = Session.Turn;
+        _ = ExpireAfterAsync(turn, cts.Token);
+    }
+
+    private async Task ExpireAfterAsync(int turn, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(NarrationTimeout, ct);
+            await InvokeAsync(() =>
+            {
+                if (_disposed || !Session.ExpireNarration(turn)) return;
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
         {
         }
     }
@@ -176,6 +252,10 @@
         _disposed = true;
         Hub.TurnResolved -= OnTurnResolved;
         Hub.PartyUpdated -= OnPartyUpdated;
+        Hub.NarrationReady -= OnNarrationReady;
+        Hub.DiscussionUpdated -= OnDiscussionUpdated;
+        _narrationCts?.Cancel();
+        _narrationCts?.Dispose();
         await Hub.DisposeAsync();
     }
 
@@ -188,21 +268,35 @@
 
     private Task ExploreAsync() => SendAsync(null);
 
-    private Task ChooseAsync(int index) => SendAsync(index);
+    private Task ChooseAsync(int index) => SendAsync(index, TakeAction());
 
-    private async Task SendAsync(int? choiceIndex)
+    private Task SubmitActionAsync() =>
+        string.IsNullOrWhiteSpace(_actionText) ? Task.CompletedTask : SendAsync(null, TakeAction());
+
+    private IReadOnlyList<PlayerAction>? TakeAction()
+    {
+        var text = _actionText.Trim();
+        return text.Length == 0 ? null : [new PlayerAction(Session.PlayerId, Session.PlayerName, text)];
+    }
+
+    private async Task SendAsync(int? choiceIndex, IReadOnlyList<PlayerAction>? actions = null)
     {
         _busy = true;
         _error = null;
         try
         {
-            var result = await Api.ExploreAsync(Session.PartyId, choiceIndex);
+            var result = await Api.ExploreAsync(Session.PartyId, choiceIndex, actions);
             switch (result.Status)
             {
                 case ApiStatus.Success:
                     var response = result.Value!;
                     if (response.ChoicePrompt is not null) Session.ApplyPrompt(response);
-                    else if (Session.Apply(response)) _scroll = true;
+                    else if (Session.Apply(response))
+                    {
+                        _scroll = true;
+                        _actionText = "";
+                        WatchNarration();
+                    }
                     break;
                 case ApiStatus.ValidationError when choiceIndex is not null:
                     // Server has no matching encounter (e.g. restarted); drop the stale prompt so Explore returns.
@@ -233,9 +327,11 @@
         Nav.NavigateTo("/");
     }
 
-    private static string RoomLabel(RoomType type) => type == RoomType.Chest ? "chest" : "combat";
+    private static string RoomLabel(RoomType type) => type switch { RoomType.Chest => "chest", RoomType.Puzzle => "puzzle", _ => "combat" };
 
     private static string Describe(LogEntry entry) => entry.RoomType == RoomType.Combat
         ? (entry.TargetName is null ? "No damage" : $"{entry.TargetName} took {entry.Damage} damage")
-        : $"Gold +{entry.GoldFound}";
+        : entry.RoomType == RoomType.Puzzle && entry.GoldFound == 0 && entry.Damage > 0
+            ? $"{entry.TargetName ?? "A hero"} took {entry.Damage} damage"
+            : $"Gold +{entry.GoldFound}";
 }

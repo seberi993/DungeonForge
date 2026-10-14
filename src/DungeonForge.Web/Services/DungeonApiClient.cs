@@ -10,6 +10,7 @@ public sealed class DungeonApiClient(HttpClient http)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
@@ -22,11 +23,12 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
 
-    // Null index = request (or re-read) the pending prompt, sent without a body; otherwise resolve the chosen option.
-    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, int? choiceIndex = null, CancellationToken ct = default) =>
-        SendAsync<ExploreResponse>(() => choiceIndex is { } index
-            ? http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(index), Json, ct)
-            : http.PostAsync($"/api/parties/{partyId}/explore", null, ct), ct);
+    // No index and no actions = request (or re-read) the pending prompt, sent without a body.
+    // Actions only = submit tactical input; an index resolves the chosen option (actions are submitted first).
+    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, int? choiceIndex = null, IReadOnlyList<PlayerAction>? actions = null, CancellationToken ct = default) =>
+        SendAsync<ExploreResponse>(() => choiceIndex is null && actions is not { Count: > 0 }
+            ? http.PostAsync($"/api/parties/{partyId}/explore", null, ct)
+            : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(choiceIndex, actions is { Count: > 0 } ? actions : null), Json, ct), ct);
 
     private static async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, CancellationToken ct) where T : class
     {

@@ -24,6 +24,12 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
 
         public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) =>
             throw new InvalidOperationException("boom");
+
+        public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
+
+        public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
     }
 
     private WebApplicationFactory<Program> WithFixedRoller() =>

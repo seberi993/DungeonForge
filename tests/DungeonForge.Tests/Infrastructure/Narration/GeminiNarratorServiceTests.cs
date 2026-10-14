@@ -1,15 +1,16 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Infrastructure.Narration;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Tests.Infrastructure.Narration;
 
-public sealed class AnthropicNarratorServiceTests
+public sealed class GeminiNarratorServiceTests
 {
     private sealed class FakeHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
         : HttpMessageHandler
@@ -31,10 +32,10 @@ public sealed class AnthropicNarratorServiceTests
         new(code) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
     private static string TextBody(string text) =>
-        "{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":"
-        + JsonSerializer.Serialize(text) + "}]}";
+        "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":"
+        + JsonSerializer.Serialize(text) + "}]}}]}";
 
-    private static (AnthropicNarratorService Svc, FakeHandler Handler) Create(
+    private static (GeminiNarratorService Svc, FakeHandler Handler) Create(
         Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond,
         Action<NarrationOptions>? configure = null)
     {
@@ -42,11 +43,11 @@ public sealed class AnthropicNarratorServiceTests
         configure?.Invoke(opts);
         var handler = new FakeHandler(respond);
         var http = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl) };
-        var svc = new AnthropicNarratorService(http, Options.Create(opts), NullLogger<AnthropicNarratorService>.Instance);
+        var svc = new GeminiNarratorService(http, Options.Create(opts), NullLogger<GeminiNarratorService>.Instance);
         return (svc, handler);
     }
 
-    private static (AnthropicNarratorService Svc, FakeHandler Handler) CreateReturning(string text, Action<NarrationOptions>? configure = null) =>
+    private static (GeminiNarratorService Svc, FakeHandler Handler) CreateReturning(string text, Action<NarrationOptions>? configure = null) =>
         Create((_, _) => Task.FromResult(Json(HttpStatusCode.OK, TextBody(text))), configure);
 
     private static readonly NarrationContext Ctx = new(RoomType.Combat, "Heroes", 3, true);
@@ -58,13 +59,13 @@ public sealed class AnthropicNarratorServiceTests
     private static string UserPrompt(string? body)
     {
         using var doc = JsonDocument.Parse(body!);
-        return doc.RootElement.GetProperty("messages")[0].GetProperty("content").GetString()!;
+        return doc.RootElement.GetProperty("contents")[0].GetProperty("parts")[0].GetProperty("text").GetString()!;
     }
 
     private static string SystemPrompt(string? body)
     {
         using var doc = JsonDocument.Parse(body!);
-        return doc.RootElement.GetProperty("system").GetString()!;
+        return doc.RootElement.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString()!;
     }
 
     // ---- GenerateChoicesAsync ----
@@ -91,18 +92,17 @@ public sealed class AnthropicNarratorServiceTests
     }
 
     [Fact]
-    public async Task Choices_Request_SendsTemperatureAndTargetsMessagesEndpoint()
+    public async Task Choices_Request_SendsTemperatureAndTargetsGenerateContentEndpoint()
     {
         var (svc, handler) = CreateReturning(ValidChoicesJson);
 
         await svc.GenerateChoicesAsync(Ctx, CancellationToken.None);
 
         handler.Request!.Method.Should().Be(HttpMethod.Post);
-        handler.Request.RequestUri!.AbsolutePath.Should().Be("/v1/messages");
-        handler.Request.Headers.GetValues("x-api-key").Should().ContainSingle().Which.Should().Be("test-key");
-        handler.Request.Headers.GetValues("anthropic-version").Should().ContainSingle().Which.Should().Be("2023-06-01");
+        handler.Request.RequestUri!.AbsolutePath.Should().Be("/v1beta/models/gemini-flash-latest:generateContent");
+        handler.Request.Headers.GetValues("x-goog-api-key").Should().ContainSingle().Which.Should().Be("test-key");
         using var doc = JsonDocument.Parse(handler.Body!);
-        doc.RootElement.GetProperty("temperature").GetDouble().Should().Be(0.85);
+        doc.RootElement.GetProperty("generationConfig").GetProperty("temperature").GetDouble().Should().Be(0.85);
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public sealed class AnthropicNarratorServiceTests
         await svc.GenerateChoicesAsync(Ctx, CancellationToken.None);
 
         using var doc = JsonDocument.Parse(handler.Body!);
-        doc.RootElement.GetProperty("temperature").GetDouble().Should().Be(0.3);
+        doc.RootElement.GetProperty("generationConfig").GetProperty("temperature").GetDouble().Should().Be(0.3);
     }
 
     [Fact]
@@ -123,14 +123,14 @@ public sealed class AnthropicNarratorServiceTests
     [Fact]
     public async Task Choices_RequestBody_ContainsModelAndFactsButNoMath()
     {
-        var (svc, handler) = CreateReturning(ValidChoicesJson, o => o.Model = "claude-test-model");
+        var (svc, handler) = CreateReturning(ValidChoicesJson, o => o.Model = "gemini-test-model");
         var ctx = new NarrationContext(RoomType.Chest, "Silver Wolves", 7, false);
 
         await svc.GenerateChoicesAsync(ctx, CancellationToken.None);
 
         var body = handler.Body!;
-        body.Should().Contain("claude-test-model");
-        body.Should().Contain("max_tokens");
+        handler.Request!.RequestUri!.AbsolutePath.Should().Contain("gemini-test-model");
+        body.Should().Contain("maxOutputTokens");
         body.Should().Contain("Silver Wolves");
         body.ToLowerInvariant().Should().Contain("chest");
         body.ToLowerInvariant().Should().NotContainAny("\"hp\"", "\"gold\"", "hpchange", "goldfound", "dice", "percent");
@@ -199,8 +199,9 @@ public sealed class AnthropicNarratorServiceTests
     }
 
     [Theory]
-    [InlineData("{\"content\":[]}")]
-    [InlineData("{\"content\":[{\"type\":\"text\",\"text\":\"   \"}]}")]
+    [InlineData("{\"candidates\":[]}")]
+    [InlineData("{\"promptFeedback\":{\"blockReason\":\"SAFETY\"}}")]
+    [InlineData("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"   \"}]}}]}")]
     public async Task Choices_EmptyContent_ReturnsFallback(string json)
     {
         var (svc, _) = Create((_, _) => Task.FromResult(Json(HttpStatusCode.OK, json)));
@@ -321,7 +322,7 @@ public sealed class AnthropicNarratorServiceTests
         await svc.NarrateOutcomeAsync("Charge", true, Ctx, CancellationToken.None);
 
         using var doc = JsonDocument.Parse(handler.Body!);
-        doc.RootElement.GetProperty("temperature").GetDouble().Should().Be(0.85);
+        doc.RootElement.GetProperty("generationConfig").GetProperty("temperature").GetDouble().Should().Be(0.85);
         UserPrompt(handler.Body).Should().Contain("Charge").And.Contain("succeeded");
     }
 
@@ -383,8 +384,9 @@ public sealed class AnthropicNarratorServiceTests
     }
 
     [Theory]
-    [InlineData("{\"content\":[]}")]
-    [InlineData("{\"content\":[{\"type\":\"text\",\"text\":\"   \"}]}")]
+    [InlineData("{\"candidates\":[]}")]
+    [InlineData("{\"promptFeedback\":{\"blockReason\":\"SAFETY\"}}")]
+    [InlineData("{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"   \"}]}}]}")]
     public async Task Outcome_EmptyContent_ReturnsFallback(string json)
     {
         var (svc, _) = Create((_, _) => Task.FromResult(Json(HttpStatusCode.OK, json)));
@@ -419,6 +421,30 @@ public sealed class AnthropicNarratorServiceTests
         var act = () => svc.NarrateOutcomeAsync("Charge", true, Ctx, cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class CaptureLogger<T> : ILogger<T>
+    {
+        public List<string> Lines { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Lines.Add(formatter(state, exception));
+    }
+
+    [Fact]
+    public async Task NonSuccessResponse_LogsStatusOnly_NotBody()
+    {
+        var logger = new CaptureLogger<GeminiNarratorService>();
+        var opts = new NarrationOptions { ApiKey = "test-key", Enabled = true, TimeoutSeconds = 1 };
+        var handler = new FakeHandler((_, _) => Task.FromResult(Json(HttpStatusCode.InternalServerError, "{\"error\":\"SECRET-BODY-LEAK\"}")));
+        var http = new HttpClient(handler) { BaseAddress = new Uri(opts.BaseUrl) };
+        var svc = new GeminiNarratorService(http, Options.Create(opts), logger);
+
+        await svc.GenerateChoicesAsync(Ctx, CancellationToken.None);
+
+        logger.Lines.Should().Contain(l => l.Contains("500"));
+        logger.Lines.Should().NotContain(l => l.Contains("SECRET-BODY-LEAK"));
     }
 }
 

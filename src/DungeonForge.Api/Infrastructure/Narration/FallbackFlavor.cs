@@ -18,6 +18,13 @@ public static class FallbackFlavor
         new("A gilded coffer glimmers beyond a gap.", ["Hook it with a rope", "Climb across", "Leap for it"]),
     ];
 
+    private static readonly EncounterChoice[] Puzzle =
+    [
+        new("Glowing runes ring a sealed stone door.", ["Study the runes slowly", "Press the runes in sequence", "Smash the central glyph"]),
+        new("A riddling statue blocks the passage.", ["Ponder its riddle", "Answer boldly", "Wrench the statue aside"]),
+        new("Floor tiles shift beneath a locked gate.", ["Test each tile carefully", "Dash across the tiles", "Leap for the lever"]),
+    ];
+
     private static readonly string[] CombatSuccess =
     [
         "Your nerve holds and the foe falls back, battered and broken.",
@@ -42,9 +49,21 @@ public static class FallbackFlavor
         "Nothing but dust and splinters rewards the effort.",
     ];
 
+    private static readonly string[] PuzzleSuccess =
+    [
+        "The mechanism clicks, the way opens, and a hidden cache glitters inside.",
+        "Together you crack the riddle and the vault yields its treasure.",
+    ];
+
+    private static readonly string[] PuzzleFailure =
+    [
+        "The trap springs and a jolt of force sweeps through the party.",
+        "A wrong move triggers the lock's defenses, and stone and sparks fly.",
+    ];
+
     public static EncounterChoice Choices(RoomType room, int turn)
     {
-        var set = room == RoomType.Combat ? Combat : Chest;
+        var set = room switch { RoomType.Combat => Combat, RoomType.Puzzle => Puzzle, _ => Chest };
         return set[Index(turn, set.Length)];
     }
 
@@ -54,6 +73,8 @@ public static class FallbackFlavor
         {
             (RoomType.Combat, true) => CombatSuccess,
             (RoomType.Combat, false) => CombatFailure,
+            (RoomType.Puzzle, true) => PuzzleSuccess,
+            (RoomType.Puzzle, false) => PuzzleFailure,
             (_, true) => ChestSuccess,
             _ => ChestFailure,
         };

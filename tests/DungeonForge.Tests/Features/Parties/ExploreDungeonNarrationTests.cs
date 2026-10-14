@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -43,9 +44,10 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         }
     }
 
-    private WebApplicationFactory<Program> With(FakeNarrator narrator, int room = 0, int success = Succeed) =>
+    private WebApplicationFactory<Program> With(FakeNarrator narrator, int room = 0, int success = Succeed, CapturingNotifier? notifier = null) =>
         factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
+            if (notifier is not null) s.AddSingleton<IPartyNotifier>(notifier);
             s.AddSingleton<IRoller>(new FixedRoller(room, success));
             s.AddSingleton<IDungeonNarrator>(narrator);
         }));
@@ -72,15 +74,17 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
     [Fact]
     public async Task Choice_UsesNarratorOutcome_AndLeavesMathToCSharp()
     {
+        var notifier = new CapturingNotifier();
         var narrator = new FakeNarrator(outcome: "Steel rings. The goblins flee.");
-        using var derived = With(narrator, room: 0, success: Fail);
+        using var derived = With(narrator, room: 0, success: Fail, notifier: notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await TurnAsync(client, id, 1);
 
         var root = doc.RootElement;
-        root.GetProperty("lastOutcome").GetString().Should().Be("Steel rings. The goblins flee.");
+        root.TryGetProperty("lastOutcome", out _).Should().BeFalse();
+        (await notifier.NarrationAsync).Outcome.Should().Be("Steel rings. The goblins flee.");
         root.GetProperty("targetName").GetString().Should().Be("Conan");
         root.GetProperty("damage").GetInt32().Should().Be(2);
         root.GetProperty("gold").GetInt32().Should().Be(0);
@@ -92,12 +96,14 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
     [Fact]
     public async Task Choice_Success_PassesSuccessTrueToNarrator()
     {
+        var notifier = new CapturingNotifier();
         var narrator = new FakeNarrator();
-        using var derived = With(narrator, room: 0, success: Succeed);
+        using var derived = With(narrator, room: 0, success: Succeed, notifier: notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var _ = await TurnAsync(client, id, 0);
+        await notifier.NarrationAsync;
 
         narrator.SeenSuccess.Should().BeTrue();
         narrator.SeenOption.Should().Be("Open it");
@@ -150,7 +156,8 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
     [Fact]
     public async Task Choice_OutcomeNarratorThrows_FallsBackAndStillResolvesTurn()
     {
-        using var derived = With(new FakeNarrator(throwOnOutcome: true), room: 0, success: Fail);
+        var notifier = new CapturingNotifier();
+        using var derived = With(new FakeNarrator(throwOnOutcome: true), room: 0, success: Fail, notifier: notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
@@ -158,20 +165,21 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
 
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
         doc.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
-        doc.RootElement.GetProperty("lastOutcome").GetString()
+        (await notifier.NarrationAsync).Outcome
             .Should().Be(FallbackFlavor.Outcome(RoomType.Combat, false, 0));
     }
 
     [Fact]
     public async Task Choice_OutcomeNarratorReturnsBlank_FallsBack()
     {
-        using var derived = With(new FakeNarrator(outcome: "   "), room: 1, success: Succeed);
+        var notifier = new CapturingNotifier();
+        using var derived = With(new FakeNarrator(outcome: "   "), room: 1, success: Succeed, notifier: notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await TurnAsync(client, id);
 
-        doc.RootElement.GetProperty("lastOutcome").GetString()
+        (await notifier.NarrationAsync).Outcome
             .Should().Be(FallbackFlavor.Outcome(RoomType.Chest, true, 0));
     }
 
@@ -206,5 +214,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
     {
         public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) => Task.CompletedTask;
         public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) => Task.CompletedTask;
+        public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) => Task.CompletedTask;
+        public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) => Task.CompletedTask;
     }
 }

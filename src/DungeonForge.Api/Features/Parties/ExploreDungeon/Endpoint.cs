@@ -20,11 +20,16 @@ public sealed class ExploreDungeonEndpoint : IEndpoint
            .AddEndpointFilter(async (ctx, next) =>
            {
                var request = ctx.Arguments.OfType<ExploreRequest>().FirstOrDefault();
-               return request?.SelectedChoiceIndex is < 0 or > 2
-                   ? TypedResults.ValidationProblem(new Dictionary<string, string[]>
+               if (request?.SelectedChoiceIndex is < 0 or > 2)
+               {
+                   return TypedResults.ValidationProblem(new Dictionary<string, string[]>
                    {
                        ["selectedChoiceIndex"] = ["Choice index must be between 0 and 2."],
-                   })
+                   });
+               }
+
+               return ExploreRequestLimits.Validate(request?.Actions) is { } error
+                   ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["actions"] = [error] })
                    : await next(ctx);
            })
            .WithName("ExploreDungeon");
