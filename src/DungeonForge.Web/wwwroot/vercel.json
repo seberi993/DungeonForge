@@ -2,7 +2,7 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/((?!_framework|_content|css|js|.*..*).*)",
+      "source": "/((?!_framework|_content|css|js|.*\..*).*)",
       "destination": "/index.html"
     }
   ]
