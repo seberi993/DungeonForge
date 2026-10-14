@@ -163,7 +163,7 @@ public class PartyLobbyTests : TestContext
     }
 
     [Fact]
-    public void Join_EmptyInput_ShowsErrorWithoutRequest()
+    public void Join_EmptyInput_ShowsErrorWithoutPartyRequest()
     {
         var handler = new FakeHandler(HttpStatusCode.OK);
         var cut = Render(handler);
@@ -172,7 +172,8 @@ public class PartyLobbyTests : TestContext
         cut.Find("button#join-party").Click();
 
         cut.Find(".join-error").TextContent.Should().NotBeNullOrWhiteSpace();
-        handler.LastRequest.Should().BeNull();
+        // The lobby loads the hall of fame on init; empty input must send nothing else.
+        handler.LastRequest?.RequestUri!.AbsolutePath.Should().Be("/api/scores");
     }
 
     [Fact]

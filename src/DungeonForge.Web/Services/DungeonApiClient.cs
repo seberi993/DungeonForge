@@ -36,6 +36,9 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<IReadOnlyList<SpellDto>>> GetSpellsAsync(CharacterClass characterClass, CancellationToken ct = default) =>
         SendAsync<IReadOnlyList<SpellDto>>(() => http.GetAsync($"/api/classes/{characterClass.ToString().ToLowerInvariant()}/spells", ct), ct);
 
+    public Task<ApiResult<HighScoresResponse>> GetHighScoresAsync(int limit = 10, CancellationToken ct = default) =>
+        SendAsync<HighScoresResponse>(() => http.GetAsync($"/api/scores?limit={limit}", ct), ct);
+
     public Task<ApiResult<UnlockResponse>> UnlockAsync(Guid partyId, Guid memberId, CancellationToken ct = default) =>
         SendAsync<UnlockResponse>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/unlock", new UnlockRequest(memberId), Json, ct), ct);
 

@@ -151,6 +151,7 @@
         <div class="defeated">
             <p>Your party has been defeated.</p>
             <RunSummaryCard Summary="Session.Summary" />
+            <HighScoresCard HighlightParty="@Session.Name" />
             <button id="new-party" @onclick="NewParty">New Party</button>
         </div>
     }

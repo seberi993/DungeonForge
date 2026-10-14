@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -20,7 +21,8 @@ public sealed class ExploreDungeonHandler(
     IDungeonNarrator narrator,
     IPartyNotifier notifier,
     ILogger<ExploreDungeonHandler> logger,
-    IOptions<NarrationOptions>? options = null)
+    IOptions<NarrationOptions>? options = null,
+    IScoreBoard? scores = null)
 {
     private const double WoundedRatio = 0.5;
     private const int RoomKinds = 3;
@@ -171,6 +173,7 @@ public sealed class ExploreDungeonHandler(
 
         response = response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
+        if (snapshot.IsPartyDefeated) await RecordScoreAsync(snapshot);
 
         // The browser of whoever resolved the turn writes the narration; a defeat has no next scenario to wait on,
         // so it keeps the server path.
@@ -182,6 +185,23 @@ public sealed class ExploreDungeonHandler(
 
         _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, success, context));
         return result with { Response = response };
+    }
+
+    // Only the resolve that wipes the party reaches here (later resolves answer Defeated), so each run is recorded once.
+    // A board outage never blocks the turn.
+    private async Task RecordScoreAsync(GetPartyStateResponse party)
+    {
+        if (scores is null) return;
+        try
+        {
+            await scores.RecordAsync(new RunScore(
+                party.PartyId, party.Name, [.. party.Members.Select(m => m.Name)],
+                party.Floor, party.Turn, party.Gold, DateTimeOffset.UtcNow));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not record the score for party {PartyId}.", party.PartyId);
+        }
     }
 
     private async Task NarrateAndNotifyAsync(Guid partyId, int turn, bool success, NarrationContext context)

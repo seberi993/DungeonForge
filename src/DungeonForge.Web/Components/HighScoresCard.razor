@@ -1,0 +1,40 @@
+@using DungeonForge.Web.Models
+@using DungeonForge.Web.Services
+@inject DungeonApiClient Api
+
+@* Top runs by depth, then gold. HighlightParty marks the run that just ended. *@
+<section class="high-scores" aria-label="High scores">
+    <h3>Hall of Fame</h3>
+    @if (_scores is null)
+    {
+        <p class="scores-loading">Reading the roll of the fallen...</p>
+    }
+    else if (_scores.Count == 0)
+    {
+        <p class="scores-empty">No runs recorded yet. Be the first to fall.</p>
+    }
+    else
+    {
+        <ol class="score-list">
+            @foreach (var s in _scores)
+            {
+                <li class="@(s.PartyName == HighlightParty ? "score me" : "score")">
+                    <strong>@s.PartyName</strong> &mdash; floor @s.Floor · @s.Gold gold · @s.Turns @(s.Turns == 1 ? "turn" : "turns")
+                    <span class="score-heroes">@string.Join(", ", s.Heroes)</span>
+                </li>
+            }
+        </ol>
+    }
+</section>
+
+@code {
+    [Parameter] public string? HighlightParty { get; set; }
+
+    private IReadOnlyList<HighScoreDto>? _scores;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await Api.GetHighScoresAsync();
+        _scores = result.Value?.Scores ?? [];
+    }
+}

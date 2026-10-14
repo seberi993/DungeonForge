@@ -5,7 +5,10 @@ using DungeonForge.Api.Features.Parties.CreateParty;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Api.Features.Scores;
+using DungeonForge.Api.Features.Scores.GetHighScores;
 using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Api.Infrastructure.Scores;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
@@ -59,6 +62,24 @@ builder.Services.TryAddSingleton<IDungeonNarrator>(sp =>
         ? sp.GetRequiredService<KeyPoolGeminiNarrator>()
         : new StaticDungeonNarrator();
 });
+
+var supabase = builder.Configuration.GetSection("Supabase").Get<SupabaseOptions>();
+if (supabase is { IsConfigured: true })
+{
+    builder.Services.AddHttpClient<SupabaseScoreBoard>(http =>
+    {
+        http.BaseAddress = new Uri(supabase.Url!.TrimEnd('/') + "/");
+        http.DefaultRequestHeaders.Add("apikey", supabase.ServiceKey);
+        http.DefaultRequestHeaders.Add("Authorization", "Bearer " + supabase.ServiceKey);
+    });
+    builder.Services.TryAddSingleton<IScoreBoard>(sp => sp.GetRequiredService<SupabaseScoreBoard>());
+}
+else
+{
+    builder.Services.TryAddSingleton<IScoreBoard, InMemoryScoreBoard>();
+}
+
+builder.Services.AddSingleton<GetHighScoresHandler>();
 
 const string CorsPolicy = "BlazorClient";
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
