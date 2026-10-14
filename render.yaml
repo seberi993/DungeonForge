@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: dungeonforge-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: Cors__AllowedOrigins__0
+        sync: false
