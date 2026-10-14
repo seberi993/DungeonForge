@@ -1,0 +1,33 @@
+name: Deploy web to Vercel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/DungeonForge.Web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish Blazor WASM
+        run: dotnet publish src/DungeonForge.Web -c Release -o out
+
+      - name: Deploy to Vercel (production)
+        run: npx --yes vercel@latest deploy out/wwwroot --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
