@@ -110,6 +110,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .st-name { color: var(--parchment); } .st-act { font-weight: 700; text-decoration: underline; }
 .st-hpG { color: var(--success); } .st-hpL { color: var(--crimson-bright); }
 .st-fxr { color: #ff6b5a; } .st-fxo { color: #ff9d4d; } .st-fxy { color: var(--gold-bright); } .st-fxg { color: #7bd88f; } .st-fxc { color: #5fd3d0; } .st-fxd { color: var(--parchment-dim); }
+/* Props the narrator paints into the hall; the highlighted word in the text shares its prop's colour. */
+.st-p-fire, .key.st-p-fire { color: #ff9d4d; } .st-p-bone, .key.st-p-bone { color: #e8dcc0; } .st-p-ghost, .key.st-p-ghost { color: #9fb8ff; }
+.st-p-mist, .key.st-p-mist { color: #aab4c0; } .st-p-cold, .key.st-p-cold { color: #5fd3d0; } .st-p-wood, .key.st-p-wood { color: #c08a52; }
+.st-p-iron, .key.st-p-iron { color: #9aa3ad; } .st-p-gold, .key.st-p-gold { color: var(--gold-bright); } .st-p-arcane, .key.st-p-arcane { color: #c39be0; }
+.st-p-red, .key.st-p-red { color: #ff6b5a; } .st-p-green, .key.st-p-green { color: #8fcf7a; }
+.key[class*="st-p-"] { text-shadow: 0 0 .45em currentColor; }
 .members .me .member-name { color: var(--gold-bright); font-weight: 700; }
 details.card > summary, details.audit > summary { cursor: pointer; color: var(--parchment-dim); }
 details.audit { margin: .5rem 0; }

@@ -26,6 +26,8 @@
     [Parameter] public int Turn { get; set; }
     [Parameter] public RoomType? Room { get; set; }
     [Parameter] public string? Scene { get; set; }
+    // The narrator's scenario: its **highlighted** words are painted into the hall as animated props.
+    [Parameter] public string? Narration { get; set; }
     [Parameter] public StageShow? Show { get; set; }
     [Parameter] public bool NarrationPending { get; set; }
     [Parameter] public EventCallback<int> OnShowComplete { get; set; }
@@ -47,7 +49,7 @@
         _director.NarrationPending = NarrationPending;
         // The show first: a new room that arrives with it must wait until the actors are done.
         if (Show is { } show) _director.StartShow(show);
-        _director.SetRoom(Turn, Room, Scene);
+        _director.SetRoom(Turn, Room, Scene, Narration);
         _frame = _director.Frame();
     }
 

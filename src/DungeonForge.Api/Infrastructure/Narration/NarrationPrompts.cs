@@ -16,9 +16,11 @@ public static class NarrationPrompts
     private const string Rules =
         "Do not include any number, statistic, rule, or reward; never change the stated result.";
 
-    // The client types these words out in gold; everything else stays plain.
+    // The client paints every highlighted word into the corridor as an animated prop, so they must be things you can see.
     private const string Highlight =
-        "Wrap the 2 to 4 nouns or verbs the party must decide on (a creature, a door, a lever, an escape) in double asterisks, like **goblin**; use no other markdown.";
+        "Wrap the 3 to 5 concrete things the party can see in the corridor (a creature, a torch, dripping water, a lever, " +
+        "chains, mist, a door) in double asterisks, like **goblin**, each a single noun, each a different thing; " +
+        "use no other markdown.";
 
     private static readonly string SceneRule =
         $"\"scene\": the single best-fitting tag for the NEXT scenario, one of: {string.Join(", ", SceneTags.All)}.";

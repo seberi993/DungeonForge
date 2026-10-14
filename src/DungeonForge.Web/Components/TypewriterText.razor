@@ -8,10 +8,11 @@
     {
         var take = Math.Min(left, text.Length);
         left -= take;
-        <span class="@(key ? "key" : null)">@text[..take]</span>
+        var cls = key ? KeyClass(text) : null;
+        <span class="@cls">@text[..take]</span>
         @if (take < text.Length)
         {
-            <span class="tw-rest @(key ? "key" : null)">@text[take..]</span>
+            <span class="tw-rest @cls">@text[take..]</span>
         }
     }
 </span>
@@ -87,6 +88,9 @@
         _shown = _total;
         _ = OnComplete.InvokeAsync();
     }
+
+    // A highlighted word takes the colour of the prop it paints in the hall.
+    public static string KeyClass(string word) => "key " + DungeonForge.Web.Components.Stage.PropArt.Resolve(word).Class;
 
     // "a **b** c" -> [("a ", false), ("b", true), (" c", false)]; an unmatched ** is kept as plain text.
     public static List<(string Text, bool Key)> Parse(string? text)

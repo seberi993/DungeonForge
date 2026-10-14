@@ -12,8 +12,9 @@ public static class Corridor
     private static readonly char[] Flames = ['(', ')', '^', '*'];
 
     // intro 0..1 pulls the camera in: the far frames start closer together and spread out to their final spacing.
-    public static void Draw(CharGrid g, double ms, double intro)
+    public static void Draw(CharGrid g, double ms, double intro, RoomDecor? decor = null)
     {
+        decor ??= RoomDecor.Default;
         var e = Ease(intro);
         var sc = Depths.Select((s, d) => d == 0 ? 1 : Math.Pow(s, 1 + (1 - e) * 0.9)).ToArray();
         int L(int d) => CharGrid.Round(VanishX - 32 * sc[d]);
@@ -36,7 +37,7 @@ public static class Corridor
             {
                 var u = (x - VanishX) / (32 * s);
                 var lateral = (int)Math.Floor((u + 1) * 3);
-                g.Set(x, y, ((lateral + d) & 1) != 0 ? '░' : ' ', "st-z" + Math.Min(6, d + 1));
+                g.Set(x, y, ((lateral + d) & 1) != 0 ? decor.Floor : ' ', "st-z" + Math.Min(6, d + 1));
             }
         }
 
@@ -49,22 +50,23 @@ public static class Corridor
             {
                 var u = (x - VanishX) / (32 * s);
                 var lateral = (int)Math.Floor((u + 1) * 3);
-                if (((lateral + d) & 1) == 0 && s > 0.1) g.Set(x, y, '.', "st-z" + Math.Min(6, d + 1));
+                if (((lateral + d) & 1) == 0 && s > 0.1) g.Set(x, y, decor.Ceiling, "st-z" + Math.Min(6, d + 1));
             }
         }
 
         for (var y = T(Last); y <= B(Last); y++)
         {
-            for (var x = L(Last); x <= R(Last); x++) g.Set(x, y, '▓', "st-z6");
+            for (var x = L(Last); x <= R(Last); x++) g.Set(x, y, decor.Door, "st-z6");
         }
 
         for (var d = 1; d <= Last; d++)
         {
             int l = L(d), r = R(d), t = T(d), b = B(d);
             var cls = "st-z" + d;
-            for (var x = l + 1; x < r; x++) { g.Set(x, t, '─', cls); g.Set(x, b, '─', cls); }
-            for (var y = t + 1; y < b; y++) { g.Set(l, y, '│', cls); g.Set(r, y, '│', cls); }
-            g.Set(l, t, '┌', cls); g.Set(r, t, '┐', cls); g.Set(l, b, '└', cls); g.Set(r, b, '┘', cls);
+            var fs = decor.Frame;
+            for (var x = l + 1; x < r; x++) { g.Set(x, t, fs.H, cls); g.Set(x, b, fs.H, cls); }
+            for (var y = t + 1; y < b; y++) { g.Set(l, y, fs.V, cls); g.Set(r, y, fs.V, cls); }
+            g.Set(l, t, fs.TopLeft, cls); g.Set(r, t, fs.TopRight, cls); g.Set(l, b, fs.BottomLeft, cls); g.Set(r, b, fs.BottomRight, cls);
         }
 
         g.Line(0, 0, L(Last), T(Last), "st-z3");
@@ -73,11 +75,17 @@ public static class Corridor
         g.Line(g.Width - 1, g.Height - 1, R(Last), B(Last), "st-z3");
 
         var n = 0;
-        foreach (var d in new[] { 2, 4 })
+        foreach (var d in decor.TorchDepths)
         {
             var side = 0;
             foreach (var x in new[] { L(d) + 1, R(d) - 1 })
             {
+                if (side == 0 ? !decor.TorchLeft : !decor.TorchRight)
+                {
+                    side++;
+                    continue;
+                }
+
                 var y = VanishY - CharGrid.Round(2 * sc[d] * 3);
                 g.Set(x, y, Flames[(int)Math.Floor(ms / 120 + side * 2 + n) % 4], "st-torch");
                 g.Set(x, y + 1, '#', "st-torch");

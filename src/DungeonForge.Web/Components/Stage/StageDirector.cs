@@ -11,6 +11,8 @@ public sealed class StageDirector
 {
     public const double IntroMs = 3200;
     public const double ResultMs = 3000;
+    public const double PropDelayMs = 900;
+    public const double PropStaggerMs = 600;
     private const int FeetY = 16;
     private const int TargetX = Corridor.VanishX;
 
@@ -21,7 +23,10 @@ public sealed class StageDirector
     private RoomType? _room;
     private string? _scene;
     private double _roomStart;
-    private (int Key, RoomType Room, string? Scene)? _pending;
+    private string? _text;
+    private RoomDecor _decor = RoomDecor.Default;
+    private double _decorStart;
+    private (int Key, RoomType Room, string? Scene, string? Text)? _pending;
 
     private StageShow? _show;
     private StageShow? _ended;
@@ -40,20 +45,29 @@ public sealed class StageDirector
 
     // The room the party is in (key = the turn it belongs to). A new key plays the camera push-in, unless a show is
     // still running: then it waits, so the room never changes under the actors.
-    public void SetRoom(int key, RoomType? room, string? scene)
+    // text is the narrator's scenario for the room; its **highlighted** words become the animated props.
+    public void SetRoom(int key, RoomType? room, string? scene, string? text = null)
     {
         if (room is not { } r) return;
-        if (key == _roomKey && r == _room && scene == _scene) return;
+        if (key == _roomKey && r == _room && scene == _scene && text == _text) return;
         if (_show is not null)
         {
-            _pending = (key, r, scene);
+            _pending = (key, r, scene, text);
             return;
         }
 
-        ApplyRoom(key, r, scene);
+        // Same room, the narration just arrived: dress the hall without replaying the push-in.
+        if (key == _roomKey && r == _room)
+        {
+            _scene = scene;
+            Dress(text);
+            return;
+        }
+
+        ApplyRoom(key, r, scene, text);
     }
 
-    private void ApplyRoom(int key, RoomType room, string? scene)
+    private void ApplyRoom(int key, RoomType room, string? scene, string? text)
     {
         _roomKey = key;
         _room = room;
@@ -61,7 +75,18 @@ public sealed class StageDirector
         _ended = null;
         _roomStart = _clock;
         _pending = null;
+        Dress(text);
     }
+
+    private void Dress(string? text)
+    {
+        _text = text;
+        _decor = RoomDecor.Compose(text, _roomKey);
+        _decorStart = _clock;
+    }
+
+    // The props of the room on stage, in pop-in order.
+    public IReadOnlyList<PlacedProp> Props => _decor.Props;
 
     public bool StartShow(StageShow show)
     {
@@ -79,7 +104,7 @@ public sealed class StageDirector
         if (_show is not { } show || _clock - _showStart < ShowMs(show)) return;
         _show = null;
         _ended = show;
-        if (_pending is { } p) ApplyRoom(p.Key, p.Room, p.Scene);
+        if (_pending is { } p) ApplyRoom(p.Key, p.Room, p.Scene, p.Text);
         ShowFinished?.Invoke(show.Turn);
     }
 
@@ -175,7 +200,8 @@ public sealed class StageDirector
         var combat = room == RoomType.Combat;
 
         var g = new CharGrid(Corridor.Width, Corridor.Height);
-        Corridor.Draw(g, _clock, intro);
+        Corridor.Draw(g, _clock, intro, _decor);
+        foreach (var prop in _decor.Props) PropArt.Draw(g, prop, _clock, _clock - _decorStart - PropDelayMs - prop.Index * PropStaggerMs);
 
         /* --- the foe / prop at the far end --- */
         var baseRows = StageArt.SceneRows(scene, room, 0);

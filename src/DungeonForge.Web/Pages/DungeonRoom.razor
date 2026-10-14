@@ -39,7 +39,7 @@
         </div>
     </details>
 
-    <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene"
+    <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene" Narration="Session.Scenario"
                 Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" />
     <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" />
 
