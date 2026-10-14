@@ -1,4 +1,5 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Infrastructure.Narration;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
@@ -35,7 +36,7 @@ public static class ExploreRequestLimits
                 return "Each action needs a member id.";
             }
 
-            if (string.IsNullOrWhiteSpace(action.Text))
+            if (NarrationText.Clean(action.Text, MaxActionTextLength + 1).Length == 0)
             {
                 return "Action text must not be empty.";
             }
@@ -55,12 +56,13 @@ public static class ExploreRequestLimits
     }
 }
 
-// Optional body. Index null + Actions = submit tactical input to the pending encounter (no turn change);
-// both null = ask for (or re-read) the pending encounter; index 0..2 = resolve (Actions are submitted first).
-public sealed record ExploreRequest(int? SelectedChoiceIndex, IReadOnlyList<PlayerAction>? Actions = null);
+// Optional body. No actions (or an empty body) = ask for the pending scenario; actions = resolve the turn with the
+// party's aggregated free-text plan; actions + SubmitOnly = share tactical input with the party (no turn change).
+public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool SubmitOnly = false);
 
-// Prompt step: ChoicePrompt/Choices set, Turn unchanged, no deltas. Resolve step: deltas applied, LastOutcome null and
-// NarrationPending true; the text follows later as a NarrationReady event.
+// Prompt step: Scenario set, Turn unchanged, no deltas. When the next scenario is still being narrated, Scenario is
+// null and ScenarioPending is true (no extra LLM call is made; NarrationReady delivers the text). Resolve step: deltas
+// applied, LastOutcome null and NarrationPending true; outcome and next scenario follow as a NarrationReady event.
 public sealed record ExploreResponse(
     Guid PartyId,
     int Turn,
@@ -71,21 +73,27 @@ public sealed record ExploreResponse(
     string FlavorEvent,
     int Gold,
     bool IsPartyDefeated,
-    string? ChoicePrompt = null,
-    IReadOnlyList<string>? Choices = null,
+    string? Scenario = null,
     string? LastOutcome = null,
     IReadOnlyList<PlayerAction>? Discussion = null,
-    bool NarrationPending = false);
+    bool NarrationPending = false,
+    bool ScenarioPending = false);
 
-// Phase two of a resolved turn. Turn matches ExploreResponse.Turn of the resolve response.
-public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome);
+// Phase two of a resolved turn. Turn matches ExploreResponse.Turn of the resolve response. NextScenario/NextRoomType are
+// null when the party was defeated (there is no next encounter).
+public sealed record NarrationReady(
+    Guid PartyId,
+    int Turn,
+    string Outcome,
+    string? NextScenario = null,
+    RoomType? NextRoomType = null);
 
 public enum ExploreStatus
 {
     Explored,
     NotFound,
     Defeated,
-    InvalidChoice,
+    InvalidRequest,
 }
 
 public readonly record struct ExploreResult(ExploreStatus Status, ExploreResponse? Response = null, string? Error = null);

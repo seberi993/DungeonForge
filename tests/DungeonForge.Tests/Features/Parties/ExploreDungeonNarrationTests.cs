@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties;
@@ -17,197 +18,459 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
     : IClassFixture<WebApplicationFactory<Program>>
 {
     private sealed class FakeNarrator(
-        EncounterChoice? choices = null,
-        string outcome = "You prevail.",
-        bool throwOnChoices = false,
-        bool throwOnOutcome = false) : IDungeonNarrator
+        string scenario = "A door looms. What do you do?",
+        TurnNarration? turn = null,
+        bool throwOnScenario = false,
+        bool throwOnTurn = false) : IDungeonNarrator
     {
-        public NarrationContext? SeenChoicesContext { get; private set; }
-        public NarrationContext? SeenOutcomeContext { get; private set; }
-        public string? SeenOption { get; private set; }
+        private int _scenarioCalls;
+        private int _turnCalls;
+
+        public TaskCompletionSource? TurnGate { get; init; }
+        public int ScenarioCalls => Volatile.Read(ref _scenarioCalls);
+        public int TurnCalls => Volatile.Read(ref _turnCalls);
+        public int TotalCalls => ScenarioCalls + TurnCalls;
+        public NarrationContext? SeenScenarioContext { get; private set; }
+        public NarrationContext? SeenTurnContext { get; private set; }
         public bool? SeenSuccess { get; private set; }
 
-        public Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct)
+        public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct)
         {
-            SeenChoicesContext = ctx;
-            return throwOnChoices
-                ? throw new InvalidOperationException("boom")
-                : Task.FromResult(choices ?? new EncounterChoice("A door looms.", ["Open it", "Kick it", "Leave"]));
+            Interlocked.Increment(ref _scenarioCalls);
+            SeenScenarioContext = ctx;
+            return throwOnScenario ? throw new InvalidOperationException("boom") : Task.FromResult(scenario);
         }
 
-        public Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct)
+        public async Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct)
         {
-            SeenOption = chosenOption;
+            Interlocked.Increment(ref _turnCalls);
             SeenSuccess = success;
-            SeenOutcomeContext = ctx;
-            return throwOnOutcome ? throw new InvalidOperationException("boom") : Task.FromResult(outcome);
+            SeenTurnContext = ctx;
+            if (TurnGate is not null)
+            {
+                await TurnGate.Task;
+            }
+
+            return throwOnTurn
+                ? throw new InvalidOperationException("boom")
+                : turn ?? new TurnNarration("You prevail.", "The tunnel opens into a cavern. What do you do?");
         }
     }
 
-    private WebApplicationFactory<Program> With(FakeNarrator narrator, int room = 0, int success = Succeed, CapturingNotifier? notifier = null) =>
+    private WebApplicationFactory<Program> With(
+        IDungeonNarrator narrator, IRoller? roller = null, IPartyNotifier? notifier = null) =>
         factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
-            if (notifier is not null) s.AddSingleton<IPartyNotifier>(notifier);
-            s.AddSingleton<IRoller>(new FixedRoller(room, success));
-            s.AddSingleton<IDungeonNarrator>(narrator);
+            if (notifier is not null) s.AddSingleton(notifier);
+            s.AddSingleton(roller ?? new FixedRoller(0, Succeed));
+            s.AddSingleton(narrator);
         }));
 
+    // ---- Prompt step: at most one call, and none when a scenario is already stored ----
+
     [Fact]
-    public async Task Prompt_UsesNarratorChoices_AndPassesFactsOnly()
+    public async Task FirstPrompt_GeneratesScenarioWithExactlyOneCall_AndPassesFactsOnly()
     {
-        var narrator = new FakeNarrator(new EncounterChoice("The dark hums.", ["Sneak", "Fight", "Gamble"]));
+        var narrator = new FakeNarrator("The dark hums. What do you do?");
         using var derived = With(narrator);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await ReadAsync(await PromptAsync(client, id));
 
-        var root = doc.RootElement;
-        root.GetProperty("choicePrompt").GetString().Should().Be("The dark hums.");
-        root.GetProperty("choices").EnumerateArray().Select(e => e.GetString())
-            .Should().Equal("Sneak", "Fight", "Gamble");
-        narrator.SeenChoicesContext.Should().NotBeNull();
-        narrator.SeenChoicesContext!.Room.Should().Be(RoomType.Combat);
-        narrator.SeenChoicesContext.PartyName.Should().Be("Heroes");
+        doc.RootElement.GetProperty("scenario").GetString().Should().Be("The dark hums. What do you do?");
+        narrator.ScenarioCalls.Should().Be(1);
+        narrator.TurnCalls.Should().Be(0);
+        narrator.SeenScenarioContext!.Room.Should().Be(RoomType.Combat);
+        narrator.SeenScenarioContext.PartyName.Should().Be("Heroes");
     }
 
     [Fact]
-    public async Task Choice_UsesNarratorOutcome_AndLeavesMathToCSharp()
+    public async Task PromptWithStoredScenario_MakesNoNarratorCall()
     {
-        var notifier = new CapturingNotifier();
-        var narrator = new FakeNarrator(outcome: "Steel rings. The goblins flee.");
-        using var derived = With(narrator, room: 0, success: Fail, notifier: notifier);
-        var client = derived.CreateClient();
-        var id = await PartyTestData.CreatePartyAsync(client);
-
-        using var doc = await TurnAsync(client, id, 1);
-
-        var root = doc.RootElement;
-        root.TryGetProperty("lastOutcome", out _).Should().BeFalse();
-        (await notifier.NarrationAsync).Outcome.Should().Be("Steel rings. The goblins flee.");
-        root.GetProperty("targetName").GetString().Should().Be("Conan");
-        root.GetProperty("damage").GetInt32().Should().Be(2);
-        root.GetProperty("gold").GetInt32().Should().Be(0);
-        narrator.SeenOption.Should().Be("Kick it");
-        narrator.SeenSuccess.Should().BeFalse();
-        narrator.SeenOutcomeContext!.Room.Should().Be(RoomType.Combat);
-    }
-
-    [Fact]
-    public async Task Choice_Success_PassesSuccessTrueToNarrator()
-    {
-        var notifier = new CapturingNotifier();
         var narrator = new FakeNarrator();
-        using var derived = With(narrator, room: 0, success: Succeed, notifier: notifier);
+        using var derived = With(narrator);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        using var _ = await TurnAsync(client, id, 0);
-        await notifier.NarrationAsync;
+        for (var i = 0; i < 5; i++)
+        {
+            (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+        }
 
-        narrator.SeenSuccess.Should().BeTrue();
-        narrator.SeenOption.Should().Be("Open it");
+        narrator.TotalCalls.Should().Be(1);
     }
 
     [Fact]
-    public async Task Prompt_NarratorThrows_FallsBackToThreeDeterministicChoices()
+    public async Task ConcurrentFirstPrompts_MakeExactlyOneNarratorCall()
     {
-        using var derived = With(new FakeNarrator(throwOnChoices: true));
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => PromptAsync(client, id)));
+
+        responses.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK);
+        narrator.ScenarioCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task FirstPrompt_NarratorThrows_FallsBackToDeterministicScenario()
+    {
+        using var derived = With(new FakeNarrator(throwOnScenario: true));
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await ReadAsync(await PromptAsync(client, id));
 
-        var expected = FallbackFlavor.Choices(RoomType.Combat, 0);
-        doc.RootElement.GetProperty("choicePrompt").GetString().Should().Be(expected.Prompt);
-        doc.RootElement.GetProperty("choices").EnumerateArray().Select(e => e.GetString())
-            .Should().Equal(expected.Options);
+        doc.RootElement.GetProperty("scenario").GetString().Should().Be(FallbackFlavor.Scenario(RoomType.Combat, 0));
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(4)]
-    public async Task Prompt_NarratorReturnsWrongChoiceCount_FallsBack(int count)
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task FirstPrompt_NarratorReturnsBlank_FallsBack(string blank)
     {
-        var bad = new EncounterChoice("Odd.", Enumerable.Range(0, count).Select(i => $"Opt {i}").ToArray());
-        using var derived = With(new FakeNarrator(bad));
+        using var derived = With(new FakeNarrator(blank), new FixedRoller(2));
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await ReadAsync(await PromptAsync(client, id));
 
-        doc.RootElement.GetProperty("choices").GetArrayLength().Should().Be(3);
-        doc.RootElement.GetProperty("choicePrompt").GetString().Should().Be(FallbackFlavor.Choices(RoomType.Combat, 0).Prompt);
+        doc.RootElement.GetProperty("scenario").GetString().Should().Be(FallbackFlavor.Scenario(RoomType.Puzzle, 0));
     }
 
-    [Fact]
-    public async Task Prompt_NarratorReturnsBlankOption_FallsBack()
-    {
-        var bad = new EncounterChoice("Odd.", ["Fine", "  ", "Fine too"]);
-        using var derived = With(new FakeNarrator(bad));
-        var client = derived.CreateClient();
-        var id = await PartyTestData.CreatePartyAsync(client);
-
-        using var doc = await ReadAsync(await PromptAsync(client, id));
-
-        doc.RootElement.GetProperty("choicePrompt").GetString().Should().Be(FallbackFlavor.Choices(RoomType.Combat, 0).Prompt);
-    }
+    // ---- Resolve step: ONE call, next room rolled first, scenario stored for the next prompt ----
 
     [Fact]
-    public async Task Choice_OutcomeNarratorThrows_FallsBackAndStillResolvesTurn()
+    public async Task Resolve_MakesExactlyOneNarratorCall_AndNextPromptMakesNone()
     {
         var notifier = new CapturingNotifier();
-        using var derived = With(new FakeNarrator(throwOnOutcome: true), room: 0, success: Fail, notifier: notifier);
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator, notifier: notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+        narrator.ScenarioCalls.Should().Be(1);
+
+        (await ResolveAsync(client, id)).EnsureSuccessStatusCode();
+        var ready = await notifier.NarrationAsync;
+
+        narrator.TurnCalls.Should().Be(1);
+        narrator.ScenarioCalls.Should().Be(1);
+        ready.Outcome.Should().Be("You prevail.");
+        ready.NextScenario.Should().Be("The tunnel opens into a cavern. What do you do?");
+
+        using var next = await ReadAsync(await PromptAsync(client, id));
+        next.RootElement.GetProperty("scenario").GetString().Should().Be(ready.NextScenario);
+        next.RootElement.GetProperty("scenarioPending").GetBoolean().Should().BeFalse();
+        next.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
+        narrator.TotalCalls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Resolve_RollsNextRoomInCSharpBeforeTheNarratorCall_AndNarrationReadyCarriesIt()
+    {
+        var notifier = new CapturingNotifier();
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator, new SequenceRoller(Succeed, 0, 2), notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+
+        (await ResolveAsync(client, id, Act("flank them", "Conan"), Act("cast a light", "Merlin", Guid.NewGuid()))).EnsureSuccessStatusCode();
+        var ready = await notifier.NarrationAsync;
+
+        narrator.SeenTurnContext!.Room.Should().Be(RoomType.Combat);
+        narrator.SeenTurnContext.NextRoom.Should().Be(RoomType.Puzzle);
+        narrator.SeenTurnContext.Actions.Select(a => a.Text).Should().Equal("flank them", "cast a light");
+        narrator.SeenSuccess.Should().BeTrue();
+        ready.PartyId.Should().Be(id);
+        ready.Turn.Should().Be(1);
+        ready.NextRoomType.Should().Be(RoomType.Puzzle);
+
+        using var next = await ReadAsync(await PromptAsync(client, id));
+        next.RootElement.GetProperty("roomType").GetString().Should().Be("puzzle");
+    }
+
+    [Fact]
+    public async Task Resolve_FailedRoll_PassesSuccessFalseToNarrator()
+    {
+        var notifier = new CapturingNotifier();
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator, new FixedRoller(0, Fail), notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
         using var doc = await TurnAsync(client, id);
+        await notifier.NarrationAsync;
+
+        narrator.SeenSuccess.Should().BeFalse();
+        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
+        doc.RootElement.TryGetProperty("lastOutcome", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Resolve_NarratorThrows_BothPartsFallBack_AndTurnStillResolves()
+    {
+        var notifier = new CapturingNotifier();
+        using var derived = With(new FakeNarrator(throwOnTurn: true), new FixedRoller(1, Fail), notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        using var doc = await TurnAsync(client, id);
+        var ready = await notifier.NarrationAsync;
 
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
-        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
-        (await notifier.NarrationAsync).Outcome
-            .Should().Be(FallbackFlavor.Outcome(RoomType.Combat, false, 0));
+        ready.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Chest, false, 0));
+        ready.NextScenario.Should().Be(FallbackFlavor.Scenario(RoomType.Chest, 1));
+        using var next = await PromptWhenReadyAsync(client, id);
+        next.RootElement.GetProperty("scenario").GetString().Should().Be(ready.NextScenario);
     }
 
     [Fact]
-    public async Task Choice_OutcomeNarratorReturnsBlank_FallsBack()
+    public async Task Resolve_BlankOutcome_OnlyOutcomeFallsBack_NextIsKept()
     {
         var notifier = new CapturingNotifier();
-        using var derived = With(new FakeNarrator(outcome: "   "), room: 1, success: Succeed, notifier: notifier);
+        using var derived = With(new FakeNarrator(turn: new TurnNarration("  ", "A new hall. What do you do?")), new FixedRoller(1), notifier);
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
 
-        using var doc = await TurnAsync(client, id);
+        using var _ = await TurnAsync(client, id);
+        var ready = await notifier.NarrationAsync;
 
-        (await notifier.NarrationAsync).Outcome
-            .Should().Be(FallbackFlavor.Outcome(RoomType.Chest, true, 0));
+        ready.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Chest, true, 0));
+        ready.NextScenario.Should().Be("A new hall. What do you do?");
     }
 
     [Fact]
-    public async Task Handler_PromptRequestCancelled_PropagatesCancellationFromNarrator()
+    public async Task Resolve_BlankNext_OnlyNextFallsBack_OutcomeIsKept()
+    {
+        var notifier = new CapturingNotifier();
+        using var derived = With(new FakeNarrator(turn: new TurnNarration("Steel rings.", "")), new FixedRoller(2), notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        using var _ = await TurnAsync(client, id);
+        var ready = await notifier.NarrationAsync;
+
+        ready.Outcome.Should().Be("Steel rings.");
+        ready.NextScenario.Should().Be(FallbackFlavor.Scenario(RoomType.Puzzle, 1));
+    }
+
+    // ---- In-flight window: no second call, no double resolve ----
+
+    [Fact]
+    public async Task WhileNarrationInFlight_PromptReturnsScenarioPending_WithoutCalling_AndResolveIsRejected()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var notifier = new CapturingNotifier();
+        var narrator = new FakeNarrator { TurnGate = gate };
+        using var derived = With(narrator, new FixedRoller(1), notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await ResolveAsync(client, id)).EnsureSuccessStatusCode();
+
+        using var pending = await ReadAsync(await PromptAsync(client, id));
+        var again = await ResolveAsync(client, id);
+
+        pending.RootElement.GetProperty("scenarioPending").GetBoolean().Should().BeTrue();
+        pending.RootElement.GetProperty("roomType").GetString().Should().Be("chest");
+        pending.RootElement.TryGetProperty("scenario", out _).Should().BeFalse();
+        pending.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
+        again.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        narrator.TotalCalls.Should().Be(2, "one scenario call plus the single in-flight turn call");
+
+        gate.SetResult();
+        var ready = await notifier.NarrationAsync;
+        using var next = await PromptWhenReadyAsync(client, id);
+        next.RootElement.GetProperty("scenario").GetString().Should().Be(ready.NextScenario);
+        narrator.TotalCalls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task ConcurrentResolves_ResolveExactlyOnce_WithExactlyOneTurnCall()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var narrator = new FakeNarrator { TurnGate = gate };
+        using var derived = With(narrator, new FixedRoller(1));
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => ResolveAsync(client, id)));
+        gate.SetResult();
+
+        responses.Count(r => r.StatusCode == HttpStatusCode.OK).Should().Be(1);
+        responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest).Should().Be(19);
+        narrator.TurnCalls.Should().Be(1);
+        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
+        state.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
+    }
+
+    // ---- Defeat: still one call, next scenario ignored ----
+
+    [Fact]
+    public async Task PartyDefeated_NarratesWithOneCall_AndStoresNoNextScenario()
+    {
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator, new FixedRoller(0, Fail));
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client, members: [new { name = "Merlin", @class = "mage" }]);
+        for (var i = 0; i < 5; i++)
+        {
+            using var _ = await TurnAsync(client, id);
+        }
+
+        var before = narrator.TurnCalls;
+        using var final = await TurnAsync(client, id); // mage (16 HP) falls on the sixth failure
+
+        final.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeTrue();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (narrator.TurnCalls == before && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        narrator.TurnCalls.Should().Be(before + 1);
+        narrator.SeenTurnContext!.NextRoom.Should().BeNull();
+        (await PromptAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ---- Failures downstream of narration never break the next turn ----
+
+    [Fact]
+    public async Task NarrationReadyBroadcastFailure_StillStoresNextScenario()
+    {
+        var narrator = new FakeNarrator();
+        using var derived = With(narrator, new FixedRoller(1), new ThrowingNarrationNotifier());
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        using var _ = await TurnAsync(client, id);
+        using var next = await PromptWhenReadyAsync(client, id);
+
+        next.RootElement.GetProperty("scenario").GetString().Should().Be("The tunnel opens into a cavern. What do you do?");
+    }
+
+    [Fact]
+    public async Task Handler_PromptRequestCancelled_PropagatesCancellation_AndDoesNotWedgeTheParty()
     {
         using var derived = With(new FakeNarrator());
         var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
+        var cancelling = new CancellingNarrator();
         var handler = new ExploreDungeonHandler(
             derived.Services.GetRequiredService<IMemoryCache>(),
             new FixedRoller(0),
-            new CancellingNarrator(),
+            cancelling,
             new NoopNotifier(),
             NullLogger<ExploreDungeonHandler>.Instance);
-        using var cts = new CancellationTokenSource();
 
-        var act = () => handler.HandleAsync(id, null, cts.Token);
-
+        var act = () => handler.HandleAsync(id, null);
         await act.Should().ThrowAsync<OperationCanceledException>();
+
+        cancelling.Cancel = false;
+        var retry = await handler.HandleAsync(id, null);
+        retry.Status.Should().Be(ExploreStatus.Explored);
+        retry.Response!.Scenario.Should().Be("Calm now. What do you do?");
+    }
+
+    [Fact]
+    public async Task NarrationPhaseFault_CompletesWithFallback_AndPartyStaysPromptable()
+    {
+        using var derived = With(new FakeNarrator());
+        var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
+        var cache = new FaultableCache(derived.Services.GetRequiredService<IMemoryCache>());
+        var notifier = new CapturingNotifier();
+        var handler = new ExploreDungeonHandler(cache, new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier,
+            NullLogger<ExploreDungeonHandler>.Instance);
+
+        (await handler.HandleAsync(id, null)).Status.Should().Be(ExploreStatus.Explored);
+        var resolved = await handler.HandleAsync(id, new ExploreRequest([Act()]));
+        resolved.Status.Should().Be(ExploreStatus.Explored);
+
+        var ready = await notifier.NarrationAsync;
+        ready.NextScenario.Should().NotBeNullOrWhiteSpace();
+
+        cache.FailSets = false;
+        var next = await handler.HandleAsync(id, null);
+        next.Response!.ScenarioPending.Should().BeFalse();
+        next.Response.Scenario.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task FirstTurnCompletion_BroadcastsNarrationReadyWithScenario()
+    {
+        var notifier = new CapturingNotifier();
+        using var derived = With(new FakeNarrator("The dark hums. What do you do?"), notifier: notifier);
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        using var doc = await ReadAsync(await PromptAsync(client, id));
+
+        var ready = await notifier.FirstScenarioAsync;
+        ready.PartyId.Should().Be(id);
+        ready.Outcome.Should().BeEmpty();
+        ready.NextScenario.Should().Be("The dark hums. What do you do?");
+        ready.NextRoomType.Should().Be(RoomType.Combat);
+    }
+
+    [Fact]
+    public async Task FirstTurnCompletion_BroadcastFailure_DoesNotFailTheRequest()
+    {
+        using var derived = With(new FakeNarrator(), notifier: new ThrowingNarrationNotifier());
+        var client = derived.CreateClient();
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        (await PromptAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    private sealed class FaultArmingNarrator(FaultableCache cache) : IDungeonNarrator
+    {
+        public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct) =>
+            Task.FromResult("A door looms. What do you do?");
+
+        public Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct)
+        {
+            cache.FailSets = true;
+            return Task.FromResult(new TurnNarration("You prevail.", "Onward. What do you do?"));
+        }
+    }
+
+    private sealed class FaultableCache(IMemoryCache inner) : IMemoryCache
+    {
+        public volatile bool FailSets;
+
+        public ICacheEntry CreateEntry(object key) =>
+            FailSets ? throw new InvalidOperationException("cache fault") : inner.CreateEntry(key);
+
+        public void Remove(object key) => inner.Remove(key);
+        public bool TryGetValue(object key, out object? value) => inner.TryGetValue(key, out value);
+        public void Dispose() { }
     }
 
     private sealed class CancellingNarrator : IDungeonNarrator
     {
-        public Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct) =>
-            throw new OperationCanceledException();
+        public bool Cancel { get; set; } = true;
 
-        public Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct) =>
+        public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct) =>
+            Cancel ? throw new OperationCanceledException() : Task.FromResult("Calm now. What do you do?");
+
+        public Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct) =>
             throw new OperationCanceledException();
+    }
+
+    private sealed class ThrowingNarrationNotifier : IPartyNotifier
+    {
+        public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) => Task.CompletedTask;
+        public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
+        public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class NoopNotifier : IPartyNotifier

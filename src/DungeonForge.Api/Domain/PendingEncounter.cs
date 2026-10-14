@@ -2,10 +2,9 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Domain;
 
-// Choices are ordered safest to riskiest; the index maps to a success-chance tier in C#.
+// Scenario is the narrated, open-ended situation the party discusses; there are no predefined options.
 // Discussion holds at most one PlayerAction per member, in submission order.
 public sealed record PendingEncounter(
     RoomType Room,
-    string Prompt,
-    IReadOnlyList<string> Choices,
+    string Scenario,
     IReadOnlyList<PlayerAction>? Discussion = null);

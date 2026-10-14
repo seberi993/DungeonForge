@@ -16,11 +16,11 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
 {
     private sealed class FixedNarrator : IDungeonNarrator
     {
-        public Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct) =>
-            Task.FromResult(new EncounterChoice("prompt", ["a", "b", "c"]));
+        public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct) =>
+            Task.FromResult("scenario");
 
-        public Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct) =>
-            Task.FromResult("outcome");
+        public Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct) =>
+            Task.FromResult(new TurnNarration("outcome", "next"));
     }
 
     private sealed class RecordingNotifier(bool failTurnResolved = false) : IPartyNotifier
@@ -74,19 +74,19 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         var result = await handler.HandleAsync(id, null);
 
         result.Status.Should().Be(ExploreStatus.Explored);
-        result.Response!.Choices.Should().HaveCount(3);
+        result.Response!.Scenario.Should().Be("scenario");
         notifier.TurnResolvedCalls.Should().Be(0);
     }
 
     [Fact]
-    public async Task Choice_TurnResolvedThrows_StillDeliversPartyUpdated()
+    public async Task Resolve_TurnResolvedThrows_StillDeliversPartyUpdated()
     {
         var notifier = new RecordingNotifier(failTurnResolved: true);
         var (handler, id, scope) = await ArrangeAsync(notifier);
         using var _ = scope;
         await handler.HandleAsync(id, null);
 
-        var result = await handler.HandleAsync(id, new ExploreRequest(0));
+        var result = await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act()]));
 
         result.Status.Should().Be(ExploreStatus.Explored);
         notifier.TurnResolvedCalls.Should().Be(1);
@@ -94,7 +94,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
-    public async Task Choice_RequestTokenCancelled_BroadcastIsNotCancelled()
+    public async Task Resolve_RequestTokenCancelled_BroadcastIsNotCancelled()
     {
         var notifier = new RecordingNotifier();
         var (handler, id, scope) = await ArrangeAsync(notifier);
@@ -103,7 +103,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await handler.HandleAsync(id, new ExploreRequest(0), cts.Token);
+        await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act()]), cts.Token);
 
         notifier.TurnResolvedCalls.Should().Be(1);
         notifier.PartyUpdatedCalls.Should().Be(1);
@@ -111,16 +111,16 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
-    public async Task Choice_InvalidIndex_BroadcastsNothing()
+    public async Task Resolve_OnlyControlCharacterAction_BroadcastsNothing()
     {
         var notifier = new RecordingNotifier();
         var (handler, id, scope) = await ArrangeAsync(notifier);
         using var _ = scope;
         await handler.HandleAsync(id, null);
 
-        var result = await handler.HandleAsync(id, new ExploreRequest(7));
+        var result = await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act("\u0007")]));
 
-        result.Status.Should().Be(ExploreStatus.InvalidChoice);
+        result.Status.Should().Be(ExploreStatus.InvalidRequest);
         notifier.TurnResolvedCalls.Should().Be(0);
         notifier.PartyUpdatedCalls.Should().Be(0);
     }

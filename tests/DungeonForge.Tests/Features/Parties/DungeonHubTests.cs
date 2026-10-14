@@ -38,7 +38,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     private static async Task<HttpResponseMessage> ExploreTurnAsync(HttpClient client, Guid id)
     {
         (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
-        return await ExploreTestSupport.ChooseAsync(client, id, 0);
+        return await ExploreTestSupport.ResolveAsync(client, id);
     }
 
     private static HubConnection Connect(WebApplicationFactory<Program> f) =>

@@ -2,9 +2,9 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 
 public sealed class StaticDungeonNarrator : IDungeonNarrator
 {
-    public Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct) =>
-        Task.FromResult(FallbackFlavor.Choices(ctx.Room, ctx.Turn));
+    public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct) =>
+        Task.FromResult(FallbackFlavor.Scenario(ctx.Room, ctx.Turn));
 
-    public Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct) =>
-        Task.FromResult(FallbackFlavor.Outcome(ctx.Room, success, ctx.Turn));
+    public Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct) =>
+        Task.FromResult(FallbackFlavor.Complete(null, success, ctx));
 }

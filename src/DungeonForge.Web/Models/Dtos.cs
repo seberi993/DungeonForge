@@ -36,17 +36,17 @@ public sealed record ExploreResponse(
     string FlavorEvent,
     int Gold,
     bool IsPartyDefeated,
-    string? ChoicePrompt = null,
-    IReadOnlyList<string>? Choices = null,
     string? LastOutcome = null,
     IReadOnlyList<PlayerAction>? Discussion = null,
-    bool NarrationPending = false);
+    bool NarrationPending = false,
+    string? Scenario = null,
+    bool ScenarioPending = false);
 
 public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 
-public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome);
+public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null);
 
-public sealed record ExploreRequest(int? SelectedChoiceIndex, IReadOnlyList<PlayerAction>? Actions = null);
+public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null);
 
 public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null);
 

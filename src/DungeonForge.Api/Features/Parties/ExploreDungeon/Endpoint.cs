@@ -13,24 +13,13 @@ public sealed class ExploreDungeonEndpoint : IEndpoint
                 {
                     { Status: ExploreStatus.Explored, Response: { } response } => TypedResults.Ok(response),
                     { Status: ExploreStatus.Defeated } => TypedResults.Conflict(),
-                    { Status: ExploreStatus.InvalidChoice } r => TypedResults.ValidationProblem(
-                        new Dictionary<string, string[]> { ["selectedChoiceIndex"] = [r.Error ?? "Invalid choice."] }),
+                    { Status: ExploreStatus.InvalidRequest } r => TypedResults.ValidationProblem(
+                        new Dictionary<string, string[]> { ["actions"] = [r.Error ?? "Invalid request."] }),
                     _ => TypedResults.NotFound(),
                 })
            .AddEndpointFilter(async (ctx, next) =>
-           {
-               var request = ctx.Arguments.OfType<ExploreRequest>().FirstOrDefault();
-               if (request?.SelectedChoiceIndex is < 0 or > 2)
-               {
-                   return TypedResults.ValidationProblem(new Dictionary<string, string[]>
-                   {
-                       ["selectedChoiceIndex"] = ["Choice index must be between 0 and 2."],
-                   });
-               }
-
-               return ExploreRequestLimits.Validate(request?.Actions) is { } error
+               ExploreRequestLimits.Validate(ctx.Arguments.OfType<ExploreRequest>().FirstOrDefault()?.Actions) is { } error
                    ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["actions"] = [error] })
-                   : await next(ctx);
-           })
+                   : await next(ctx))
            .WithName("ExploreDungeon");
 }

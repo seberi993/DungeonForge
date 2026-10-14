@@ -14,71 +14,51 @@ public sealed class GeminiNarratorService(
     ILogger<GeminiNarratorService> logger,
     TimeProvider? clock = null) : IDungeonNarrator
 {
-    private const string ChoicesSystemPrompt =
-        "You write dungeon encounter dilemmas. Reply with strict JSON only, no markdown, in the shape " +
-        "{\"prompt\":\"one or two atmospheric sentences\",\"options\":[\"safest\",\"balanced\",\"riskiest\"]}. " +
-        "Provide exactly 3 short options (under 8 words each) ordered from safest to riskiest. " +
-        "Do not include numbers, statistics, rules, or outcomes; only describe the scene and the options.";
-
-    private const string OutcomeSystemPrompt =
-        "You write dungeon outcome narration. Reply with 1 or 2 short sentences describing how the chosen action " +
-        "went, matching the stated result exactly. Do not include any number, statistic, rule, or reward; " +
-        "never change the stated result. When member inputs are listed, weave the ideas that fit into the narration, in the order given.";
-
-    private const int ChoicesMaxTokens = 300;
-    private const int OutcomeMaxTokens = 120;
-    private const int OptionCount = 3;
-    private const int MaxPromptLength = 240;
-    private const int MaxOutcomeLength = 300;
-    private const int MaxPartyNameLength = MasterPromptBuilder.MaxNameLength;
-    private const string NeutralPartyName = "the party";
-    private const int MaxOptionLength = MasterPromptBuilder.MaxOptionLength;
+    // Output budgets: a scenario is ~180 words; a turn call returns an outcome plus a scenario as JSON.
+    private const int ScenarioMaxTokens = 700;
+    private const int TurnMaxTokens = 1400;
 
     private readonly NarrationOptions _options = options.Value;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
-    public async Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct)
+    public async Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct)
     {
-        var result = await TryGenerateChoicesAsync(ctx, _options.ApiKey, ct);
-        return result.Value ?? FallbackFlavor.Choices(ctx.Room, ctx.Turn);
+        var result = await TryGenerateScenarioAsync(ctx, _options.ApiKey, ct);
+        return result.Value ?? FallbackFlavor.Scenario(ctx.Room, ctx.Turn);
     }
 
-    public async Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct)
+    public async Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct)
     {
-        var result = await TryNarrateOutcomeAsync(chosenOption, success, ctx, _options.ApiKey, ct);
-        return result.Value ?? FallbackFlavor.Outcome(ctx.Room, success, ctx.Turn);
+        var result = await TryNarrateTurnAsync(success, ctx, _options.ApiKey, ct);
+        return FallbackFlavor.Complete(result.Value, success, ctx);
     }
 
     // Per-request key variants: Value is null on any failure; RateLimited is set on HTTP 429.
-    public async Task<GeminiResult<EncounterChoice>> TryGenerateChoicesAsync(NarrationContext ctx, string? apiKey, CancellationToken ct)
+    public async Task<GeminiResult<string>> TryGenerateScenarioAsync(NarrationContext ctx, string? apiKey, CancellationToken ct)
     {
-        var userPrompt = $"Party: {NarrationText.Sanitize(ctx.PartyName, MaxPartyNameLength, NeutralPartyName)}. Scene: {MasterPromptBuilder.Scene(ctx.Room)}. Mood: the party is {MasterPromptBuilder.Mood(ctx.PartyWounded)}.";
+        var send = await SendAsync(NarrationPrompts.Scenario(ctx.Room), MasterPromptBuilder.BuildScenario(ctx), ScenarioMaxTokens, apiKey, ct);
+        var cleaned = NarrationText.Clean(send.Text, TurnNarrationParser.MaxScenarioLength);
+        return cleaned.Length == 0
+            ? new(null, send.RateLimited, send.RetryAfter)
+            : new(cleaned, false, null);
+    }
 
-        var send = await SendAsync(ChoicesSystemPrompt, userPrompt, ChoicesMaxTokens, apiKey, ct);
+    // One call returns both the outcome narration and the next scenario; unusable replies yield a null Value.
+    public async Task<GeminiResult<TurnNarration>> TryNarrateTurnAsync(bool success, NarrationContext ctx, string? apiKey, CancellationToken ct)
+    {
+        var send = await SendAsync(NarrationPrompts.Turn(ctx.NextRoom), MasterPromptBuilder.Build(success, ctx), TurnMaxTokens, apiKey, ct);
         if (send.Text is null)
         {
             return new(null, send.RateLimited, send.RetryAfter);
         }
 
-        if (TryParseChoices(send.Text) is { } parsed)
+        if (TurnNarrationParser.Parse(send.Text) is { } parsed)
         {
             return new(parsed, false, null);
         }
 
-        logger.LogWarning("Narration choices response was malformed; using fallback.");
+        logger.LogWarning("Narration turn response was malformed; using fallback.");
         return new(null, false, null);
-    }
-
-    public async Task<GeminiResult<string>> TryNarrateOutcomeAsync(
-        string chosenOption, bool success, NarrationContext ctx, string? apiKey, CancellationToken ct)
-    {
-        var userPrompt = MasterPromptBuilder.Build(chosenOption, success, ctx);
-
-        var send = await SendAsync(OutcomeSystemPrompt, userPrompt, OutcomeMaxTokens, apiKey, ct);
-        var cleaned = NarrationText.Clean(send.Text, MaxOutcomeLength);
-        return cleaned.Length == 0
-            ? new(null, send.RateLimited, send.RetryAfter)
-            : new(cleaned, false, null);
     }
 
     // Text is null on any failure (blank key, timeout, non-2xx, empty content); HTTP 429 sets RateLimited.
@@ -153,59 +133,6 @@ public sealed class GeminiNarratorService(
         }
 
         return SendResult.Failed;
-    }
-
-    // Defensive: tolerates code fences / chatter around the JSON object; any wrong shape yields null.
-    private static EncounterChoice? TryParseChoices(string text)
-    {
-        var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
-        if (start < 0 || end <= start)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(text[start..(end + 1)]);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("prompt", out var promptEl) || promptEl.ValueKind != JsonValueKind.String
-                || !root.TryGetProperty("options", out var optionsEl) || optionsEl.ValueKind != JsonValueKind.Array
-                || optionsEl.GetArrayLength() != OptionCount)
-            {
-                return null;
-            }
-
-            var prompt = NarrationText.Clean(promptEl.GetString(), MaxPromptLength);
-            if (prompt.Length == 0)
-            {
-                return null;
-            }
-
-            var parsed = new List<string>(OptionCount);
-            foreach (var el in optionsEl.EnumerateArray())
-            {
-                if (el.ValueKind != JsonValueKind.String)
-                {
-                    return null;
-                }
-
-                var option = NarrationText.Clean(el.GetString(), MaxOptionLength);
-                if (option.Length == 0)
-                {
-                    return null;
-                }
-
-                parsed.Add(option);
-            }
-
-            return new EncounterChoice(prompt, parsed);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
     }
 
     private readonly record struct SendResult(string? Text, bool RateLimited, TimeSpan? RetryAfter)

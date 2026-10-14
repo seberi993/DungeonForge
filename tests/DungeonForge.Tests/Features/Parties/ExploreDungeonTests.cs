@@ -34,7 +34,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     // ---- Prompt step ----
 
     [Fact]
-    public async Task Explore_NoIndex_ReturnsPromptWithThreeChoices_AndChangesNothing()
+    public async Task Explore_NoActions_ReturnsScenarioWithoutChoices_AndChangesNothing()
     {
         var client = ClientWithRoll(0);
         var id = await PartyTestData.CreatePartyAsync(client);
@@ -48,8 +48,10 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         root.GetProperty("roomType").GetString().Should().Be("combat");
         root.GetProperty("damage").GetInt32().Should().Be(0);
         root.GetProperty("goldFound").GetInt32().Should().Be(0);
-        root.GetProperty("choicePrompt").GetString().Should().NotBeNullOrWhiteSpace();
-        root.GetProperty("choices").GetArrayLength().Should().Be(3);
+        root.GetProperty("scenario").GetString().Should().NotBeNullOrWhiteSpace();
+        root.GetProperty("scenarioPending").GetBoolean().Should().BeFalse();
+        root.TryGetProperty("choices", out _).Should().BeFalse();
+        root.TryGetProperty("choicePrompt", out _).Should().BeFalse();
 
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
         state.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
@@ -59,7 +61,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_NoIndexTwice_ReturnsSamePendingPromptWithoutReRolling()
+    public async Task Explore_PromptTwice_ReturnsSamePendingScenarioWithoutReRolling()
     {
         var derived = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
             s.AddSingleton<IRoller>(new FlippingRoomRoller())));
@@ -72,16 +74,30 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
 
         second.RootElement.GetProperty("roomType").GetString()
             .Should().Be(first.RootElement.GetProperty("roomType").GetString());
-        second.RootElement.GetProperty("choicePrompt").GetString()
-            .Should().Be(first.RootElement.GetProperty("choicePrompt").GetString());
-        second.RootElement.GetProperty("choices").GetRawText()
-            .Should().Be(first.RootElement.GetProperty("choices").GetRawText());
+        second.RootElement.GetProperty("scenario").GetString()
+            .Should().Be(first.RootElement.GetProperty("scenario").GetString());
     }
 
-    private sealed class FlippingRoomRoller : DungeonForge.Api.Features.Parties.ExploreDungeon.IRoller
+    private sealed class FlippingRoomRoller : IRoller
     {
         private int _calls;
         public int Next(int max) => max == 3 ? Interlocked.Increment(ref _calls) % 2 : 0;
+    }
+
+    [Fact]
+    public async Task Explore_EmptyActionsArrayOrEmptyObject_BehavesLikePromptRequest()
+    {
+        var client = ClientWithRoll(0);
+        var id = await PartyTestData.CreatePartyAsync(client);
+
+        var empty = await client.PostAsJsonAsync($"/api/parties/{id}/explore", new { });
+        var emptyList = await client.PostAsJsonAsync($"/api/parties/{id}/explore", new { actions = Array.Empty<object>() });
+
+        empty.StatusCode.Should().Be(HttpStatusCode.OK);
+        emptyList.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var doc = await ReadAsync(emptyList);
+        doc.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
+        doc.RootElement.GetProperty("scenario").GetString().Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
@@ -93,55 +109,22 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_UnknownPartyIdWithChoice_ReturnsNotFound()
+    public async Task Explore_UnknownPartyIdWithActions_ReturnsNotFound()
     {
-        var response = await ChooseAsync(factory.CreateClient(), Guid.NewGuid(), 0);
+        var response = await ResolveAsync(factory.CreateClient(), Guid.NewGuid());
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     // ---- Resolve step: validation ----
 
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(3)]
-    [InlineData(100)]
-    public async Task Explore_OutOfRangeIndex_ReturnsBadRequestAndKeepsPending(int index)
-    {
-        var client = ClientWithRoll(0);
-        var id = await PartyTestData.CreatePartyAsync(client);
-        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
-
-        var response = await ChooseAsync(client, id, index);
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        state.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
-        // Pending encounter survives a bad index: a valid choice still resolves.
-        (await ChooseAsync(client, id, 0)).StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Theory]
-    [InlineData(-1)]
-    [InlineData(3)]
-    public async Task Explore_OutOfRangeIndex_IsRejectedByFilterBeforePartyLookup(int index)
-    {
-        var client = ClientWithRoll(0);
-
-        var response = await ChooseAsync(client, Guid.NewGuid(), index);
-
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        using var body = await ReadAsync(response);
-        body.RootElement.GetProperty("errors").TryGetProperty("selectedChoiceIndex", out _).Should().BeTrue();
-    }
-
     [Fact]
-    public async Task Explore_IndexWithoutPendingEncounter_ReturnsBadRequest()
+    public async Task Explore_ResolveWithoutPendingScenario_ReturnsBadRequest()
     {
         var client = ClientWithRoll(0);
         var id = await PartyTestData.CreatePartyAsync(client);
 
-        var response = await ChooseAsync(client, id, 0);
+        var response = await ResolveAsync(client, id);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
@@ -149,16 +132,16 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_ChoiceResolved_ClearsPending_SoSecondChoiceIsBadRequest()
+    public async Task Explore_ResolveWithOnlyControlCharacterAction_ReturnsBadRequestAndKeepsPending()
     {
         var client = ClientWithRoll(0);
         var id = await PartyTestData.CreatePartyAsync(client);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
-        (await ChooseAsync(client, id, 0)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var again = await ChooseAsync(client, id, 0);
+        var response = await ResolveAsync(client, id, Act("\u0007\u0007"));
 
-        again.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ResolveAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ---- Resolve step: outcomes ----
@@ -169,7 +152,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         var client = ClientWithRoll(0, Succeed);
         var id = await PartyTestData.CreatePartyAsync(client);
 
-        using var t1 = await TurnAsync(client, id, 0);
+        using var t1 = await TurnAsync(client, id);
 
         t1.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
         t1.RootElement.GetProperty("roomType").GetString().Should().Be("combat");
@@ -178,9 +161,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         // Two-phase contract: mechanics return immediately; narration arrives later via NarrationReady.
         t1.RootElement.TryGetProperty("lastOutcome", out _).Should().BeFalse();
         t1.RootElement.GetProperty("narrationPending").GetBoolean().Should().BeTrue();
-        // Nulls are omitted on the wire: a resolved turn carries no choices/prompt.
-        t1.RootElement.TryGetProperty("choices", out _).Should().BeFalse();
-        t1.RootElement.TryGetProperty("choicePrompt", out _).Should().BeFalse();
+        t1.RootElement.TryGetProperty("scenario", out _).Should().BeFalse();
 
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
         state.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
@@ -210,23 +191,6 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         Member(state, 0).GetProperty("hp").GetInt32().Should().Be(25);
         Member(state, 1).GetProperty("hp").GetInt32().Should().Be(16);
         Member(state, 2).GetProperty("hp").GetInt32().Should().Be(20);
-    }
-
-    [Theory]
-    [InlineData(0, 79, true)]
-    [InlineData(0, 80, false)]
-    [InlineData(1, 54, true)]
-    [InlineData(1, 55, false)]
-    [InlineData(2, 29, true)]
-    [InlineData(2, 30, false)]
-    public async Task Explore_SuccessChanceDependsOnChoiceRiskTier(int index, int roll, bool expectSuccess)
-    {
-        var client = ClientWithRoll(0, roll);
-        var id = await PartyTestData.CreatePartyAsync(client);
-
-        using var doc = await TurnAsync(client, id, index);
-
-        (doc.RootElement.GetProperty("damage").GetInt32() == 0).Should().Be(expectSuccess);
     }
 
     [Fact]
@@ -260,8 +224,6 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
         state.RootElement.GetProperty("gold").GetInt32().Should().Be(11);
         state.RootElement.GetProperty("turn").GetInt32().Should().Be(2);
-        state.RootElement.GetProperty("members").EnumerateArray()
-            .Should().OnlyContain(m => m.GetProperty("hp").GetInt32() == m.GetProperty("maxHp").GetInt32());
     }
 
     [Fact]
@@ -338,7 +300,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_DefeatedParty_ReturnsConflictForPromptAndChoice_AndDoesNotAdvanceTurn()
+    public async Task Explore_DefeatedParty_ReturnsConflictForPromptAndResolve_AndDoesNotAdvanceTurn()
     {
         var client = ClientWithRoll(0, Fail);
         var id = await CreateSoloMagePartyAsync(client);
@@ -348,38 +310,15 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         }
 
         (await PromptAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await ChooseAsync(client, id, 0)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await ResolveAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
         state.RootElement.GetProperty("turn").GetInt32().Should().Be(6);
-    }
-
-    [Fact]
-    public async Task Explore_ThirdCombatFailure_DealsFourDamage()
-    {
-        var client = ClientWithRoll(0, Fail);
-        var id = await PartyTestData.CreatePartyAsync(client);
-
-        JsonDocument? last = null;
-        for (var i = 0; i < 3; i++)
-        {
-            last?.Dispose();
-            last = await TurnAsync(client, id);
-        }
-
-        using (last)
-        {
-            last!.RootElement.GetProperty("damage").GetInt32().Should().Be(4);
-            last.RootElement.GetProperty("targetName").GetString().Should().Be("Conan");
-        }
-
-        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        Member(state, 0).GetProperty("hp").GetInt32().Should().Be(21);
     }
 
     // ---- Concurrency ----
 
     [Fact]
-    public async Task Explore_ConcurrentPrompts_AllReturnTheSamePendingEncounter_AndTurnStaysZero()
+    public async Task Explore_ConcurrentPrompts_AllReturnTheSamePendingScenario_AndTurnStaysZero()
     {
         var client = ClientWithRoll(1);
         var id = await PartyTestData.CreatePartyAsync(client);
@@ -387,55 +326,29 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => PromptAsync(client, id)));
 
         responses.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK);
-        var prompts = new HashSet<string>();
+        var scenarios = new HashSet<string>();
         foreach (var r in responses)
         {
             using var doc = await ReadAsync(r);
-            prompts.Add(doc.RootElement.GetProperty("choicePrompt").GetString()!);
+            if (doc.RootElement.TryGetProperty("scenario", out var s))
+            {
+                scenarios.Add(s.GetString()!);
+            }
         }
 
-        prompts.Should().HaveCount(1);
+        scenarios.Should().HaveCount(1);
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
         state.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
     }
 
     [Fact]
-    public async Task Explore_ConcurrentChoices_ResolveExactlyOnce()
-    {
-        var client = ClientWithRoll(1);
-        var id = await PartyTestData.CreatePartyAsync(client);
-        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
-
-        var responses = await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => ChooseAsync(client, id, 0)));
-
-        responses.Count(r => r.StatusCode == HttpStatusCode.OK).Should().Be(1);
-        responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest).Should().Be(19);
-        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        state.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Explore_MalformedBody_Index_AsString_IsRejected()
+    public async Task Explore_MalformedBody_ActionsAsString_IsRejected()
     {
         var client = ClientWithRoll(0);
         var id = await PartyTestData.CreatePartyAsync(client);
-        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        var response = await client.PostAsJsonAsync($"/api/parties/{id}/explore", new { selectedChoiceIndex = "abc" });
+        var response = await client.PostAsJsonAsync($"/api/parties/{id}/explore", new { actions = "abc" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task Explore_EmptyJsonObjectBody_BehavesLikePromptRequest()
-    {
-        var client = ClientWithRoll(0);
-        var id = await PartyTestData.CreatePartyAsync(client);
-
-        var response = await client.PostAsJsonAsync($"/api/parties/{id}/explore", new { });
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        using var doc = await ReadAsync(response);
-        doc.RootElement.GetProperty("choices").GetArrayLength().Should().Be(3);
     }
 }

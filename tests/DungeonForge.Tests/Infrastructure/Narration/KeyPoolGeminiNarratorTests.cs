@@ -97,9 +97,8 @@ public sealed class KeyPoolGeminiNarratorTests
         return (new KeyPoolGeminiNarrator(gemini, pool, log), handler, clock, log);
     }
 
-    private static readonly NarrationContext Ctx = new(RoomType.Combat, "Heroes", 3, false);
-    private const string ValidChoicesJson =
-        "{\"prompt\":\"A troll blocks the bridge.\",\"options\":[\"Parley\",\"Charge\",\"Leap the gap\"]}";
+    private static readonly NarrationContext Ctx = new(RoomType.Combat, "Heroes", 3, false) { NextRoom = RoomType.Chest };
+    private const string ValidScenario = "A troll blocks the bridge. What do you do?";
 
     [Fact]
     public async Task RoundRobin_UsesKeysInOrderAndWraps()
@@ -108,7 +107,7 @@ public sealed class KeyPoolGeminiNarratorTests
 
         for (var i = 0; i < 4; i++)
         {
-            await n.NarrateOutcomeAsync("Charge", true, Ctx, CancellationToken.None);
+            await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         }
 
         h.KeysSeen.Should().Equal(K0, K1, K2, K0);
@@ -117,11 +116,23 @@ public sealed class KeyPoolGeminiNarratorTests
     [Fact]
     public async Task RateLimited_RotatesToNextKeyAndSucceeds()
     {
-        var (n, h, _, _) = Create(k => k == K0 ? Status(HttpStatusCode.TooManyRequests) : Ok(ValidChoicesJson), K0, K1);
+        var (n, h, _, _) = Create(k => k == K0 ? Status(HttpStatusCode.TooManyRequests) : Ok(ValidScenario), K0, K1);
 
-        var result = await n.GenerateChoicesAsync(Ctx, CancellationToken.None);
+        var result = await n.GenerateScenarioAsync(Ctx, CancellationToken.None);
 
-        result.Prompt.Should().Be("A troll blocks the bridge.");
+        result.Should().Be(ValidScenario);
+        h.KeysSeen.Should().Equal(K0, K1);
+    }
+
+    [Fact]
+    public async Task RateLimited_Turn_RotatesToNextKeyAndParsesBothParts()
+    {
+        const string json = "{\"outcome\":\"The bridge holds.\",\"next\":\"A vault gapes. What do you do?\"}";
+        var (n, h, _, _) = Create(k => k == K0 ? Status(HttpStatusCode.TooManyRequests) : Ok(json), K0, K1);
+
+        var result = await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+
+        result.Should().Be(new TurnNarration("The bridge holds.", "A vault gapes. What do you do?"));
         h.KeysSeen.Should().Equal(K0, K1);
     }
 
@@ -130,11 +141,12 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, _, _) = Create(_ => Status(HttpStatusCode.TooManyRequests), K0, K1, K2);
 
-        var choices = await n.GenerateChoicesAsync(Ctx, CancellationToken.None);
-        var outcome = await n.NarrateOutcomeAsync("Charge", true, Ctx, CancellationToken.None);
+        var scenario = await n.GenerateScenarioAsync(Ctx, CancellationToken.None);
+        var turn = await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
 
-        choices.Should().BeEquivalentTo(FallbackFlavor.Choices(RoomType.Combat, 3));
-        outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Combat, true, 3));
+        scenario.Should().Be(FallbackFlavor.Scenario(RoomType.Combat, 3));
+        turn.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Combat, true, 3));
+        turn.Next.Should().Be(FallbackFlavor.Scenario(RoomType.Chest, 4));
         h.KeysSeen.Should().HaveCount(3, "second call finds every key cooling and makes no request");
     }
 
@@ -144,15 +156,15 @@ public sealed class KeyPoolGeminiNarratorTests
         var limited = true;
         var (n, h, clock, _) = Create(k => k == K0 && limited ? Status(HttpStatusCode.TooManyRequests, 30) : Ok("Fine."), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // K0 429 -> K1
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // K0 cooling -> K1
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None); // K0 429 -> K1
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None); // K0 cooling -> K1
         h.KeysSeen.Should().Equal(K0, K1, K1);
 
         limited = false;
         clock.Now += TimeSpan.FromSeconds(31);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
 
         h.KeysSeen.Should().Contain(K0);
     }
@@ -162,17 +174,17 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, clock, _) = Create(k => k == K0 ? Status(HttpStatusCode.TooManyRequests) : Ok("Fine."), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         clock.Now += TimeSpan.FromSeconds(59);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().NotContain(K0);
 
         clock.Now += TimeSpan.FromSeconds(2);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().Contain(K0);
     }
 
@@ -181,9 +193,9 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, _, _) = Create(_ => Status(HttpStatusCode.InternalServerError), K0, K1);
 
-        var outcome = await n.NarrateOutcomeAsync("Charge", false, Ctx, CancellationToken.None);
+        var outcome = await n.NarrateTurnAsync(false, Ctx, CancellationToken.None);
 
-        outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Combat, false, 3));
+        outcome.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Combat, false, 3));
         h.KeysSeen.Should().Equal(K0);
     }
 
@@ -194,7 +206,7 @@ public sealed class KeyPoolGeminiNarratorTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var act = () => n.NarrateOutcomeAsync("a", true, Ctx, cts.Token);
+        var act = () => n.NarrateTurnAsync(true, Ctx, cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -204,7 +216,7 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, _, _, log) = Create(k => k == K0 ? Status(HttpStatusCode.TooManyRequests) : Status(HttpStatusCode.InternalServerError), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
 
         log.Messages.Should().NotBeEmpty();
         log.Messages.Should().NotContain(m => m.Contains(K0) || m.Contains(K1));
@@ -217,17 +229,17 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, clock, _) = Create(k => k == K0 ? Quota429("120s", "GenerateRequestsPerMinutePerProjectPerModel-FreeTier") : Ok("Fine."), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // K0 429 -> K1
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None); // K0 429 -> K1
         clock.Now += TimeSpan.FromSeconds(100);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().NotContain(K0, "retryDelay of 120s has not elapsed (default would be 60s)");
 
         clock.Now += TimeSpan.FromSeconds(21);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().Contain(K0);
     }
 
@@ -236,17 +248,17 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, clock, _) = Create(k => k == K0 ? Quota429("20s", "GenerateRequestsPerDayPerProjectPerModel-FreeTier") : Ok("Fine."), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         clock.Now += TimeSpan.FromMinutes(59);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().NotContain(K0);
 
         clock.Now += TimeSpan.FromMinutes(2);
         h.KeysSeen.Clear();
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         h.KeysSeen.Should().Contain(K0);
     }
 
@@ -255,7 +267,7 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, _, _, log) = Create(_ => Quota429("10s", "GenerateRequestsPerDayPerProjectPerModel-FreeTier"), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
 
         log.Messages.Should().Contain(m => m.Contains("GenerateRequestsPerDayPerProjectPerModel-FreeTier"));
         log.Messages.Should().NotContain(m => m.Contains(K0) || m.Contains(K1));
@@ -266,11 +278,11 @@ public sealed class KeyPoolGeminiNarratorTests
     {
         var (n, h, _, log) = Create(_ => Status(HttpStatusCode.TooManyRequests), K0, K1);
 
-        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // both keys 429
+        await n.NarrateTurnAsync(true, Ctx, CancellationToken.None); // both keys 429
         log.Warnings.Clear();
         for (var i = 0; i < 5; i++)
         {
-            await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+            await n.NarrateTurnAsync(true, Ctx, CancellationToken.None);
         }
 
         h.KeysSeen.Should().HaveCount(2, "all later calls skip HTTP while every key is cooling");

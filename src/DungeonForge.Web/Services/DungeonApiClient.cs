@@ -23,12 +23,12 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
 
-    // No index and no actions = request (or re-read) the pending prompt, sent without a body.
-    // Actions only = submit tactical input; an index resolves the chosen option (actions are submitted first).
-    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, int? choiceIndex = null, IReadOnlyList<PlayerAction>? actions = null, CancellationToken ct = default) =>
-        SendAsync<ExploreResponse>(() => choiceIndex is null && actions is not { Count: > 0 }
+    // No actions = request (or re-read) the pending scenario, sent without a body.
+    // Actions + submitOnly = share input with the party; actions alone = resolve the turn.
+    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, IReadOnlyList<PlayerAction>? actions = null, bool submitOnly = false, CancellationToken ct = default) =>
+        SendAsync<ExploreResponse>(() => actions is not { Count: > 0 }
             ? http.PostAsync($"/api/parties/{partyId}/explore", null, ct)
-            : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(choiceIndex, actions is { Count: > 0 } ? actions : null), Json, ct), ct);
+            : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(actions, submitOnly ? true : null), Json, ct), ct);
 
     private static async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, CancellationToken ct) where T : class
     {

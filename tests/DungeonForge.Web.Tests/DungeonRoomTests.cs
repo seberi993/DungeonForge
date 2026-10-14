@@ -78,81 +78,30 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
-    public void Explore_Success_UpdatesStatsAndAppendsLogEntry()
+    public void Resolve_Success_UpdatesStatsAndAppendsLogEntry()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 15, "Shiny chest", 15)));
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 15, "Shiny chest", 15)));
 
-        cut.Find("button#explore").Click();
+        Resolve(cut);
 
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-                cut.Find("#stat-gold").TextContent.Should().Contain("15");
+        cut.Find("#stat-gold").TextContent.Should().Contain("15");
         cut.Find("#stat-turn").TextContent.Should().Contain("1");
         var entry = cut.Find(".log-entry").TextContent;
         entry.Should().Contain("Shiny chest").And.Contain("chest").And.Contain("15");
     }
 
     [Fact]
-    public void Explore_Combat_ReducesTargetMemberHpAndLogsDamage()
+    public void Resolve_Combat_ReducesTargetMemberHpAndLogsDamage()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 4, 0, "Clash", 0)));
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 4, 0, "Clash", 0)));
 
-        cut.Find("button#explore").Click();
+        Resolve(cut);
 
         cut.WaitForAssertion(() => cut.Find("#member-0").TextContent.Should().Contain("26/30"));
         cut.Find("#member-1").TextContent.Should().Contain("16/16");
         cut.Find("#stat-hp").TextContent.Should().Contain("42/46");
         cut.Find(".log-entry").TextContent.Should().Contain("Conan took 4 damage");
-    }
-
-    [Fact]
-    public void Explore_Twice_AppendsEntries()
-    {
-        var turn = 0;
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, bodyFactory: () => ExploreJson(++turn, "combat", "Conan", 1, 0, "Step", 0)));
-        cut.Find("button#explore").Click();
-        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-        cut.Find("button#explore").Click();
-        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(2));
-    }
-
-    [Fact]
-    public void BroadcastThenHttp_SameTurn_LogsOnce()
-    {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 7, "Same", 7)));
-        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Same", 7)));
-        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-
-        cut.Find("button#explore").Click();
-
-        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse());
-        cut.FindAll(".log-entry").Should().HaveCount(1);
-    }
-
-    [Fact]
-    public void StaleHttpTurn_DoesNotRegressState()
-    {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 9, 0, "Old", 0)));
-        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(2, RoomType.Chest, null, 0, 5, "New", 5)));
-        cut.WaitForAssertion(() => cut.Find("#stat-turn").TextContent.Should().Contain("2"));
-
-        cut.Find("button#explore").Click();
-
-        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse());
-        _session.Turn.Should().Be(2);
-        _session.TotalHp.Should().Be(46);
-        cut.FindAll(".log-entry").Should().HaveCount(1);
-    }
-
-    [Fact]
-    public void Explore_PartyDefeated_ShowsDefeatedAndDisablesExplore()
-    {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(3, "combat", "Merlin", 5, 0, "Slain", 4, defeated: true)));
-
-        cut.Find("button#explore").Click();
-
-        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeTrue());
-        cut.Find(".defeated").TextContent.Should().Contain("defeated");
-        cut.Find("button#new-party").Should().NotBeNull();
     }
 
     [Fact]
@@ -202,113 +151,23 @@ public class DungeonRoomTests : TestContext
         cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
     }
 
-    private static string PromptJson() =>
-        $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"A troll blocks the bridge.","gold":0,"isPartyDefeated":false,"choicePrompt":"A troll blocks the bridge.","choices":["Fight","Sneak","Bribe"]}""";
-
-    private static string ResolveJson() =>
-        $$"""{"partyId":"{{Id}}","turn":1,"roomType":"combat","targetName":"Conan","damage":3,"goldFound":0,"flavorEvent":"Resolved","gold":0,"isPartyDefeated":false,"lastOutcome":"You bribed the troll and slipped past."}""";
-
-    // First POST (no body) returns the prompt; POSTs carrying a body resolve.
-    private static FakeHandler PromptThenResolve()
-    {
-        FakeHandler? h = null;
-        h = new FakeHandler(HttpStatusCode.OK, bodyFactory: () => h!.LastRequestBody is null ? PromptJson() : ResolveJson());
-        return h;
-    }
-
-    private IRenderedComponent<DungeonRoom> RenderWithPending(FakeHandler handler)
-    {
-        _session.Start(new PartyResponse(Id, "Heroes",
-            [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
-            DateTimeOffset.UtcNow, "K7F2-9QXM"));
-        _session.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Combat, null, 0, 0, "p", 0, false, "p", ["a", "b", "c"]));
-        return Render(handler, withParty: false);
-    }
-
-    [Fact]
-    public void Prompt_RendersThreeChoiceButtons_AndHidesExplore()
-    {
-        var cut = Render(PromptThenResolve());
-
-        cut.Find("button#explore").Click();
-
-        cut.WaitForAssertion(() => cut.Find("#choice-0"));
-        cut.Find("#choice-0").TextContent.Should().Be("Fight");
-        cut.Find("#choice-1").TextContent.Should().Be("Sneak");
-        cut.Find("#choice-2").TextContent.Should().Be("Bribe");
-        cut.FindAll("#choice-3").Should().BeEmpty();
-        cut.Find("#choice-prompt").TextContent.Should().Contain("troll");
-        cut.FindAll("#explore").Should().BeEmpty();
-        cut.FindAll(".log-entry").Should().BeEmpty();
-        cut.Find("#stat-turn").TextContent.Should().Contain("0");
-    }
-
-    [Fact]
-    public void Explore_SendsNoBody()
-    {
-        var handler = PromptThenResolve();
-        var cut = Render(handler);
-        cut.Find("button#explore").Click();
-        cut.WaitForAssertion(() => cut.Find("#choice-0"));
-        handler.LastRequestBody.Should().BeNull();
-    }
-
-    [Fact]
-    public void ClickingChoice_SendsIndexInBody_ShowsLastOutcome_AndRestoresExplore()
-    {
-        var handler = PromptThenResolve();
-        var cut = Render(handler);
-        cut.Find("button#explore").Click();
-        cut.WaitForAssertion(() => cut.Find("#choice-2"));
-
-        cut.Find("#choice-2").Click();
-
-        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-        handler.LastRequestBody.Should().Be("{\"selectedChoiceIndex\":2}");
-        cut.Find(".log-entry").TextContent.Should().Contain("You bribed the troll and slipped past.");
-        cut.Find("#last-outcome").TextContent.Should().Contain("You bribed the troll");
-        cut.FindAll("#choice-0").Should().BeEmpty();
-        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
-        cut.Find("#stat-turn").TextContent.Should().Contain("1");
-        cut.Find("#member-0").TextContent.Should().Contain("27/30");
-    }
-
-    [Fact]
-    public void ChoiceRejectedWith400_ShowsErrorAndRestoresExplore()
-    {
-        var cut = RenderWithPending(new FakeHandler(HttpStatusCode.BadRequest,
-            """{"errors":{"selectedChoiceIndex":["No active encounter."]}}"""));
-
-        cut.Find("#choice-1").Click();
-
-        cut.WaitForAssertion(() => cut.Find(".error").TextContent.Should().Contain("No active encounter."));
-        cut.FindAll("#choice-0").Should().BeEmpty();
-        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
-    }
-
-    [Fact]
-    public void RemoteResolvedTurn_ClearsPendingChoices()
-    {
-        var cut = RenderWithPending(new FakeHandler(HttpStatusCode.OK));
-
-        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote", 7)));
-
-        cut.WaitForAssertion(() => cut.FindAll("#choice-0").Should().BeEmpty());
-        cut.Find("button#explore").Should().NotBeNull();
-    }
-
-    private static string PuzzlePromptJson(string discussion = "[]") =>
-        $$"""{"partyId":"{{Id}}","turn":0,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"Three runes glow.","gold":0,"isPartyDefeated":false,"choicePrompt":"Three runes glow.","choices":["Left","Middle","Right"],"discussion":{{discussion}}}""";
+    private static string PromptJson(string discussion = "[]") =>
+        $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"A troll blocks the bridge.\nIt growls.","gold":0,"isPartyDefeated":false,"scenario":"A troll blocks the bridge.\nIt growls.","scenarioPending":false,"discussion":{{discussion}}}""";
 
     private static string PendingResolveJson() =>
         $$"""{"partyId":"{{Id}}","turn":1,"roomType":"puzzle","damage":0,"goldFound":20,"flavorEvent":"Solved","gold":20,"isPartyDefeated":false,"narrationPending":true}""";
 
-    private IRenderedComponent<DungeonRoom> RenderPuzzle(FakeHandler handler, TimeSpan? narrationTimeout = null)
+    private static string ResolveWithOutcomeJson() =>
+        $$"""{"partyId":"{{Id}}","turn":1,"roomType":"combat","targetName":"Conan","damage":3,"goldFound":0,"flavorEvent":"Resolved","gold":0,"isPartyDefeated":false,"lastOutcome":"You bribed the troll and slipped past."}""";
+
+    private static readonly string Scenario0 = "A troll blocks the bridge.\nIt growls.";
+
+    private IRenderedComponent<DungeonRoom> RenderWithScenario(FakeHandler handler, TimeSpan? narrationTimeout = null)
     {
         _session.Start(new PartyResponse(Id, "Heroes",
             [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
             DateTimeOffset.UtcNow, "K7F2-9QXM"));
-        _session.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Puzzle, null, 0, 0, "Three runes glow.", 0, false, "Three runes glow.", ["Left", "Middle", "Right"]));
+        _session.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Combat, null, 0, 0, Scenario0, 0, false, Scenario: Scenario0));
         Services.AddSingleton<IDungeonHubClient>(_hub);
         Services.AddSingleton(_session);
         Services.AddSingleton(new DungeonApiClient(handler.CreateClient()));
@@ -318,56 +177,257 @@ public class DungeonRoomTests : TestContext
         });
     }
 
-    [Fact]
-    public void PuzzlePrompt_ShowsPromptChoicesAndActionInput()
+    private static void Resolve(IRenderedComponent<DungeonRoom> cut, string text = "Attack the troll")
     {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK));
-        cut.Find("#choice-prompt").TextContent.Should().Contain("runes");
-        cut.Find("#choice-2").TextContent.Should().Be("Right");
-        cut.Find("#action-text").Should().NotBeNull();
-        cut.Find("button#submit-action").TextContent.Should().Contain("Submit action");
+        cut.Find("#action-text").Input(text);
+        cut.Find("button#resolve-turn").Click();
     }
 
     [Fact]
-    public void ExplorePuzzle_PromptResponse_ShowsActionInput()
+    public void Explore_ShowsScenarioWithLineBreaks_AndNoOptionButtons()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, PuzzlePromptJson()));
+        var handler = new FakeHandler(HttpStatusCode.OK, PromptJson());
+        var cut = Render(handler);
+
         cut.Find("button#explore").Click();
-        cut.WaitForAssertion(() => cut.Find("#choice-0"));
-        cut.Find("#action-text").Should().NotBeNull();
+
+        cut.WaitForAssertion(() => cut.Find("#scenario"));
+        handler.LastRequestBody.Should().BeNull();
+        cut.Find("#scenario").TextContent.Should().Be(Scenario0);
+        cut.Find("#scenario").ClassList.Should().Contain("scenario");
+        cut.FindAll("[id^=choice]").Should().BeEmpty();
+        cut.FindAll("#explore").Should().BeEmpty();
         cut.FindAll(".log-entry").Should().BeEmpty();
+        cut.Find("#stat-turn").TextContent.Should().Contain("0");
     }
 
     [Fact]
-    public void SubmitAction_PostsActionOnlyBody_AndListsDiscussion()
+    public void ScenarioPending_PromptResponse_ShowsDungeonShiftsPlaceholder()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"x","gold":0,"isPartyDefeated":false,"scenarioPending":true}"""));
+
+        cut.Find("button#explore").Click();
+
+        cut.WaitForAssertion(() => cut.Find("#scenario-pending").TextContent.Should().Contain("dungeon shifts"));
+        cut.FindAll("#scenario").Should().BeEmpty();
+        cut.FindAll("#resolve-turn").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ActionBox_HasMaxLength200_AndResolveDisabledUntilAnActionExists()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+
+        cut.Find("#action-text").GetAttribute("maxlength").Should().Be("200");
+        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("button#submit-action").HasAttribute("disabled").Should().BeTrue();
+
+        cut.Find("#action-text").Input("   ");
+        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
+
+        cut.Find("#action-text").Input("Shield the mage");
+        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeFalse();
+        cut.Find("button#submit-action").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public void TeammateSubmittedAction_EnablesResolveWithEmptyTextBox()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+
+        cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, [new PlayerAction(Guid.NewGuid(), "Merlin", "Light a torch")]));
+
+        cut.WaitForAssertion(() => cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeFalse());
+        cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch");
+    }
+
+    [Fact]
+    public void SubmitAction_PostsSubmitOnlyBody_ListsDiscussion_AndKeepsScenario()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () =>
-            PuzzlePromptJson($$"""[{"memberId":"{{_session.PlayerId}}","name":"Conan","text":"Press the left rune"},{"memberId":"{{Guid.NewGuid()}}","name":"Merlin","text":"Read the glyphs"}]"""));
-        var cut = RenderPuzzle(handler);
+            PromptJson($$"""[{"memberId":"{{_session.PlayerId}}","name":"Conan","text":"Press the left rune"},{"memberId":"{{Guid.NewGuid()}}","name":"Merlin","text":"Read the glyphs"}]"""));
+        var cut = RenderWithScenario(handler);
 
         cut.Find("#action-text").Input("Press the left rune");
         cut.Find("button#submit-action").Click();
 
         cut.WaitForAssertion(() => cut.FindAll("#discussion li").Should().HaveCount(2));
-        handler.LastRequestBody.Should().Be($"{{\"actions\":[{{\"memberId\":\"{_session.PlayerId}\",\"name\":\"Conan\",\"text\":\"Press the left rune\"}}]}}");
+        handler.LastRequestBody.Should().Be($"{{\"actions\":[{{\"memberId\":\"{_session.PlayerId}\",\"name\":\"Conan\",\"text\":\"Press the left rune\"}}],\"submitOnly\":true}}");
         cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Read the glyphs");
-        cut.FindAll("#choice-0").Should().HaveCount(1);
+        cut.Find("#scenario").Should().NotBeNull();
+        cut.FindAll(".log-entry").Should().BeEmpty();
     }
 
     [Fact]
     public void SubmitAction_BlankText_DoesNothing()
     {
-        var handler = new FakeHandler(HttpStatusCode.OK, PuzzlePromptJson());
-        var cut = RenderPuzzle(handler);
+        var handler = new FakeHandler(HttpStatusCode.OK, PromptJson());
+        var cut = RenderWithScenario(handler);
         cut.Find("#action-text").Input("   ");
         cut.Find("button#submit-action").Click();
         handler.LastRequest.Should().BeNull();
     }
 
     [Fact]
+    public void Resolve_SendsOwnActionPlusTeammateActions_WithoutSubmitOnly()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, PendingResolveJson());
+        var cut = RenderWithScenario(handler);
+        var mate = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, [new PlayerAction(mate, "Merlin", "Light a torch")]));
+        cut.WaitForAssertion(() => cut.Find("#discussion"));
+
+        Resolve(cut, "Charge");
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        handler.LastRequestBody.Should().Contain("\"text\":\"Light a torch\"").And.Contain("\"text\":\"Charge\"");
+        handler.LastRequestBody.Should().NotContain("submitOnly").And.NotContain("selectedChoiceIndex");
+    }
+
+    [Fact]
+    public void Resolve_WithOutcome_AppliesMechanicsAndShowsOutcome()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ResolveWithOutcomeJson()));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        cut.Find(".log-entry").TextContent.Should().Contain("You bribed the troll and slipped past.");
+        cut.Find("#last-outcome").TextContent.Should().Contain("You bribed the troll");
+        cut.Find("#stat-turn").TextContent.Should().Contain("1");
+        cut.Find("#member-0").TextContent.Should().Contain("27/30");
+        cut.FindAll("#scenario").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Resolve_NarrationPending_AppliesMechanicsImmediately_WithPlaceholders_AndNoExplore()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.Find("#stat-gold").TextContent.Should().Contain("20"));
+        cut.Find("#stat-turn").TextContent.Should().Contain("1");
+        cut.Find("#narration-loading").Should().NotBeNull();
+        cut.Find("#scenario-pending").TextContent.Should().Contain("dungeon shifts");
+        cut.FindAll("#last-outcome").Should().BeEmpty();
+        cut.FindAll("#scenario").Should().BeEmpty();
+        cut.FindAll("#explore").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NarrationReady_MatchingTurn_ShowsOutcomeAndNextScenario()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+        Resolve(cut);
+        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
+
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "The runes hum and the door opens.", "A vast hall\nstretches ahead.", RoomType.Chest)));
+
+        cut.WaitForAssertion(() => cut.Find("#last-outcome").TextContent.Should().Contain("door opens"));
+        cut.FindAll("#narration-loading").Should().BeEmpty();
+        cut.FindAll("#scenario-pending").Should().BeEmpty();
+        cut.Find(".log-outcome").TextContent.Should().Contain("door opens");
+        cut.Find("#scenario").TextContent.Should().Be("A vast hall\nstretches ahead.");
+        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
+    }
+
+    [Fact]
+    public void NarrationReady_WrongTurn_IsIgnored()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+        Resolve(cut);
+        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
+
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 5, "wrong", "wrong scenario")));
+
+        cut.Find("#narration-loading").Should().NotBeNull();
+        cut.FindAll("#last-outcome").Should().BeEmpty();
+        cut.FindAll("#scenario").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NarrationReady_PartyDefeated_NoNextScenario_ShowsOutcomeOnly()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+        Resolve(cut);
+        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
+
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "Darkness takes you.")));
+
+        cut.WaitForAssertion(() => cut.Find("#last-outcome").TextContent.Should().Contain("Darkness"));
+        cut.FindAll("#scenario-pending").Should().BeEmpty();
+        cut.FindAll("#scenario").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void NarrationNeverArrives_FallsBackToPlaceholderText_AndOffersExploreAgain()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()), TimeSpan.FromMilliseconds(50));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.Find("#last-outcome").TextContent.Should().NotBeNullOrWhiteSpace(), TimeSpan.FromSeconds(3));
+        cut.FindAll("#narration-loading").Should().BeEmpty();
+        cut.FindAll("#scenario-pending").Should().BeEmpty();
+        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Resolve_Twice_AppendsEntries_ViaNextScenario()
+    {
+        var turn = 0;
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, bodyFactory: () => ExploreJson(++turn, "combat", "Conan", 1, 0, "Step", 0)));
+        Resolve(cut);
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "o", "Next room.")));
+        cut.WaitForAssertion(() => cut.Find("#scenario").TextContent.Should().Be("Next room."));
+
+        Resolve(cut, "Again");
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(2));
+    }
+
+    [Fact]
+    public void ResolveRejectedWith400_ShowsError_AndKeepsScenario()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.BadRequest,
+            """{"errors":{"actions":["At least one action is required."]}}"""));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.Find(".error").TextContent.Should().Contain("At least one action is required."));
+        cut.Find("#scenario").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void RemoteResolvedTurn_ClearsScenario_AndShowsPlaceholder()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote", 7)));
+
+        cut.WaitForAssertion(() => cut.FindAll("#scenario").Should().BeEmpty());
+        cut.Find("#scenario-pending").Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Resolve_PartyDefeated_ShowsDefeatedAndDisablesExplore()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(3, "combat", "Merlin", 5, 0, "Slain", 4, defeated: true)));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.Find("button#explore").HasAttribute("disabled").Should().BeTrue());
+        cut.Find(".defeated").TextContent.Should().Contain("defeated");
+        cut.Find("button#new-party").Should().NotBeNull();
+    }
+
+    [Fact]
     public void RemoteDiscussionUpdate_ReplacesTeammateList()
     {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK));
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
         var actions = new[] { new PlayerAction(Guid.NewGuid(), "Merlin", "Light a torch") };
 
         cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, actions));
@@ -375,57 +435,6 @@ public class DungeonRoomTests : TestContext
         cut.WaitForAssertion(() => cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch"));
     }
 
-    [Fact]
-    public void Resolve_NarrationPending_AppliesMechanicsImmediately_WithLoadingPlaceholder_AndInputStillUsable()
-    {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
-
-        cut.Find("#choice-1").Click();
-
-        cut.WaitForAssertion(() => cut.Find("#stat-gold").TextContent.Should().Contain("20"));
-        cut.Find("#stat-turn").TextContent.Should().Contain("1");
-        cut.Find("#narration-loading").Should().NotBeNull();
-        cut.FindAll("#last-outcome").Should().BeEmpty();
-        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
-    }
-
-    [Fact]
-    public void NarrationReady_MatchingTurn_ReplacesPlaceholder()
-    {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
-        cut.Find("#choice-1").Click();
-        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
-
-        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "The runes hum and the door opens.")));
-
-        cut.WaitForAssertion(() => cut.Find("#last-outcome").TextContent.Should().Contain("door opens"));
-        cut.FindAll("#narration-loading").Should().BeEmpty();
-        cut.Find(".log-outcome").TextContent.Should().Contain("door opens");
-    }
-
-    [Fact]
-    public void NarrationReady_WrongTurn_IsIgnored()
-    {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
-        cut.Find("#choice-1").Click();
-        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
-
-        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 5, "wrong")));
-
-        cut.Find("#narration-loading").Should().NotBeNull();
-        cut.FindAll("#last-outcome").Should().BeEmpty();
-    }
-
-    [Fact]
-    public void NarrationNeverArrives_FallsBackToPlaceholderText()
-    {
-        var cut = RenderPuzzle(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()), TimeSpan.FromMilliseconds(50));
-
-        cut.Find("#choice-0").Click();
-
-        cut.WaitForAssertion(() => cut.Find("#last-outcome").TextContent.Should().NotBeNullOrWhiteSpace(), TimeSpan.FromSeconds(3));
-        cut.FindAll("#narration-loading").Should().BeEmpty();
-    }
 
     [Fact]
     public void Connects_HubForParty()
@@ -450,8 +459,8 @@ public class DungeonRoomTests : TestContext
     [Fact]
     public void DuplicateTurn_IsNotAppliedTwice()
     {
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 7, "Mine", 7)));
-        cut.Find("button#explore").Click();
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "chest", null, 0, 7, "Mine", 7)));
+        Resolve(cut);
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
 
         cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Mine", 7)));
@@ -472,10 +481,10 @@ public class DungeonRoomTests : TestContext
     public void ConnectFailure_ShowsOfflineNoticeAndExploreStillWorks()
     {
         _hub = new FakeDungeonHubClient { FailConnect = true };
-        var cut = Render(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 1, 0, "Hit", 0)));
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 1, 0, "Hit", 0)));
 
         cut.WaitForAssertion(() => cut.Find(".offline").TextContent.Should().Contain("offline"));
-        cut.Find("button#explore").Click();
+        Resolve(cut);
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
     }
 

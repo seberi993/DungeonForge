@@ -1,3 +1,5 @@
+using DungeonForge.Api.Features.Parties.ExploreDungeon;
+
 namespace DungeonForge.Api.Domain;
 
 // Mutable aggregate shared via cache. Mutators and Snapshot() lock SyncRoot internally (re-entrant, so handlers may hold it
@@ -18,6 +20,7 @@ public sealed class Party
     private int _gold;
     private int _turn;
     private PendingEncounter? _pending;
+    private RoomType? _awaitingRoom;
 
     public Lock SyncRoot { get; } = new();
 
@@ -99,6 +102,42 @@ public sealed class Party
         lock (SyncRoot)
         {
             return _pending ??= encounter;
+        }
+    }
+
+    // Room of the scenario being generated (rolled in C#); null when idle or a scenario is already pending.
+    public RoomType? AwaitingRoom { get { lock (SyncRoot) { return _awaitingRoom; } } }
+
+    // Claims the right to generate the next scenario. False when one is pending or already being generated, which
+    // guarantees a single narrator call per turn.
+    public bool TryBeginScenario(RoomType room)
+    {
+        lock (SyncRoot)
+        {
+            if (_pending is not null || _awaitingRoom is not null)
+            {
+                return false;
+            }
+
+            _awaitingRoom = room;
+            return true;
+        }
+    }
+
+    public PendingEncounter CompleteScenario(PendingEncounter encounter)
+    {
+        lock (SyncRoot)
+        {
+            _awaitingRoom = null;
+            return _pending = encounter;
+        }
+    }
+
+    public void AbortScenario()
+    {
+        lock (SyncRoot)
+        {
+            _awaitingRoom = null;
         }
     }
 

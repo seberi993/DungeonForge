@@ -44,6 +44,35 @@ public class GameSessionTests
     }
 
     [Fact]
+    public void ApplyNarration_EmptyOutcome_FirstTurn_SetsScenarioWithoutLoggingBlankOutcome()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Combat, null, 0, 0, "", 0, false, ScenarioPending: true));
+
+        sut.ApplyNarration(Id, 0, "", "A door looms.").Should().BeTrue();
+
+        sut.Scenario.Should().Be("A door looms.");
+        sut.ScenarioPending.Should().BeFalse();
+        sut.LastOutcome.Should().BeNull();
+        sut.Log.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ApplyNarration_EmptyOutcome_DoesNotOverwriteExistingOutcome()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+        sut.ApplyNarration(Id, 1, "You win.", "Next room.");
+
+        sut.ApplyNarration(Id, 1, "", "Other.").Should().BeFalse();
+
+        sut.LastOutcome.Should().Be("You win.");
+        sut.Log[0].Outcome.Should().Be("You win.");
+    }
+
+    [Fact]
     public void ApplyNarration_OtherTurnOrParty_IsIgnored()
     {
         var sut = new GameSession();
@@ -109,7 +138,7 @@ public class GameSessionTests
         sut.Start(Party());
         var p = new PlayerAction(Guid.NewGuid(), "A", "hit it");
 
-        sut.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Puzzle, null, 0, 0, "r", 0, false, "r", ["a", "b", "c"], Discussion: [p]));
+        sut.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Puzzle, null, 0, 0, "r", 0, false, Discussion: [p], Scenario: "r"));
 
         sut.Discussion.Should().Equal(p);
     }
@@ -286,23 +315,24 @@ public class GameSessionTests
         sut.IsDefeated.Should().BeTrue();
     }
 
-    private static ExploreResponse Prompt(int turn) =>
-        new(Id, turn, RoomType.Combat, null, 0, 0, "Troll", 0, false, "Troll", ["a", "b", "c"]);
+    private static ExploreResponse Prompt(int turn, string scenario = "A troll\nblocks the bridge.") =>
+        new(Id, turn, RoomType.Combat, null, 0, 0, scenario, 0, false, Scenario: scenario);
 
     [Fact]
-    public void ApplyPrompt_SameTurn_BypassesTurnGuard_AndSetsPending()
+    public void ApplyPrompt_SameTurn_BypassesTurnGuard_AndSetsScenario()
     {
         var sut = new GameSession();
         sut.Start(Party());
         sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 5));
+        sut.ApplyNarration(Id, 2, "done");
         var changed = 0;
         sut.Changed += () => changed++;
 
         sut.ApplyPrompt(Prompt(2)).Should().BeTrue();
 
-        sut.HasPendingChoice.Should().BeTrue();
-        sut.PendingPrompt.Should().Be("Troll");
-        sut.PendingChoices.Should().Equal("a", "b", "c");
+        sut.HasScenario.Should().BeTrue();
+        sut.Scenario.Should().Be("A troll\nblocks the bridge.");
+        sut.ScenarioPending.Should().BeFalse();
         sut.Turn.Should().Be(2);
         sut.Log.Should().HaveCount(1);
         changed.Should().Be(1);
@@ -314,25 +344,39 @@ public class GameSessionTests
         var sut = new GameSession();
         sut.Start(Party());
         sut.ApplyPrompt(Prompt(0)).Should().BeTrue();
-        sut.HasPendingChoice.Should().BeTrue();
+        sut.HasScenario.Should().BeTrue();
     }
 
     [Fact]
-    public void ApplyPrompt_StaleTurnOtherPartyOrMalformed_IsIgnored()
+    public void ApplyPrompt_ScenarioPending_SetsPendingWithoutText()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ApplyPrompt(new ExploreResponse(Id, 1, RoomType.Combat, null, 0, 0, "x", 0, false, ScenarioPending: true)).Should().BeTrue();
+
+        sut.ScenarioPending.Should().BeTrue();
+        sut.HasScenario.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyPrompt_StaleTurnOtherPartyOrNoScenario_IsIgnored()
     {
         var sut = new GameSession();
         sut.Start(Party());
         sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 5));
+        sut.ApplyNarration(Id, 2, "done");
 
         sut.ApplyPrompt(Prompt(1)).Should().BeFalse();
         sut.ApplyPrompt(Prompt(2) with { PartyId = Guid.NewGuid() }).Should().BeFalse();
-        sut.ApplyPrompt(Prompt(2) with { Choices = null }).Should().BeFalse();
-        sut.ApplyPrompt(Prompt(2) with { ChoicePrompt = null }).Should().BeFalse();
-        sut.HasPendingChoice.Should().BeFalse();
+        sut.ApplyPrompt(Prompt(2) with { Scenario = null }).Should().BeFalse();
+        sut.HasScenario.Should().BeFalse();
+        sut.ScenarioPending.Should().BeFalse();
     }
 
     [Fact]
-    public void Apply_ClearsPending_AndRecordsLastOutcome()
+    public void Apply_ClearsScenario_AwaitsNext_AndRecordsLastOutcome()
     {
         var sut = new GameSession();
         sut.Start(Party());
@@ -340,35 +384,145 @@ public class GameSessionTests
 
         sut.Apply(Turn(1, RoomType.Combat, "A", 3, 0, 0) with { LastOutcome = "You won." }).Should().BeTrue();
 
-        sut.HasPendingChoice.Should().BeFalse();
-        sut.PendingChoices.Should().BeEmpty();
+        sut.HasScenario.Should().BeFalse();
+        sut.ScenarioPending.Should().BeTrue();
         sut.LastOutcome.Should().Be("You won.");
         sut.Log[0].Outcome.Should().Be("You won.");
     }
 
     [Fact]
-    public void ApplyPartyState_Newer_ClearsPending()
+    public void Apply_PartyDefeated_DoesNotAwaitScenario()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(1, RoomType.Combat, "A", 99, 0, 0, defeated: true));
+        sut.ScenarioPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyNarration_WithNextScenario_BecomesCurrentScenario()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ApplyNarration(Id, 1, "You win.", "A new hall\nopens.");
+
+        sut.Scenario.Should().Be("A new hall\nopens.");
+        sut.ScenarioPending.Should().BeFalse();
+        sut.NarrationPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyNarration_WithoutNextScenario_ClearsScenarioPending()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ApplyNarration(Id, 1, "The end.");
+
+        sut.HasScenario.Should().BeFalse();
+        sut.ScenarioPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyNarration_OldTurn_DoesNotOverrideCurrentScenario()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+        sut.Apply(Pending(2));
+
+        sut.ApplyNarration(Id, 1, "old", "stale scenario");
+
+        sut.Scenario.Should().BeNull();
+        sut.ScenarioPending.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyNarration_ArrivingBeforeResponse_KeepsNextScenario()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+
+        sut.ApplyNarration(Id, 1, "early", "Next room.");
+        sut.Apply(Pending(1));
+
+        sut.Scenario.Should().Be("Next room.");
+        sut.ScenarioPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ExpireNarration_AlsoStopsWaitingForScenario()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Pending(1));
+
+        sut.ExpireNarration(1).Should().BeTrue();
+
+        sut.ScenarioPending.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ExpireNarration_ScenarioPendingOnly_Expires()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(1, RoomType.Chest, null, 0, 1, 1));
+        sut.ScenarioPending.Should().BeTrue();
+
+        sut.ExpireNarration(1).Should().BeTrue();
+
+        sut.ScenarioPending.Should().BeFalse();
+        sut.LastOutcome.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyPartyState_Newer_ClearsScenario()
     {
         var sut = new GameSession();
         sut.Start(Party());
         sut.ApplyPrompt(Prompt(0));
         sut.ApplyPartyState(new PartyStateDto(Id, "Heroes", [Member("A", CharacterClass.Warrior, 7, 30)], DateTimeOffset.UtcNow, 1, 1, false));
-        sut.HasPendingChoice.Should().BeFalse();
+        sut.HasScenario.Should().BeFalse();
     }
 
     [Fact]
-    public void CancelPending_AndClear_ResetPrompt()
+    public void BuildActions_OwnTextPlusTeammates_ReplacesOwnSubmitted()
     {
         var sut = new GameSession();
         sut.Start(Party());
-        sut.ApplyPrompt(Prompt(0));
-        sut.CancelPending();
-        sut.HasPendingChoice.Should().BeFalse();
+        var mate = new PlayerAction(Guid.NewGuid(), "B", "Read glyphs");
+        sut.ApplyDiscussion(Id, [new PlayerAction(sut.PlayerId, "A", "old idea"), mate]);
 
-        sut.ApplyPrompt(Prompt(0));
-        sut.Clear();
-        sut.HasPendingChoice.Should().BeFalse();
-        sut.LastOutcome.Should().BeNull();
+        var actions = sut.BuildActions("  New idea ");
+
+        actions.Should().HaveCount(2);
+        actions.Should().Contain(mate);
+        actions.Should().Contain(new PlayerAction(sut.PlayerId, sut.PlayerName, "New idea"));
+    }
+
+    [Fact]
+    public void BuildActions_BlankOwnText_KeepsOwnSubmittedAction()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        var own = new PlayerAction(sut.PlayerId, "A", "old idea");
+        sut.ApplyDiscussion(Id, [own]);
+
+        sut.BuildActions("   ").Should().Equal(own);
+    }
+
+    [Fact]
+    public void BuildActions_NothingAnywhere_IsEmpty_AndIgnoresBlankTeammateText()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyDiscussion(Id, [new PlayerAction(Guid.NewGuid(), "B", "  ")]);
+
+        sut.BuildActions(null).Should().BeEmpty();
     }
 
     [Fact]
@@ -376,11 +530,14 @@ public class GameSessionTests
     {
         var sut = new GameSession();
         sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0));
         sut.Apply(Turn(1, RoomType.Chest, null, 0, 5, 5));
         sut.Clear();
 
         sut.HasParty.Should().BeFalse();
         sut.Log.Should().BeEmpty();
         sut.Gold.Should().Be(0);
+        sut.HasScenario.Should().BeFalse();
+        sut.ScenarioPending.Should().BeFalse();
     }
 }

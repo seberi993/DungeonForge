@@ -31,13 +31,14 @@ public sealed class GameSession
         _members = [.. party.Members];
     }
 
-    public string? PendingPrompt { get; private set; }
-    public IReadOnlyList<string> PendingChoices { get; private set; } = [];
+    public string? Scenario { get; private set; }
+    public bool ScenarioPending { get; private set; }
     public string? LastOutcome { get; private set; }
     public IReadOnlyList<PlayerAction> Discussion { get; private set; } = [];
     public bool NarrationPending { get; private set; }
+    public bool HasScenario => Scenario is not null;
     private int _narrationTurn;
-    private (int Turn, string Outcome)? _earlyNarration;
+    private (int Turn, string Outcome, string? NextScenario)? _earlyNarration;
     private const string NarrationPlaceholder = "The dungeon falls quiet; the tale of this moment is lost to the mist.";
 
     public bool ApplyDiscussion(Guid partyId, IReadOnlyList<PlayerAction> actions)
@@ -48,73 +49,100 @@ public sealed class GameSession
         return true;
     }
 
+    // Own text (if any) replaces this player's shared action; teammates' non-blank shared actions are kept.
+    public IReadOnlyList<PlayerAction> BuildActions(string? ownText)
+    {
+        var own = ownText?.Trim();
+        var actions = Discussion
+            .Where(a => !string.IsNullOrWhiteSpace(a.Text) && (a.MemberId != PlayerId || string.IsNullOrEmpty(own)))
+            .ToList();
+        if (!string.IsNullOrEmpty(own)) actions.Add(new PlayerAction(PlayerId, PlayerName, own));
+        return actions;
+    }
+
     // Matches by turn; narration landing before the resolve response is held until that turn is applied.
-    public bool ApplyNarration(Guid partyId, int turn, string outcome)
+    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null)
     {
         if (partyId != PartyId) return false;
+        if (string.IsNullOrEmpty(outcome)) return ApplyScenarioOnly(turn, nextScenario);
         var index = _log.FindIndex(e => e.Turn == turn);
         if (index < 0)
         {
             if (turn <= Turn) return false;
-            _earlyNarration = (turn, outcome);
+            _earlyNarration = (turn, outcome, nextScenario);
             return false;
         }
 
         _log[index] = _log[index] with { Outcome = outcome };
-        if (turn == Turn) LastOutcome = outcome;
+        if (turn == Turn)
+        {
+            LastOutcome = outcome;
+            Scenario = nextScenario;
+            ScenarioPending = false;
+        }
         if (turn == _narrationTurn) NarrationPending = false;
         Changed?.Invoke();
         return true;
     }
 
-    public bool ExpireNarration(int turn)
+    // Empty-outcome broadcast (first-turn scenario): only fills a missing scenario for the current turn; never logs an outcome.
+    private bool ApplyScenarioOnly(int turn, string? nextScenario)
     {
-        if (!NarrationPending || _narrationTurn != turn) return false;
-        NarrationPending = false;
-        LastOutcome = NarrationPlaceholder;
-        var index = _log.FindIndex(e => e.Turn == turn);
-        if (index >= 0) _log[index] = _log[index] with { Outcome = NarrationPlaceholder };
+        if (turn != Turn || nextScenario is null || Scenario is not null) return false;
+        Scenario = nextScenario;
+        ScenarioPending = false;
         Changed?.Invoke();
         return true;
     }
 
-    public bool HasPendingChoice => PendingPrompt is not null && PendingChoices.Count > 0;
+    // Gives up waiting for narration and/or the next scenario so the player can re-prompt.
+    public bool ExpireNarration(int turn)
+    {
+        var narrationWaiting = NarrationPending && _narrationTurn == turn;
+        var scenarioWaiting = ScenarioPending && Turn == turn;
+        if (!narrationWaiting && !scenarioWaiting) return false;
+        if (narrationWaiting)
+        {
+            NarrationPending = false;
+            LastOutcome = NarrationPlaceholder;
+            var index = _log.FindIndex(e => e.Turn == turn);
+            if (index >= 0) _log[index] = _log[index] with { Outcome = NarrationPlaceholder };
+        }
+        ScenarioPending = false;
+        Changed?.Invoke();
+        return true;
+    }
 
-    // Prompt step does not advance the turn, so it bypasses the strictly-newer guard (stale turns still rejected).
+    // Prompt/discussion step does not advance the turn, so it bypasses the strictly-newer guard (stale turns still rejected).
     public bool ApplyPrompt(ExploreResponse result)
     {
         if (result.PartyId != PartyId || result.Turn < Turn) return false;
-        if (result.ChoicePrompt is null || result.Choices is not { Count: > 0 }) return false;
-        PendingPrompt = result.ChoicePrompt;
-        PendingChoices = [.. result.Choices];
+        if (result.Scenario is null && !result.ScenarioPending) return false;
+        Scenario = result.Scenario;
+        ScenarioPending = result.Scenario is null;
         if (result.Discussion is not null) Discussion = [.. result.Discussion];
         Changed?.Invoke();
         return true;
     }
 
-    public void CancelPending()
+    private void ClearScenario()
     {
-        ClearPending();
-        Changed?.Invoke();
-    }
-
-    private void ClearPending()
-    {
-        PendingPrompt = null;
-        PendingChoices = [];
+        Scenario = null;
+        ScenarioPending = false;
     }
 
     public bool Apply(ExploreResponse result)
     {
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
-        ClearPending();
+        ClearScenario();
         LastOutcome = result.LastOutcome;
         Discussion = [];
         NarrationPending = result.NarrationPending && result.LastOutcome is null;
         _narrationTurn = result.Turn;
         Gold = result.Gold;
         IsDefeated = result.IsPartyDefeated;
+        ScenarioPending = !IsDefeated;
         ApplyDamage(result.TargetName, result.Damage);
         _log.Add(new LogEntry(result.Turn, result.RoomType, result.TargetName, result.Damage, result.GoldFound, result.FlavorEvent, result.LastOutcome));
         if (_earlyNarration is { } early && early.Turn == result.Turn && NarrationPending)
@@ -122,6 +150,8 @@ public sealed class GameSession
             LastOutcome = early.Outcome;
             _log[^1] = _log[^1] with { Outcome = early.Outcome };
             NarrationPending = false;
+            Scenario = early.NextScenario;
+            ScenarioPending = false;
         }
         _earlyNarration = null;
         Changed?.Invoke();
@@ -149,7 +179,7 @@ public sealed class GameSession
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
-        ClearPending();
+        ClearScenario();
         Discussion = [];
         IsDefeated = party.IsPartyDefeated;
         Changed?.Invoke();
@@ -162,7 +192,7 @@ public sealed class GameSession
     {
         _members = [.. _members.Select(m => m with { Hp = 0, IsDefeated = true })];
         IsDefeated = true;
-        ClearPending();
+        ClearScenario();
     }
 
     public void Clear()
@@ -175,7 +205,7 @@ public sealed class GameSession
         Turn = 0;
         IsDefeated = false;
         _log.Clear();
-        ClearPending();
+        ClearScenario();
         LastOutcome = null;
         Discussion = [];
         NarrationPending = false;

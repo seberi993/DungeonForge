@@ -5,6 +5,13 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
+// One LLM call per turn, strictly in C#-owned order:
+//   prompt  : pending scenario stored -> return it, NO narrator call. Only a party's very first turn generates one.
+//   resolve : roll success + next room in C#, apply deltas, return mechanics immediately, then ONE narrator call
+//             (outcome + next scenario) in the background; the scenario is stored before NarrationReady is pushed.
+// In-flight window (design decision): while a scenario is being narrated the party has no Pending encounter but an
+// AwaitingRoom. A prompt then returns ScenarioPending (no LLM call, no blocking; the text arrives via NarrationReady and
+// the next prompt) and a resolve is rejected, so a turn can neither race a second narrator call nor be resolved twice.
 public sealed class ExploreDungeonHandler(
     IMemoryCache cache,
     IRoller roller,
@@ -13,20 +20,17 @@ public sealed class ExploreDungeonHandler(
     ILogger<ExploreDungeonHandler> logger)
 {
     private const double WoundedRatio = 0.5;
-    private const int ChoiceCount = 3;
     private const int RoomKinds = 3;
+    private const int BaseSuccessPercent = 55;
     private const int ActionBonusPercent = 5;
     private const int MaxActionBonusPercent = 15;
 
-    // Success chance (percent) per choice index, safest to riskiest. Success when roller.Next(100) < chance.
-    private static readonly int[] SuccessChance = [80, 55, 30];
-
     public Task<ExploreResult> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
-        request?.SelectedChoiceIndex is { } index
-            ? ResolveAsync(id, index, request.Actions, ct)
-            : PromptAsync(id, request?.Actions, ct);
+        request?.Actions is { Count: > 0 } actions && !request.SubmitOnly
+            ? ResolveAsync(id, actions)
+            : PromptAsync(id, request is { SubmitOnly: true } ? request.Actions : null, ct);
 
-    // ---- Step 1: present (or re-present) the dilemma. Never advances the turn. ----
+    // ---- Step 1: present (or re-present) the scenario. Never advances the turn. ----
 
     private async Task<ExploreResult> PromptAsync(Guid id, IReadOnlyList<PlayerAction>? actions, CancellationToken ct)
     {
@@ -38,62 +42,106 @@ public sealed class ExploreDungeonHandler(
 
     private async Task<ExploreResult> PromptCoreAsync(Guid id, CancellationToken ct)
     {
-        var (early, room, context) = BeginPrompt(id);
+        var (early, context) = BeginPrompt(id);
         if (early is { } done)
         {
             return done;
         }
 
-        // Narration is awaited outside the lock; it never influences game state.
-        var choice = await GenerateChoicesSafeAsync(context!, ct);
+        // Only a party's first turn gets here, and only the one request that claimed the scenario slot.
+        string scenario;
+        try
+        {
+            scenario = await GenerateScenarioSafeAsync(context!, ct);
+        }
+        catch
+        {
+            ReleaseScenarioSlot(id);
+            throw;
+        }
 
-        var party = cache.Get<Party>(PartyCache.Key(id));
-        if (party is null)
+        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
             return new ExploreResult(ExploreStatus.NotFound);
         }
 
-        // First writer wins: concurrent prompt requests all see the same encounter.
-        var pending = party.TrySetPending(new PendingEncounter(room!.Value, choice.Prompt, choice.Options.ToArray()));
+        var pending = party.CompleteScenario(new PendingEncounter(context!.Room, scenario));
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        await BroadcastFirstScenarioAsync(party, pending);
         return new ExploreResult(ExploreStatus.Explored, PromptResponse(party, pending));
     }
 
-    private (ExploreResult? Early, RoomType? Room, NarrationContext? Context) BeginPrompt(Guid id)
+    // Other clients that received scenarioPending learn the scenario via NarrationReady (empty outcome = scenario only).
+    private async Task BroadcastFirstScenarioAsync(Party party, PendingEncounter pending)
+    {
+        try
+        {
+            var ready = new NarrationReady(party.Id, party.Turn, string.Empty, pending.Scenario, pending.Room);
+            await notifier.NarrationReadyAsync(ready, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to broadcast first scenario for party {PartyId}", party.Id);
+        }
+    }
+
+    private (ExploreResult? Early, NarrationContext? Context) BeginPrompt(Guid id)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return (new ExploreResult(ExploreStatus.NotFound), null, null);
+            return (new ExploreResult(ExploreStatus.NotFound), null);
         }
 
         lock (party.SyncRoot)
         {
             if (party.IsPartyDefeated)
             {
-                return (new ExploreResult(ExploreStatus.Defeated), null, null);
+                return (new ExploreResult(ExploreStatus.Defeated), null);
             }
 
             if (party.Pending is { } existing)
             {
-                return (new ExploreResult(ExploreStatus.Explored, PromptResponse(party, existing)), null, null);
+                return (new ExploreResult(ExploreStatus.Explored, PromptResponse(party, existing)), null);
+            }
+
+            if (party.AwaitingRoom is { } awaiting)
+            {
+                return (new ExploreResult(ExploreStatus.Explored, AwaitingResponse(party, awaiting)), null);
             }
 
             var room = (RoomType)roller.Next(RoomKinds);
-            return (null, room, new NarrationContext(room, party.Name, party.Turn, IsWounded(party)));
+            party.TryBeginScenario(room);
+            return (null, new NarrationContext(room, party.Name, party.Turn, IsWounded(party)));
+        }
+    }
+
+    private void ReleaseScenarioSlot(Guid id)
+    {
+        if (cache.TryGetValue(PartyCache.Key(id), out Party? party) && party is not null)
+        {
+            party.AbortScenario();
         }
     }
 
     private static ExploreResponse PromptResponse(Party party, PendingEncounter pending) =>
-        new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Prompt, party.Gold, party.IsPartyDefeated,
-            ChoicePrompt: pending.Prompt, Choices: pending.Choices, Discussion: pending.Discussion);
+        new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Scenario, party.Gold, party.IsPartyDefeated,
+            Scenario: pending.Scenario, Discussion: pending.Discussion);
 
-    // ---- Step 2: resolve the chosen option in C# and return the mechanics immediately. ----
-    // Phase two (narration) runs in the background and is pushed to the party as NarrationReady.
+    private static ExploreResponse AwaitingResponse(Party party, RoomType room) =>
+        new(party.Id, party.Turn, room, null, 0, 0, string.Empty, party.Gold, party.IsPartyDefeated, ScenarioPending: true);
 
-    private async Task<ExploreResult> ResolveAsync(Guid id, int index, IReadOnlyList<PlayerAction>? actions, CancellationToken ct)
+    // ---- Step 2: resolve the party's aggregated plan in C# and return the mechanics immediately. ----
+    // Phase two (narration + next scenario) runs in the background and is pushed to the party as NarrationReady.
+
+    private async Task<ExploreResult> ResolveAsync(Guid id, IReadOnlyList<PlayerAction> actions)
     {
-        var (result, context, option, success, snapshot) = Mutate(id, index, actions);
-        if (result.Response is not { } response || context is null || option is null || snapshot is null)
+        if (!actions.Any(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
+        {
+            return Invalid("At least one non-empty action is required.");
+        }
+
+        var (result, context, success, snapshot) = Mutate(id, actions);
+        if (result.Response is not { } response || context is null || snapshot is null)
         {
             return result;
         }
@@ -101,21 +149,87 @@ public sealed class ExploreDungeonHandler(
         response = response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
 
-        _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, option, success, context));
+        _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, success, context));
         return result with { Response = response };
     }
 
-    private async Task NarrateAndNotifyAsync(Guid partyId, int turn, string option, bool success, NarrationContext context)
+    private async Task NarrateAndNotifyAsync(Guid partyId, int turn, bool success, NarrationContext context)
     {
-        // Never throws: the narrator has its own timeout and every failure falls back to deterministic flavor.
-        var outcome = await NarrateOutcomeSafeAsync(option, success, context, CancellationToken.None);
+        // Outer guard: whatever fails, the party must never be left with an AwaitingRoom and no scenario.
+        TurnNarration narration;
         try
         {
-            await notifier.NarrationReadyAsync(new NarrationReady(partyId, turn, outcome), CancellationToken.None);
+            // The narrator has its own timeout and every failure falls back to deterministic flavor.
+            narration = await NarrateTurnSafeAsync(success, context);
+
+            // The next scenario is stored BEFORE the push so a client reacting to NarrationReady can prompt immediately.
+            if (context.NextRoom is { } nextRoom)
+            {
+                StoreNextScenario(partyId, new PendingEncounter(nextRoom, narration.Next));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Narration phase failed for turn {Turn} of party {PartyId}; completing with fallback.", turn, partyId);
+            narration = FallbackFlavor.Complete(null, success, context);
+            RecoverStuckScenario(partyId, context.NextRoom, narration);
+        }
+
+        try
+        {
+            var ready = new NarrationReady(
+                partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom);
+            await notifier.NarrationReadyAsync(ready, CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to broadcast NarrationReady for turn {Turn} of party {PartyId}", turn, partyId);
+        }
+    }
+
+    // Mutates the party object directly (no cache write needed) so a cache fault cannot keep it stuck.
+    private void RecoverStuckScenario(Guid partyId, RoomType? nextRoom, TurnNarration fallback)
+    {
+        try
+        {
+            if (nextRoom is null || !cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+            {
+                return;
+            }
+
+            lock (party.SyncRoot)
+            {
+                if (party.AwaitingRoom is not null)
+                {
+                    party.CompleteScenario(new PendingEncounter(nextRoom.Value, fallback.Next));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Fallback scenario failed for party {PartyId}; aborting scenario slot.", partyId);
+            ReleaseScenarioSlotSafe(partyId);
+        }
+    }
+
+    private void ReleaseScenarioSlotSafe(Guid partyId)
+    {
+        try
+        {
+            ReleaseScenarioSlot(partyId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not release scenario slot for party {PartyId}", partyId);
+        }
+    }
+
+    private void StoreNextScenario(Guid partyId, PendingEncounter next)
+    {
+        if (cache.TryGetValue(PartyCache.Key(partyId), out Party? party) && party is not null)
+        {
+            party.CompleteScenario(next);
+            cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
         }
     }
 
@@ -131,12 +245,13 @@ public sealed class ExploreDungeonHandler(
         IReadOnlyList<PlayerAction> discussion;
         lock (party.SyncRoot)
         {
-            SubmitAll(party, actions);
-            if (party.Pending is not { } pending)
+            if (party.Pending is null)
             {
                 return null;
             }
 
+            SubmitAll(party, actions);
+            var pending = party.Pending!;
             discussion = pending.Discussion ?? [];
             response = PromptResponse(party, pending);
         }
@@ -170,43 +285,51 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
-    private (ExploreResult Result, NarrationContext? Context, string? Option, bool Success, GetPartyStateResponse? Snapshot) Mutate(
-        Guid id, int index, IReadOnlyList<PlayerAction>? actions)
+    private (ExploreResult Result, NarrationContext? Context, bool Success, GetPartyStateResponse? Snapshot) Mutate(
+        Guid id, IReadOnlyList<PlayerAction> actions)
     {
         var key = PartyCache.Key(id);
         if (!cache.TryGetValue(key, out Party? party) || party is null)
         {
-            return (new ExploreResult(ExploreStatus.NotFound), null, null, false, null);
+            return (new ExploreResult(ExploreStatus.NotFound), null, false, null);
         }
 
-        // Per-party lock: serializes mutation against Party.Snapshot() readers and concurrent choices.
+        // Per-party lock: serializes mutation against Party.Snapshot() readers and concurrent resolves.
         lock (party.SyncRoot)
         {
             if (party.IsPartyDefeated)
             {
-                return (new ExploreResult(ExploreStatus.Defeated), null, null, false, null);
+                return (new ExploreResult(ExploreStatus.Defeated), null, false, null);
             }
 
-            if (index is < 0 or >= ChoiceCount)
+            if (party.Pending is null)
             {
-                return (Invalid("Choice index must be between 0 and 2."), null, null, false, null);
-            }
-
-            if (party.Pending is not { } pending)
-            {
-                return (Invalid("There is no active encounter to resolve."), null, null, false, null);
+                return (Invalid(party.AwaitingRoom is null
+                    ? "There is no active encounter to resolve."
+                    : "The next scenario is still being written; wait for it before acting."), null, false, null);
             }
 
             SubmitAll(party, actions);
-            pending = party.Pending!;
+            var pending = party.Pending!;
+            if (pending.Discussion is not { Count: > 0 } discussion)
+            {
+                return (Invalid("At least one non-empty action is required."), null, false, null);
+            }
 
             var turnBefore = party.Turn;
-            var wounded = IsWounded(party);
             var bonus = Math.Min(MaxActionBonusPercent, party.ActionBonusCount * ActionBonusPercent);
-            var success = roller.Next(100) < SuccessChance[index] + bonus;
+            var success = roller.Next(100) < BaseSuccessPercent + bonus;
             var (damage, gold) = Deltas(pending.Room, success, turnBefore);
 
             var hit = party.ApplyChoiceOutcome(damage, gold);
+
+            // The next room is rolled in C# before any narrator call; nothing follows a defeated party.
+            RoomType? nextRoom = null;
+            if (!party.IsPartyDefeated)
+            {
+                nextRoom = (RoomType)roller.Next(RoomKinds);
+                party.TryBeginScenario(nextRoom.Value);
+            }
 
             // Mutated in place under the lock; re-Set refreshes the sliding expiry.
             cache.Set(key, party, PartyCache.EntryOptions());
@@ -216,18 +339,18 @@ public sealed class ExploreDungeonHandler(
 
             var response = new ExploreResponse(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
-                pending.Prompt, party.Gold, party.IsPartyDefeated, Discussion: pending.Discussion);
-            var context = new NarrationContext(pending.Room, party.Name, turnBefore, wounded)
+                pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion);
+            var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
-                Actions = pending.Discussion ?? [],
+                Actions = discussion,
+                NextRoom = nextRoom,
             };
 
-            return (new ExploreResult(ExploreStatus.Explored, response), context, pending.Choices[index], success,
-                PartyMapping.ToResponse(party.Snapshot()));
+            return (new ExploreResult(ExploreStatus.Explored, response), context, success, PartyMapping.ToResponse(party.Snapshot()));
         }
     }
 
-    private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidChoice, Error: error);
+    private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidRequest, Error: error);
 
     // Game math lives here, never in the narrator.
     private static (int Damage, int Gold) Deltas(RoomType room, bool success, int turn) => (room, success) switch
@@ -244,44 +367,17 @@ public sealed class ExploreDungeonHandler(
 
     // ---- Narration with deterministic fallbacks: a misbehaving narrator never fails the request. ----
 
-    private async Task<EncounterChoice> GenerateChoicesSafeAsync(NarrationContext context, CancellationToken ct)
+    private async Task<string> GenerateScenarioSafeAsync(NarrationContext context, CancellationToken ct)
     {
         try
         {
-            var choice = await narrator.GenerateChoicesAsync(context, ct);
-            if (IsValid(choice))
-            {
-                return choice;
-            }
-
-            logger.LogWarning("Narrator returned an invalid encounter for turn {Turn}; using fallback.", context.Turn);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Narrator failed generating choices for turn {Turn}; using fallback.", context.Turn);
-        }
-
-        return FallbackFlavor.Choices(context.Room, context.Turn);
-    }
-
-    private static bool IsValid(EncounterChoice? choice) =>
-        choice is { Options: { Count: ChoiceCount } options }
-        && !string.IsNullOrWhiteSpace(choice.Prompt)
-        && options.All(o => !string.IsNullOrWhiteSpace(o));
-
-    private async Task<string> NarrateOutcomeSafeAsync(string option, bool success, NarrationContext context, CancellationToken ct)
-    {
-        try
-        {
-            var text = await narrator.NarrateOutcomeAsync(option, success, context, ct);
+            var text = await narrator.GenerateScenarioAsync(context, ct);
             if (!string.IsNullOrWhiteSpace(text))
             {
                 return text;
             }
+
+            logger.LogWarning("Narrator returned an empty scenario for turn {Turn}; using fallback.", context.Turn);
         }
         catch (OperationCanceledException)
         {
@@ -289,10 +385,24 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Narrator failed narrating outcome for turn {Turn}; using fallback.", context.Turn);
+            logger.LogWarning(ex, "Narrator failed generating the scenario for turn {Turn}; using fallback.", context.Turn);
         }
 
-        return FallbackFlavor.Outcome(context.Room, success, context.Turn);
+        return FallbackFlavor.Scenario(context.Room, context.Turn);
+    }
+
+    private async Task<TurnNarration> NarrateTurnSafeAsync(bool success, NarrationContext context)
+    {
+        try
+        {
+            var narration = await narrator.NarrateTurnAsync(success, context, CancellationToken.None);
+            return FallbackFlavor.Complete(narration, success, context);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Narrator failed narrating turn {Turn}; using fallback.", context.Turn);
+            return FallbackFlavor.Complete(null, success, context);
+        }
     }
 
     // Outside the lock; a broadcast failure must never fail the explore request.

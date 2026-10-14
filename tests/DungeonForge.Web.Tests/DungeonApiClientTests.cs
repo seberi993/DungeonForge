@@ -92,33 +92,31 @@ public class DungeonApiClientTests
     }
 
     [Fact]
-    public async Task Explore_NoIndex_SendsNoBody()
+    public async Task Explore_NoActions_SendsNoBody_AndReadsScenario()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"Troll","gold":0,"isPartyDefeated":false,"choicePrompt":"Troll","choices":["a","b","c"]}""");
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"Troll\nBridge","gold":0,"isPartyDefeated":false,"scenario":"Troll\nBridge","scenarioPending":false}""");
 
         var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id);
 
         handler.LastRequestBody.Should().BeNull();
-        result.Value!.ChoicePrompt.Should().Be("Troll");
-        result.Value.Choices.Should().Equal("a", "b", "c");
+        result.Value!.Scenario.Should().Be("Troll\nBridge");
+        result.Value.ScenarioPending.Should().BeFalse();
         result.Value.TargetName.Should().BeNull();
         result.Value.LastOutcome.Should().BeNull();
     }
 
     [Fact]
-    public async Task Explore_WithIndex_PostsCamelCaseBodyAndReadsOutcome()
+    public async Task Explore_EmptyActions_SendsNoBody()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":1,"roomType":"chest","damage":0,"goldFound":9,"flavorEvent":"x","gold":9,"isPartyDefeated":false,"lastOutcome":"You win."}""");
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"x","gold":0,"isPartyDefeated":false,"scenarioPending":true}""");
 
-        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, 1);
+        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, []);
 
-        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
-        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}/explore");
-        handler.LastRequestBody.Should().Be("{\"selectedChoiceIndex\":1}");
-        result.Value!.LastOutcome.Should().Be("You win.");
-        result.Value.Choices.Should().BeNull();
+        handler.LastRequestBody.Should().BeNull();
+        result.Value!.ScenarioPending.Should().BeTrue();
+        result.Value.Scenario.Should().BeNull();
     }
 
     [Fact]
@@ -126,7 +124,7 @@ public class DungeonApiClientTests
     {
         var a = Guid.NewGuid();
         var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"Runes","gold":0,"isPartyDefeated":false,"choicePrompt":"Runes","choices":["a","b","c"],"discussion":[{"memberId":"{{a}}","name":"Conan","text":"Press the left rune"}],"narrationPending":true}""");
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"Runes","gold":0,"isPartyDefeated":false,"scenario":"Runes","discussion":[{"memberId":"{{a}}","name":"Conan","text":"Press the left rune"}],"narrationPending":true}""");
 
         var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id);
 
@@ -136,46 +134,49 @@ public class DungeonApiClientTests
     }
 
     [Fact]
-    public async Task Explore_OmittedNarrationPendingAndDiscussion_DefaultFalseAndNull()
+    public async Task Explore_OmittedOptionalFields_DefaultFalseAndNull()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
             $$"""{"partyId":"{{Id}}","turn":1,"roomType":"chest","damage":0,"goldFound":1,"flavorEvent":"x","gold":1,"isPartyDefeated":false}""");
         var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id);
         result.Value!.NarrationPending.Should().BeFalse();
+        result.Value.ScenarioPending.Should().BeFalse();
+        result.Value.Scenario.Should().BeNull();
         result.Value.Discussion.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Explore_ActionsOnly_PostsActionsWithoutIndex()
-    {
-        var a = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"R","gold":0,"isPartyDefeated":false,"choicePrompt":"R","choices":["a","b","c"]}""");
-
-        await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, null, [new PlayerAction(a, "Conan", "Pull lever")]);
-
-        handler.LastRequestBody.Should().Be("{\"actions\":[{\"memberId\":\"33333333-3333-3333-3333-333333333333\",\"name\":\"Conan\",\"text\":\"Pull lever\"}]}");
-    }
+    private static readonly Guid Actor = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
     [Fact]
-    public async Task Explore_IndexAndActions_PostsBoth()
+    public async Task Explore_Resolve_PostsActionsOnly()
     {
-        var a = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var handler = new FakeHandler(HttpStatusCode.OK,
             $$"""{"partyId":"{{Id}}","turn":1,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"R","gold":0,"isPartyDefeated":false,"narrationPending":true}""");
 
-        await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, 1, [new PlayerAction(a, "Conan", "Pull lever")]);
+        await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, [new PlayerAction(Actor, "Conan", "Pull lever")]);
 
-        handler.LastRequestBody.Should().StartWith("{\"selectedChoiceIndex\":1,\"actions\":[");
+        handler.LastRequestBody.Should().Be("{\"actions\":[{\"memberId\":\"33333333-3333-3333-3333-333333333333\",\"name\":\"Conan\",\"text\":\"Pull lever\"}]}");
+        handler.LastRequestBody.Should().NotContain("selectedChoiceIndex").And.NotContain("submitOnly");
     }
 
     [Fact]
-    public async Task Explore_WithIndex_BadRequest_MapsToValidationError()
+    public async Task Explore_SubmitOnly_PostsActionsAndSubmitOnlyTrue()
     {
-        var handler = new FakeHandler(HttpStatusCode.BadRequest, """{"errors":{"selectedChoiceIndex":["Choice must be 0..2."]}}""");
-        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, 7);
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"puzzle","damage":0,"goldFound":0,"flavorEvent":"R","gold":0,"isPartyDefeated":false,"scenario":"R"}""");
+
+        await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, [new PlayerAction(Actor, "Conan", "Pull lever")], submitOnly: true);
+
+        handler.LastRequestBody.Should().Be("{\"actions\":[{\"memberId\":\"33333333-3333-3333-3333-333333333333\",\"name\":\"Conan\",\"text\":\"Pull lever\"}],\"submitOnly\":true}");
+    }
+
+    [Fact]
+    public async Task Explore_BadRequest_MapsToValidationError()
+    {
+        var handler = new FakeHandler(HttpStatusCode.BadRequest, """{"errors":{"actions":["At least one action is required."]}}""");
+        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, [new PlayerAction(Actor, "A", "x")]);
         result.Status.Should().Be(ApiStatus.ValidationError);
-        result.Error.Should().Contain("Choice must be 0..2.");
+        result.Error.Should().Contain("At least one action is required.");
     }
 
     [Fact]

@@ -1,4 +1,3 @@
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
 
@@ -11,16 +10,16 @@ public sealed class KeyPoolGeminiNarrator(
     private static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(60);
     private int _exhaustionLogged;
 
-    public async Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct)
+    public async Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct)
     {
-        var result = await RotateAsync((key, token) => gemini.TryGenerateChoicesAsync(ctx, key, token), ct);
-        return result ?? FallbackFlavor.Choices(ctx.Room, ctx.Turn);
+        var result = await RotateAsync((key, token) => gemini.TryGenerateScenarioAsync(ctx, key, token), ct);
+        return result ?? FallbackFlavor.Scenario(ctx.Room, ctx.Turn);
     }
 
-    public async Task<string> NarrateOutcomeAsync(string chosenOption, bool success, NarrationContext ctx, CancellationToken ct)
+    public async Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct)
     {
-        var result = await RotateAsync((key, token) => gemini.TryNarrateOutcomeAsync(chosenOption, success, ctx, key, token), ct);
-        return result ?? FallbackFlavor.Outcome(ctx.Room, success, ctx.Turn);
+        var result = await RotateAsync((key, token) => gemini.TryNarrateTurnAsync(success, ctx, key, token), ct);
+        return FallbackFlavor.Complete(result, success, ctx);
     }
 
     private async Task<T?> RotateAsync<T>(Func<string, CancellationToken, Task<GeminiResult<T>>> call, CancellationToken ct)

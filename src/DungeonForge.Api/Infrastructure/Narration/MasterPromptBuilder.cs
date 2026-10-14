@@ -3,16 +3,14 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
 
-// Composes ONE prompt per turn from the room, party status, the resolved result and every member's input.
+// Composes ONE user prompt per call from the room, party status, the resolved result, the next room and every member's input.
 public static class MasterPromptBuilder
 {
-    public const int MaxLength = 1500;
+    public const int MaxLength = 2000;
     public const int MaxActionTextLength = 200;
     public const int MaxNameLength = 40;
-    public const int MaxOptionLength = 80;
 
     private const string NeutralPartyName = "the party";
-    private const string NeutralOption = "the chosen action";
     private const string NeutralMember = "A member";
 
     public static string Scene(RoomType room) => room switch
@@ -24,14 +22,19 @@ public static class MasterPromptBuilder
 
     public static string Mood(bool wounded) => wounded ? "battered and weary" : "healthy and confident";
 
-    public static string Build(string chosenOption, bool success, NarrationContext ctx)
+    // First-turn scenario request.
+    public static string BuildScenario(NarrationContext ctx) =>
+        Header(ctx, "Scene", ctx.Room);
+
+    // Resolve-turn request: result of the party's combined plan, the room it was for, and the room that follows.
+    public static string Build(bool success, NarrationContext ctx)
     {
-        var sb = new StringBuilder()
-            .Append("Party: ").Append(NarrationText.Sanitize(ctx.PartyName, MaxNameLength, NeutralPartyName))
-            .Append(". Scene: ").Append(Scene(ctx.Room))
-            .Append(". Mood: the party is ").Append(Mood(ctx.PartyWounded))
-            .Append(". Chosen action: ").Append(NarrationText.Sanitize(chosenOption, MaxOptionLength, NeutralOption))
-            .Append(". Result: the action ").Append(success ? "succeeded" : "failed").Append('.');
+        var sb = new StringBuilder(Header(ctx, "Current scene", ctx.Room))
+            .Append(" Result: the party's plan ").Append(success ? "succeeded" : "failed").Append('.');
+        if (ctx.NextRoom is { } next)
+        {
+            sb.Append(" Next scene: ").Append(Scene(next)).Append('.');
+        }
 
         var first = true;
         foreach (var action in ctx.Actions)
@@ -55,4 +58,8 @@ public static class MasterPromptBuilder
 
         return sb.ToString();
     }
+
+    private static string Header(NarrationContext ctx, string sceneLabel, RoomType room) =>
+        $"Party: {NarrationText.Sanitize(ctx.PartyName, MaxNameLength, NeutralPartyName)}. {sceneLabel}: {Scene(room)}. " +
+        $"Mood: the party is {Mood(ctx.PartyWounded)}.";
 }

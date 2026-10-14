@@ -23,7 +23,7 @@ public class PartyActionTests
     public void TrySubmitAction_StoresActionsInSubmissionOrder()
     {
         var party = CreateParty();
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
 
         party.TrySubmitAction(new PlayerAction(A, "Conan", "first")).Should().BeTrue();
         party.TrySubmitAction(new PlayerAction(B, "Merlin", "second")).Should().BeTrue();
@@ -35,7 +35,7 @@ public class PartyActionTests
     public void TrySubmitAction_SameMember_ReplacesInPlace()
     {
         var party = CreateParty();
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
         party.TrySubmitAction(new PlayerAction(A, "Conan", "old"));
         party.TrySubmitAction(new PlayerAction(B, "Merlin", "other"));
 
@@ -48,7 +48,7 @@ public class PartyActionTests
     public void ApplyChoiceOutcome_ClearsDiscussionWithPending()
     {
         var party = CreateParty();
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
         party.TrySubmitAction(new PlayerAction(A, "Conan", "x"));
 
         party.ApplyChoiceOutcome(0, 0);
@@ -60,7 +60,7 @@ public class PartyActionTests
     public async Task TrySubmitAction_Concurrent_KeepsOneActionPerMember()
     {
         var party = CreateParty();
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
 
         await Task.WhenAll(Enumerable.Range(0, 200).Select(i =>
             Task.Run(() => party.TrySubmitAction(new PlayerAction(i % 2 == 0 ? A : B, "n", $"t{i}")))));
@@ -72,7 +72,7 @@ public class PartyActionTests
     public void TrySubmitAction_BeyondCap_RejectsNewMember_ButReplacingExistingStillWorks()
     {
         var party = CreateParty();
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
         var ids = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToArray();
         foreach (var id in ids)
         {
@@ -91,7 +91,7 @@ public class PartyActionTests
     {
         var party = CreateParty();
         party.ActionBonusCount.Should().Be(0);
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p", ["a", "b", "c"]));
+        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
         for (var i = 0; i < 5; i++)
         {
             party.TrySubmitAction(new PlayerAction(Guid.NewGuid(), "n", "x"));
