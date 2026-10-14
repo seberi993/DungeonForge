@@ -15,6 +15,7 @@ public sealed class Party
 
     private int _gold;
     private int _turn;
+    private PendingEncounter? _pending;
 
     public Lock SyncRoot { get; } = new();
 
@@ -85,6 +86,29 @@ public sealed class Party
         {
             _turn++;
             _gold += goldFound;
+        }
+    }
+
+    public PendingEncounter? Pending { get { lock (SyncRoot) { return _pending; } } }
+
+    // First writer wins; returns whichever encounter is pending afterwards.
+    public PendingEncounter TrySetPending(PendingEncounter encounter)
+    {
+        lock (SyncRoot)
+        {
+            return _pending ??= encounter;
+        }
+    }
+
+    // Applies a resolved choice atomically: damage (null when none), gold, turn advance, pending cleared.
+    public DamageResult? ApplyChoiceOutcome(int damage, int gold)
+    {
+        lock (SyncRoot)
+        {
+            var hit = damage > 0 ? TakeDamage(damage) : null;
+            AdvanceTurn(gold);
+            _pending = null;
+            return hit;
         }
     }
 

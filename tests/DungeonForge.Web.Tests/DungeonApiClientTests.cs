@@ -92,6 +92,45 @@ public class DungeonApiClientTests
     }
 
     [Fact]
+    public async Task Explore_NoIndex_SendsNoBody()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"Troll","gold":0,"isPartyDefeated":false,"choicePrompt":"Troll","choices":["a","b","c"]}""");
+
+        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id);
+
+        handler.LastRequestBody.Should().BeNull();
+        result.Value!.ChoicePrompt.Should().Be("Troll");
+        result.Value.Choices.Should().Equal("a", "b", "c");
+        result.Value.TargetName.Should().BeNull();
+        result.Value.LastOutcome.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Explore_WithIndex_PostsCamelCaseBodyAndReadsOutcome()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            $$"""{"partyId":"{{Id}}","turn":1,"roomType":"chest","damage":0,"goldFound":9,"flavorEvent":"x","gold":9,"isPartyDefeated":false,"lastOutcome":"You win."}""");
+
+        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, 1);
+
+        handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
+        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}/explore");
+        handler.LastRequestBody.Should().Be("{\"selectedChoiceIndex\":1}");
+        result.Value!.LastOutcome.Should().Be("You win.");
+        result.Value.Choices.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Explore_WithIndex_BadRequest_MapsToValidationError()
+    {
+        var handler = new FakeHandler(HttpStatusCode.BadRequest, """{"errors":{"selectedChoiceIndex":["Choice must be 0..2."]}}""");
+        var result = await new DungeonApiClient(handler.CreateClient()).ExploreAsync(Id, 7);
+        result.Status.Should().Be(ApiStatus.ValidationError);
+        result.Error.Should().Contain("Choice must be 0..2.");
+    }
+
+    [Fact]
     public async Task Explore_Combat_DeserializesCombatRoom()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,

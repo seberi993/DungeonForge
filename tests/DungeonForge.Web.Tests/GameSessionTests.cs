@@ -174,6 +174,91 @@ public class GameSessionTests
         sut.IsDefeated.Should().BeTrue();
     }
 
+    private static ExploreResponse Prompt(int turn) =>
+        new(Id, turn, RoomType.Combat, null, 0, 0, "Troll", 0, false, "Troll", ["a", "b", "c"]);
+
+    [Fact]
+    public void ApplyPrompt_SameTurn_BypassesTurnGuard_AndSetsPending()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 5));
+        var changed = 0;
+        sut.Changed += () => changed++;
+
+        sut.ApplyPrompt(Prompt(2)).Should().BeTrue();
+
+        sut.HasPendingChoice.Should().BeTrue();
+        sut.PendingPrompt.Should().Be("Troll");
+        sut.PendingChoices.Should().Equal("a", "b", "c");
+        sut.Turn.Should().Be(2);
+        sut.Log.Should().HaveCount(1);
+        changed.Should().Be(1);
+    }
+
+    [Fact]
+    public void ApplyPrompt_FromFreshSession_Works()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0)).Should().BeTrue();
+        sut.HasPendingChoice.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ApplyPrompt_StaleTurnOtherPartyOrMalformed_IsIgnored()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 5));
+
+        sut.ApplyPrompt(Prompt(1)).Should().BeFalse();
+        sut.ApplyPrompt(Prompt(2) with { PartyId = Guid.NewGuid() }).Should().BeFalse();
+        sut.ApplyPrompt(Prompt(2) with { Choices = null }).Should().BeFalse();
+        sut.ApplyPrompt(Prompt(2) with { ChoicePrompt = null }).Should().BeFalse();
+        sut.HasPendingChoice.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Apply_ClearsPending_AndRecordsLastOutcome()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0));
+
+        sut.Apply(Turn(1, RoomType.Combat, "A", 3, 0, 0) with { LastOutcome = "You won." }).Should().BeTrue();
+
+        sut.HasPendingChoice.Should().BeFalse();
+        sut.PendingChoices.Should().BeEmpty();
+        sut.LastOutcome.Should().Be("You won.");
+        sut.Log[0].Outcome.Should().Be("You won.");
+    }
+
+    [Fact]
+    public void ApplyPartyState_Newer_ClearsPending()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0));
+        sut.ApplyPartyState(new PartyStateDto(Id, "Heroes", [Member("A", CharacterClass.Warrior, 7, 30)], DateTimeOffset.UtcNow, 1, 1, false));
+        sut.HasPendingChoice.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CancelPending_AndClear_ResetPrompt()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0));
+        sut.CancelPending();
+        sut.HasPendingChoice.Should().BeFalse();
+
+        sut.ApplyPrompt(Prompt(0));
+        sut.Clear();
+        sut.HasPendingChoice.Should().BeFalse();
+        sut.LastOutcome.Should().BeNull();
+    }
+
     [Fact]
     public void Clear_ResetsEverything()
     {

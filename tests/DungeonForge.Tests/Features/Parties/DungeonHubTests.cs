@@ -17,11 +17,6 @@ namespace DungeonForge.Tests.Features.Parties;
 public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private sealed class FixedRoller(int value) : IRoller
-    {
-        public int Next(int max) => value;
-    }
-
     private sealed class ThrowingNotifier : IPartyNotifier
     {
         public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) =>
@@ -32,7 +27,13 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     }
 
     private WebApplicationFactory<Program> WithFixedRoller() =>
-        factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0))));
+        factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0, ExploreTestSupport.Fail))));
+
+    private static async Task<HttpResponseMessage> ExploreTurnAsync(HttpClient client, Guid id)
+    {
+        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        return await ExploreTestSupport.ChooseAsync(client, id, 0);
+    }
 
     private static HubConnection Connect(WebApplicationFactory<Program> f) =>
         new HubConnectionBuilder()
@@ -68,7 +69,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         await a.InvokeAsync("JoinParty", id);
         await b.InvokeAsync("JoinParty", id);
 
-        var response = await client.PostAsync($"/api/parties/{id}/explore", null);
+        var response = await ExploreTurnAsync(client, id);
         response.EnsureSuccessStatusCode();
 
         var timeout = TimeSpan.FromSeconds(10);
@@ -115,7 +116,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         await same.InvokeAsync("JoinParty", id);
         await other.InvokeAsync("JoinParty", otherId);
 
-        (await client.PostAsync($"/api/parties/{id}/explore", null)).EnsureSuccessStatusCode();
+        (await ExploreTurnAsync(client, id)).EnsureSuccessStatusCode();
 
         await sameGot.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Task.Delay(300);
@@ -146,7 +147,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         await conn.InvokeAsync("JoinParty", id);
         await conn.InvokeAsync("LeaveParty", id);
 
-        (await client.PostAsync($"/api/parties/{id}/explore", null)).EnsureSuccessStatusCode();
+        (await ExploreTurnAsync(client, id)).EnsureSuccessStatusCode();
 
         await Task.Delay(300);
         count.Should().Be(0);
@@ -157,13 +158,13 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     {
         using var f = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
-            s.AddSingleton<IRoller>(new FixedRoller(0));
+            s.AddSingleton<IRoller>(new FixedRoller(0, ExploreTestSupport.Fail));
             s.AddSingleton<IPartyNotifier>(new ThrowingNotifier());
         }));
         var client = f.CreateClient();
         var id = await CreatePartyAsync(client);
 
-        var response = await client.PostAsync($"/api/parties/{id}/explore", null);
+        var response = await ExploreTurnAsync(client, id);
 
         response.IsSuccessStatusCode.Should().BeTrue();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());

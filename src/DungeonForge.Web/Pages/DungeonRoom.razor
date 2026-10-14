@@ -41,7 +41,26 @@
         <p class="offline">Live updates offline. You can still explore.</p>
     }
 
-    <button id="explore"@onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
+    @if (Session.HasPendingChoice && !Session.IsDefeated)
+    {
+        <div id="choices" class="choices">
+            <p id="choice-prompt">@Session.PendingPrompt</p>
+            @for (var i = 0; i < Session.PendingChoices.Count; i++)
+            {
+                var index = i;
+                <button id="choice-@index" disabled="@_busy" @onclick="() => ChooseAsync(index)">@Session.PendingChoices[index]</button>
+            }
+        </div>
+    }
+    else
+    {
+        <button id="explore" @onclick="ExploreAsync" disabled="@(_busy || Session.IsDefeated)">Explore Room</button>
+    }
+
+    @if (Session.LastOutcome is not null)
+    {
+        <p id="last-outcome" class="outcome">@Session.LastOutcome</p>
+    }
 
     @if (Session.IsDefeated)
     {
@@ -62,6 +81,10 @@
             <div class="log-entry">
                 <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) @Describe(entry)
                 <div>@entry.FlavorEvent</div>
+                @if (entry.Outcome is not null)
+                {
+                    <div class="log-outcome">@entry.Outcome</div>
+                }
             </div>
         }
     </div>
@@ -163,17 +186,28 @@
         await JS.InvokeVoidAsync("dungeonForge.scrollToBottom", "log");
     }
 
-    private async Task ExploreAsync()
+    private Task ExploreAsync() => SendAsync(null);
+
+    private Task ChooseAsync(int index) => SendAsync(index);
+
+    private async Task SendAsync(int? choiceIndex)
     {
         _busy = true;
         _error = null;
         try
         {
-            var result = await Api.ExploreAsync(Session.PartyId);
+            var result = await Api.ExploreAsync(Session.PartyId, choiceIndex);
             switch (result.Status)
             {
                 case ApiStatus.Success:
-                    if (Session.Apply(result.Value!)) _scroll = true;
+                    var response = result.Value!;
+                    if (response.ChoicePrompt is not null) Session.ApplyPrompt(response);
+                    else if (Session.Apply(response)) _scroll = true;
+                    break;
+                case ApiStatus.ValidationError when choiceIndex is not null:
+                    // Server has no matching encounter (e.g. restarted); drop the stale prompt so Explore returns.
+                    Session.CancelPending();
+                    _error = result.Error ?? "That choice is no longer available.";
                     break;
                 case ApiStatus.Conflict:
                     Session.MarkDefeated();

@@ -28,14 +28,44 @@ public sealed class GameSession
         _members = [.. party.Members];
     }
 
+    public string? PendingPrompt { get; private set; }
+    public IReadOnlyList<string> PendingChoices { get; private set; } = [];
+    public string? LastOutcome { get; private set; }
+    public bool HasPendingChoice => PendingPrompt is not null && PendingChoices.Count > 0;
+
+    // Prompt step does not advance the turn, so it bypasses the strictly-newer guard (stale turns still rejected).
+    public bool ApplyPrompt(ExploreResponse result)
+    {
+        if (result.PartyId != PartyId || result.Turn < Turn) return false;
+        if (result.ChoicePrompt is null || result.Choices is not { Count: > 0 }) return false;
+        PendingPrompt = result.ChoicePrompt;
+        PendingChoices = [.. result.Choices];
+        Changed?.Invoke();
+        return true;
+    }
+
+    public void CancelPending()
+    {
+        ClearPending();
+        Changed?.Invoke();
+    }
+
+    private void ClearPending()
+    {
+        PendingPrompt = null;
+        PendingChoices = [];
+    }
+
     public bool Apply(ExploreResponse result)
     {
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
+        ClearPending();
+        LastOutcome = result.LastOutcome;
         Gold = result.Gold;
         IsDefeated = result.IsPartyDefeated;
         ApplyDamage(result.TargetName, result.Damage);
-        _log.Add(new LogEntry(result.Turn, result.RoomType, result.TargetName, result.Damage, result.GoldFound, result.FlavorEvent));
+        _log.Add(new LogEntry(result.Turn, result.RoomType, result.TargetName, result.Damage, result.GoldFound, result.FlavorEvent, result.LastOutcome));
         Changed?.Invoke();
         return true;
     }
@@ -61,6 +91,7 @@ public sealed class GameSession
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
+        ClearPending();
         IsDefeated = party.IsPartyDefeated;
         Changed?.Invoke();
         return true;
@@ -72,6 +103,7 @@ public sealed class GameSession
     {
         _members = [.. _members.Select(m => m with { Hp = 0, IsDefeated = true })];
         IsDefeated = true;
+        ClearPending();
     }
 
     public void Clear()
@@ -84,6 +116,8 @@ public sealed class GameSession
         Turn = 0;
         IsDefeated = false;
         _log.Clear();
+        ClearPending();
+        LastOutcome = null;
     }
 
     private void ApplyDamage(string? targetName, int damage)

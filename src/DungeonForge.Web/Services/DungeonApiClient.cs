@@ -22,8 +22,11 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
 
-    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, CancellationToken ct = default) =>
-        SendAsync<ExploreResponse>(() => http.PostAsync($"/api/parties/{partyId}/explore", null, ct), ct);
+    // Null index = request (or re-read) the pending prompt, sent without a body; otherwise resolve the chosen option.
+    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, int? choiceIndex = null, CancellationToken ct = default) =>
+        SendAsync<ExploreResponse>(() => choiceIndex is { } index
+            ? http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(index), Json, ct)
+            : http.PostAsync($"/api/parties/{partyId}/explore", null, ct), ct);
 
     private static async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, CancellationToken ct) where T : class
     {

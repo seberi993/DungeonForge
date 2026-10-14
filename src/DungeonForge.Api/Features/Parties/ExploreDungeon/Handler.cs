@@ -12,23 +12,198 @@ public sealed class ExploreDungeonHandler(
     IPartyNotifier notifier,
     ILogger<ExploreDungeonHandler> logger)
 {
-
     private const double WoundedRatio = 0.5;
+    private const int ChoiceCount = 3;
 
-    public async Task<ExploreResult> HandleAsync(Guid id, CancellationToken ct = default)
+    // Success chance (percent) per choice index, safest to riskiest. Success when roller.Next(100) < chance.
+    private static readonly int[] SuccessChance = [80, 55, 30];
+
+    public Task<ExploreResult> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
+        request?.SelectedChoiceIndex is { } index ? ResolveAsync(id, index, ct) : PromptAsync(id, ct);
+
+    // ---- Step 1: present (or re-present) the dilemma. Never advances the turn. ----
+
+    private async Task<ExploreResult> PromptAsync(Guid id, CancellationToken ct)
     {
-        var (result, context, snapshot) = Mutate(id);
-        if (result.Response is not { } response || context is null || snapshot is null)
+        var (early, room, context) = BeginPrompt(id);
+        if (early is { } done)
+        {
+            return done;
+        }
+
+        // Narration is awaited outside the lock; it never influences game state.
+        var choice = await GenerateChoicesSafeAsync(context!, ct);
+
+        var party = cache.Get<Party>(PartyCache.Key(id));
+        if (party is null)
+        {
+            return new ExploreResult(ExploreStatus.NotFound);
+        }
+
+        // First writer wins: concurrent prompt requests all see the same encounter.
+        var pending = party.TrySetPending(new PendingEncounter(room!.Value, choice.Prompt, choice.Options.ToArray()));
+        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        return new ExploreResult(ExploreStatus.Explored, PromptResponse(party, pending));
+    }
+
+    private (ExploreResult? Early, RoomType? Room, NarrationContext? Context) BeginPrompt(Guid id)
+    {
+        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        {
+            return (new ExploreResult(ExploreStatus.NotFound), null, null);
+        }
+
+        lock (party.SyncRoot)
+        {
+            if (party.IsPartyDefeated)
+            {
+                return (new ExploreResult(ExploreStatus.Defeated), null, null);
+            }
+
+            if (party.Pending is { } existing)
+            {
+                return (new ExploreResult(ExploreStatus.Explored, PromptResponse(party, existing)), null, null);
+            }
+
+            var room = roller.Next(2) == 0 ? RoomType.Combat : RoomType.Chest;
+            return (null, room, new NarrationContext(room, party.Name, party.Turn, IsWounded(party)));
+        }
+    }
+
+    private static ExploreResponse PromptResponse(Party party, PendingEncounter pending) =>
+        new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Prompt, party.Gold, party.IsPartyDefeated,
+            ChoicePrompt: pending.Prompt, Choices: pending.Choices);
+
+    // ---- Step 2: resolve the chosen option in C#, then narrate. ----
+
+    private async Task<ExploreResult> ResolveAsync(Guid id, int index, CancellationToken ct)
+    {
+        var (result, context, option, success, snapshot) = Mutate(id, index);
+        if (result.Response is not { } response || context is null || option is null || snapshot is null)
         {
             return result;
         }
 
-        // Narration is awaited outside the lock; it never influences game state.
-        var flavor = await narrator.NarrateAsync(context, ct);
-        response = response with { FlavorEvent = flavor };
+        var outcome = await NarrateOutcomeSafeAsync(option, success, context, ct);
+        response = response with { LastOutcome = outcome };
 
         await BroadcastAsync(response, snapshot);
         return result with { Response = response };
+    }
+
+    private (ExploreResult Result, NarrationContext? Context, string? Option, bool Success, GetPartyStateResponse? Snapshot) Mutate(Guid id, int index)
+    {
+        var key = PartyCache.Key(id);
+        if (!cache.TryGetValue(key, out Party? party) || party is null)
+        {
+            return (new ExploreResult(ExploreStatus.NotFound), null, null, false, null);
+        }
+
+        // Per-party lock: serializes mutation against Party.Snapshot() readers and concurrent choices.
+        lock (party.SyncRoot)
+        {
+            if (party.IsPartyDefeated)
+            {
+                return (new ExploreResult(ExploreStatus.Defeated), null, null, false, null);
+            }
+
+            if (index is < 0 or >= ChoiceCount)
+            {
+                return (Invalid("Choice index must be between 0 and 2."), null, null, false, null);
+            }
+
+            if (party.Pending is not { } pending)
+            {
+                return (Invalid("There is no active encounter to resolve."), null, null, false, null);
+            }
+
+            var turnBefore = party.Turn;
+            var wounded = IsWounded(party);
+            var success = roller.Next(100) < SuccessChance[index];
+            var (damage, gold) = Deltas(pending.Room, success, turnBefore);
+
+            var hit = party.ApplyChoiceOutcome(damage, gold);
+
+            // Mutated in place under the lock; re-Set refreshes the sliding expiry.
+            cache.Set(key, party, PartyCache.EntryOptions());
+
+            // Touch the invite entry so its sliding expiry keeps pace with an active party.
+            if (party.InviteCode.Length > 0) cache.TryGetValue(PartyCache.InviteKey(party.InviteCode), out _);
+
+            var response = new ExploreResponse(
+                party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
+                pending.Prompt, party.Gold, party.IsPartyDefeated);
+            var context = new NarrationContext(pending.Room, party.Name, turnBefore, wounded);
+
+            return (new ExploreResult(ExploreStatus.Explored, response), context, pending.Choices[index], success,
+                PartyMapping.ToResponse(party.Snapshot()));
+        }
+    }
+
+    private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidChoice, Error: error);
+
+    // Game math lives here, never in the narrator.
+    private static (int Damage, int Gold) Deltas(RoomType room, bool success, int turn) => (room, success) switch
+    {
+        (RoomType.Combat, false) => (2 + turn % 3, 0),
+        (RoomType.Chest, true) => (0, 5 + turn),
+        _ => (0, 0),
+    };
+
+    private static bool IsWounded(Party party) =>
+        party.Members.Sum(m => m.Hp) <= party.Members.Sum(m => m.MaxHp) * WoundedRatio;
+
+    // ---- Narration with deterministic fallbacks: a misbehaving narrator never fails the request. ----
+
+    private async Task<EncounterChoice> GenerateChoicesSafeAsync(NarrationContext context, CancellationToken ct)
+    {
+        try
+        {
+            var choice = await narrator.GenerateChoicesAsync(context, ct);
+            if (IsValid(choice))
+            {
+                return choice;
+            }
+
+            logger.LogWarning("Narrator returned an invalid encounter for turn {Turn}; using fallback.", context.Turn);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Narrator failed generating choices for turn {Turn}; using fallback.", context.Turn);
+        }
+
+        return FallbackFlavor.Choices(context.Room, context.Turn);
+    }
+
+    private static bool IsValid(EncounterChoice? choice) =>
+        choice is { Options: { Count: ChoiceCount } options }
+        && !string.IsNullOrWhiteSpace(choice.Prompt)
+        && options.All(o => !string.IsNullOrWhiteSpace(o));
+
+    private async Task<string> NarrateOutcomeSafeAsync(string option, bool success, NarrationContext context, CancellationToken ct)
+    {
+        try
+        {
+            var text = await narrator.NarrateOutcomeAsync(option, success, context, ct);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Narrator failed narrating outcome for turn {Turn}; using fallback.", context.Turn);
+        }
+
+        return FallbackFlavor.Outcome(context.Room, success, context.Turn);
     }
 
     // Outside the lock; a broadcast failure must never fail the explore request.
@@ -52,46 +227,6 @@ public sealed class ExploreDungeonHandler(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to broadcast PartyUpdated for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
-        }
-    }
-
-    private (ExploreResult Result, NarrationContext? Context, GetPartyStateResponse? Snapshot) Mutate(Guid id)
-    {
-        var key = PartyCache.Key(id);
-        if (!cache.TryGetValue(key, out Party? party) || party is null)
-        {
-            return (new ExploreResult(ExploreStatus.NotFound), null, null);
-        }
-
-        // Per-party lock: serializes mutation against Party.Snapshot() readers.
-        lock (party.SyncRoot)
-        {
-
-            if (party.IsPartyDefeated)
-            {
-                return (new ExploreResult(ExploreStatus.Defeated), null, null);
-            }
-
-            var room = roller.Next(2) == 0 ? RoomType.Combat : RoomType.Chest;
-            var goldFound = room == RoomType.Chest ? 5 + party.Turn : 0;
-            var turnBefore = party.Turn;
-
-            DamageResult? hit = room == RoomType.Combat ? party.TakeDamage(2 + turnBefore % 3) : null;
-            party.AdvanceTurn(goldFound);
-
-            // Mutated in place under the lock; re-Set refreshes the sliding expiry.
-            cache.Set(key, party, PartyCache.EntryOptions());
-
-            // Touch the invite entry so its sliding expiry keeps pace with an active party.
-            if (party.InviteCode.Length > 0) cache.TryGetValue(PartyCache.InviteKey(party.InviteCode), out _);
-
-            var response = new ExploreResponse(
-                party.Id, party.Turn, room, hit?.TargetName, hit?.Damage ?? 0, goldFound,
-                FallbackFlavor.Pick(room, turnBefore), party.Gold, party.IsPartyDefeated);
-            var wounded = party.Members.Sum(m => m.Hp) <= party.Members.Sum(m => m.MaxHp) * WoundedRatio;
-            var context = new NarrationContext(room, party.Name, turnBefore, wounded);
-
-            return (new ExploreResult(ExploreStatus.Explored, response), context, PartyMapping.ToResponse(party.Snapshot()));
         }
     }
 }

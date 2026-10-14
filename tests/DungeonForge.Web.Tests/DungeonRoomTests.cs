@@ -202,6 +202,101 @@ public class DungeonRoomTests : TestContext
         cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
     }
 
+    private static string PromptJson() =>
+        $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"A troll blocks the bridge.","gold":0,"isPartyDefeated":false,"choicePrompt":"A troll blocks the bridge.","choices":["Fight","Sneak","Bribe"]}""";
+
+    private static string ResolveJson() =>
+        $$"""{"partyId":"{{Id}}","turn":1,"roomType":"combat","targetName":"Conan","damage":3,"goldFound":0,"flavorEvent":"Resolved","gold":0,"isPartyDefeated":false,"lastOutcome":"You bribed the troll and slipped past."}""";
+
+    // First POST (no body) returns the prompt; POSTs carrying a body resolve.
+    private static FakeHandler PromptThenResolve()
+    {
+        FakeHandler? h = null;
+        h = new FakeHandler(HttpStatusCode.OK, bodyFactory: () => h!.LastRequestBody is null ? PromptJson() : ResolveJson());
+        return h;
+    }
+
+    private IRenderedComponent<DungeonRoom> RenderWithPending(FakeHandler handler)
+    {
+        _session.Start(new PartyResponse(Id, "Heroes",
+            [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
+            DateTimeOffset.UtcNow, "K7F2-9QXM"));
+        _session.ApplyPrompt(new ExploreResponse(Id, 0, RoomType.Combat, null, 0, 0, "p", 0, false, "p", ["a", "b", "c"]));
+        return Render(handler, withParty: false);
+    }
+
+    [Fact]
+    public void Prompt_RendersThreeChoiceButtons_AndHidesExplore()
+    {
+        var cut = Render(PromptThenResolve());
+
+        cut.Find("button#explore").Click();
+
+        cut.WaitForAssertion(() => cut.Find("#choice-0"));
+        cut.Find("#choice-0").TextContent.Should().Be("Fight");
+        cut.Find("#choice-1").TextContent.Should().Be("Sneak");
+        cut.Find("#choice-2").TextContent.Should().Be("Bribe");
+        cut.FindAll("#choice-3").Should().BeEmpty();
+        cut.Find("#choice-prompt").TextContent.Should().Contain("troll");
+        cut.FindAll("#explore").Should().BeEmpty();
+        cut.FindAll(".log-entry").Should().BeEmpty();
+        cut.Find("#stat-turn").TextContent.Should().Contain("0");
+    }
+
+    [Fact]
+    public void Explore_SendsNoBody()
+    {
+        var handler = PromptThenResolve();
+        var cut = Render(handler);
+        cut.Find("button#explore").Click();
+        cut.WaitForAssertion(() => cut.Find("#choice-0"));
+        handler.LastRequestBody.Should().BeNull();
+    }
+
+    [Fact]
+    public void ClickingChoice_SendsIndexInBody_ShowsLastOutcome_AndRestoresExplore()
+    {
+        var handler = PromptThenResolve();
+        var cut = Render(handler);
+        cut.Find("button#explore").Click();
+        cut.WaitForAssertion(() => cut.Find("#choice-2"));
+
+        cut.Find("#choice-2").Click();
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        handler.LastRequestBody.Should().Be("{\"selectedChoiceIndex\":2}");
+        cut.Find(".log-entry").TextContent.Should().Contain("You bribed the troll and slipped past.");
+        cut.Find("#last-outcome").TextContent.Should().Contain("You bribed the troll");
+        cut.FindAll("#choice-0").Should().BeEmpty();
+        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
+        cut.Find("#stat-turn").TextContent.Should().Contain("1");
+        cut.Find("#member-0").TextContent.Should().Contain("27/30");
+    }
+
+    [Fact]
+    public void ChoiceRejectedWith400_ShowsErrorAndRestoresExplore()
+    {
+        var cut = RenderWithPending(new FakeHandler(HttpStatusCode.BadRequest,
+            """{"errors":{"selectedChoiceIndex":["No active encounter."]}}"""));
+
+        cut.Find("#choice-1").Click();
+
+        cut.WaitForAssertion(() => cut.Find(".error").TextContent.Should().Contain("No active encounter."));
+        cut.FindAll("#choice-0").Should().BeEmpty();
+        cut.Find("button#explore").HasAttribute("disabled").Should().BeFalse();
+    }
+
+    [Fact]
+    public void RemoteResolvedTurn_ClearsPendingChoices()
+    {
+        var cut = RenderWithPending(new FakeHandler(HttpStatusCode.OK));
+
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote", 7)));
+
+        cut.WaitForAssertion(() => cut.FindAll("#choice-0").Should().BeEmpty());
+        cut.Find("button#explore").Should().NotBeNull();
+    }
+
     [Fact]
     public void Connects_HubForParty()
     {

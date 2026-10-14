@@ -34,9 +34,14 @@ public sealed record ExploreResponse(
     int GoldFound,
     string FlavorEvent,
     int Gold,
-    bool IsPartyDefeated);
+    bool IsPartyDefeated,
+    string? ChoicePrompt = null,
+    IReadOnlyList<string>? Choices = null,
+    string? LastOutcome = null);
 
-public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent);
+public sealed record ExploreRequest(int? SelectedChoiceIndex);
+
+public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null);
 
 public sealed record PartyStateDto(
     Guid PartyId,
