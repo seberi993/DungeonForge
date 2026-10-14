@@ -39,6 +39,21 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<UnlockResponse>> UnlockAsync(Guid partyId, Guid memberId, CancellationToken ct = default) =>
         SendAsync<UnlockResponse>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/unlock", new UnlockRequest(memberId), Json, ct), ct);
 
+    // Hands the local model's text (or a decline) for the briefed turn back to the server. False when it was not accepted.
+    public async Task<bool> SubmitNarrationAsync(Guid partyId, int turn, string? text, bool declined, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await http.PostAsJsonAsync(
+                $"/api/parties/{partyId}/narration", new SubmitNarrationRequest(turn, text, declined ? true : null), Json, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
     private static async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, CancellationToken ct) where T : class
     {
         try

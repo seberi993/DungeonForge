@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
@@ -17,13 +19,18 @@ public sealed class ExploreDungeonHandler(
     IRoller roller,
     IDungeonNarrator narrator,
     IPartyNotifier notifier,
-    ILogger<ExploreDungeonHandler> logger)
+    ILogger<ExploreDungeonHandler> logger,
+    IOptions<NarrationOptions>? options = null)
 {
     private const double WoundedRatio = 0.5;
     private const int RoomKinds = 3;
-    private const int BaseSuccessPercent = 55;
-    private const int ActionBonusPercent = 5;
-    private const int MaxActionBonusPercent = 15;
+
+    // Client narration: while a browser writes the text, the claim waits here until it submits, declines or the deadline hits.
+    private sealed record NarrationJob(NarrationContext Context, bool Success, bool IsScenario);
+
+    private readonly ConcurrentDictionary<(Guid PartyId, int Turn), NarrationJob> _jobs = new();
+
+    private bool ClientNarrationOn => options?.Value.ClientNarration == true;
 
     public Task<ExploreResult> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
         request?.Actions is not { Count: > 0 } actions
@@ -49,6 +56,11 @@ public sealed class ExploreDungeonHandler(
         if (early is { } done)
         {
             return done;
+        }
+
+        if (ClientNarrationOn)
+        {
+            return StartClientScenario(id, context!);
         }
 
         // Only a party's first turn gets here, and only the one request that claimed the scenario slot.
@@ -160,47 +172,77 @@ public sealed class ExploreDungeonHandler(
         response = response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
 
+        // The browser of whoever resolved the turn writes the narration; a defeat has no next scenario to wait on,
+        // so it keeps the server path.
+        if (ClientNarrationOn && context.NextRoom is not null)
+        {
+            var brief = RegisterClientTurn(response.PartyId, response.Turn, success, context);
+            return result with { Response = response with { Brief = brief } };
+        }
+
         _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, success, context));
         return result with { Response = response };
     }
 
     private async Task NarrateAndNotifyAsync(Guid partyId, int turn, bool success, NarrationContext context)
     {
-        // Outer guard: whatever fails, the party must never be left with an AwaitingRoom and no scenario.
         TurnNarration narration;
+        var source = "server";
         try
         {
             // The narrator has its own timeout and every failure falls back to deterministic flavor.
             narration = await NarrateTurnSafeAsync(success, context);
+            if (narration.FromFallback) source = "fallback";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Narration phase failed for turn {Turn} of party {PartyId}; completing with fallback.", turn, partyId);
+            narration = FallbackFlavor.Complete(null, success, context);
+            source = "fallback";
+        }
 
-            // The next scenario is stored BEFORE the push so a client reacting to NarrationReady can prompt immediately.
-            if (context.NextRoom is { } nextRoom)
+        await FinishTurnAsync(partyId, turn, success, context, narration, source);
+    }
+
+    // Stores the next scenario (compare-and-set on the turn's claim) BEFORE the push, so a client reacting to NarrationReady
+    // can prompt immediately. False when another writer already completed this turn: nothing is pushed twice.
+    private async Task<bool> FinishTurnAsync(
+        Guid partyId, int turn, bool success, NarrationContext context, TurnNarration narration, string source)
+    {
+        // Outer guard: whatever fails, the party must never be left with an AwaitingRoom and no scenario.
+        try
+        {
+            if (context.NextRoom is { } nextRoom
+                && !TryStoreScenario(partyId, turn, new PendingEncounter(nextRoom, narration.Next)))
             {
-                StoreNextScenario(partyId, new PendingEncounter(nextRoom, narration.Next));
+                return false;
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Narration phase failed for turn {Turn} of party {PartyId}; completing with fallback.", turn, partyId);
             narration = FallbackFlavor.Complete(null, success, context);
-            RecoverStuckScenario(partyId, context.NextRoom, narration);
+            source = "fallback";
+            RecoverStuckScenario(partyId, turn, context.NextRoom, narration);
         }
 
         try
         {
             var ready = new NarrationReady(
                 partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom,
-                narration.NextScene.Length == 0 ? null : narration.NextScene);
+                narration.NextScene.Length == 0 ? null : narration.NextScene, source);
             await notifier.NarrationReadyAsync(ready, CancellationToken.None);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to broadcast NarrationReady for turn {Turn} of party {PartyId}", turn, partyId);
         }
+
+        return true;
     }
 
     // Mutates the party object directly (no cache write needed) so a cache fault cannot keep it stuck.
-    private void RecoverStuckScenario(Guid partyId, RoomType? nextRoom, TurnNarration fallback)
+    private void RecoverStuckScenario(Guid partyId, int turn, RoomType? nextRoom, TurnNarration fallback)
     {
         try
         {
@@ -213,7 +255,7 @@ public sealed class ExploreDungeonHandler(
             {
                 if (party.AwaitingRoom is not null)
                 {
-                    party.CompleteScenario(new PendingEncounter(nextRoom.Value, fallback.Next));
+                    party.TryCompleteScenario(turn, new PendingEncounter(nextRoom.Value, fallback.Next));
                 }
             }
         }
@@ -236,13 +278,136 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
-    private void StoreNextScenario(Guid partyId, PendingEncounter next)
+    // A party that left the cache has nothing to complete, so that counts as stored (the push still goes out).
+    private bool TryStoreScenario(Guid partyId, int turn, PendingEncounter next)
     {
-        if (cache.TryGetValue(PartyCache.Key(partyId), out Party? party) && party is not null)
+        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
         {
-            party.CompleteScenario(next);
-            cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
+            return true;
         }
+
+        if (!party.TryCompleteScenario(turn, next))
+        {
+            return false;
+        }
+
+        cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
+        return true;
+    }
+
+    // ---- Client narration: the prompts go to the browser, its text comes back through SubmitClientNarrationAsync. ----
+
+    private ExploreResult StartClientScenario(Guid id, NarrationContext context)
+    {
+        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        {
+            return new ExploreResult(ExploreStatus.NotFound);
+        }
+
+        var turn = party.Turn;
+        _jobs[(id, turn)] = new NarrationJob(context, true, IsScenario: true);
+        ScheduleDeadline(id, turn);
+        var brief = new NarrationBrief(
+            turn, "scenario", NarrationPrompts.ScenarioCompact(context.Room), MasterPromptBuilder.BuildScenario(context),
+            null, NarrationPrompts.ScenarioCompactMaxTokens);
+        return new ExploreResult(ExploreStatus.Explored, AwaitingResponse(party, context.Room) with { Brief = brief });
+    }
+
+    private NarrationBrief RegisterClientTurn(Guid partyId, int turn, bool success, NarrationContext context)
+    {
+        _jobs[(partyId, turn)] = new NarrationJob(context, success, IsScenario: false);
+        ScheduleDeadline(partyId, turn);
+        return new NarrationBrief(
+            turn, "turn", NarrationPrompts.TurnCompact(context.NextRoom), MasterPromptBuilder.Build(success, context),
+            NarrationPrompts.TurnJsonSchema(context.NextRoom is not null), NarrationPrompts.TurnCompactMaxTokens);
+    }
+
+    // If nobody delivers in time (tab closed, slow GPU), the server narrator takes over exactly once.
+    private void ScheduleDeadline(Guid partyId, int turn)
+    {
+        var delay = TimeSpan.FromSeconds(Math.Max(0, options?.Value.ClientDeadlineSeconds ?? 40));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delay);
+                if (_jobs.TryRemove((partyId, turn), out var job))
+                {
+                    await RunServerNarrationAsync(partyId, turn, job);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Deadline narration failed for turn {Turn} of party {PartyId}", turn, partyId);
+            }
+        });
+    }
+
+    private async Task RunServerNarrationAsync(Guid partyId, int turn, NarrationJob job)
+    {
+        if (!job.IsScenario)
+        {
+            await NarrateAndNotifyAsync(partyId, turn, job.Success, job.Context);
+            return;
+        }
+
+        var scenario = await GenerateScenarioSafeAsync(job.Context, CancellationToken.None);
+        await CompleteClientScenarioAsync(partyId, turn, job.Context.Room, scenario);
+    }
+
+    private async Task<bool> CompleteClientScenarioAsync(Guid partyId, int turn, RoomType room, string scenario)
+    {
+        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        {
+            return false;
+        }
+
+        var pending = new PendingEncounter(room, scenario);
+        if (!party.TryCompleteScenario(turn, pending))
+        {
+            return false;
+        }
+
+        cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
+        await BroadcastFirstScenarioAsync(party, pending);
+        return true;
+    }
+
+    // Accepts the browser's model output for the claimed turn. Blank text or a declined flag hands over to the server
+    // narrator at once; unparseable turn JSON does the same instead of canning the whole turn.
+    public async Task<ClientNarrationStatus> SubmitClientNarrationAsync(Guid partyId, int turn, string? text, bool declined)
+    {
+        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        {
+            return ClientNarrationStatus.NotFound;
+        }
+
+        // Atomic claim: the deadline task and this call race on the same entry, only one can take it.
+        if (!_jobs.TryRemove((partyId, turn), out var job))
+        {
+            return ClientNarrationStatus.Conflict;
+        }
+
+        var cleaned = declined ? string.Empty : text?.Trim() ?? string.Empty;
+        TurnNarration? partial = job.IsScenario || cleaned.Length == 0 ? null : TurnNarrationParser.Parse(cleaned);
+        var scenario = job.IsScenario ? NarrationText.Clean(cleaned, TurnNarrationParser.MaxScenarioLength) : string.Empty;
+        if (job.IsScenario ? scenario.Length == 0 : partial is null)
+        {
+            _ = Task.Run(() => RunServerNarrationAsync(partyId, turn, job));
+            return ClientNarrationStatus.Accepted;
+        }
+
+        if (job.IsScenario)
+        {
+            return await CompleteClientScenarioAsync(partyId, turn, job.Context.Room, scenario)
+                ? ClientNarrationStatus.Accepted
+                : ClientNarrationStatus.Conflict;
+        }
+
+        var narration = FallbackFlavor.Complete(partial, job.Success, job.Context);
+        return await FinishTurnAsync(partyId, turn, job.Success, job.Context, narration, narration.FromFallback ? "fallback" : "model")
+            ? ClientNarrationStatus.Accepted
+            : ClientNarrationStatus.Conflict;
     }
 
     // Outside the lock; failures are logged, never thrown.
@@ -328,11 +493,22 @@ public sealed class ExploreDungeonHandler(
             }
 
             var turnBefore = party.Turn;
-            var bonus = Math.Min(MaxActionBonusPercent, party.ActionBonusCount * ActionBonusPercent);
-            var success = roller.Next(100) < BaseSuccessPercent + bonus;
-            var (damage, gold) = Deltas(pending.Room, success, turnBefore);
+            // Every locked-in action rolls on its own, with odds shifted by what the rest of the party locked in.
+            var chances = ActionOdds.For(discussion);
+            var failed = new List<DamageResult>();
+            var passed = 0;
+            for (var i = 0; i < discussion.Count; i++)
+            {
+                if (roller.Next(100) < chances[i]) passed++;
+                else failed.Add(new DamageResult(discussion[i].Name, FailDamage(pending.Room, turnBefore)));
+            }
 
-            var hit = party.ApplyChoiceOutcome(damage, gold);
+            // The room itself needs a strict majority; a tie goes to the dungeon.
+            var success = passed > failed.Count;
+            var gold = success ? Gold(pending.Room, turnBefore) : 0;
+
+            var hits = party.ApplyMemberOutcomes(failed, gold);
+            var hit = hits.Count > 0 ? hits[0] : null;
 
             // The next room is rolled in C# before any narrator call; nothing follows a defeated party.
             RoomType? nextRoom = null;
@@ -351,11 +527,14 @@ public sealed class ExploreDungeonHandler(
             var response = new ExploreResponse(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
                 pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
-                Beats: ToBeats(party, discussion), Success: success);
+                Beats: ToBeats(party, discussion), Success: success,
+                Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))]);
             var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
                 Actions = discussion,
                 NextRoom = nextRoom,
+                Failed = [.. failed.Select(f => f.TargetName)],
+                Downed = [.. party.Members.Where(m => m.IsDefeated).Select(m => m.Name)],
             };
 
             return (new ExploreResult(ExploreStatus.Explored, response), context, success, PartyMapping.ToResponse(party.Snapshot()));
@@ -372,13 +551,19 @@ public sealed class ExploreDungeonHandler(
     private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidRequest, Error: error);
 
     // Game math lives here, never in the narrator.
-    private static (int Damage, int Gold) Deltas(RoomType room, bool success, int turn) => (room, success) switch
+    // Each member whose own action failed takes this hit; it grows as the dungeon deepens.
+    private static int FailDamage(RoomType room, int turn) => room switch
     {
-        (RoomType.Combat, false) => (2 + turn % 3, 0),
-        (RoomType.Chest, true) => (0, 5 + turn),
-        (RoomType.Puzzle, true) => (0, 10 + 2 * turn),
-        (RoomType.Puzzle, false) => (4 + turn % 3, 0),
-        _ => (0, 0),
+        RoomType.Combat => 6 + turn % 3 + turn / 3,
+        RoomType.Puzzle => 7 + turn % 3 + turn / 3,
+        _ => 4 + turn / 3,
+    };
+
+    private static int Gold(RoomType room, int turn) => room switch
+    {
+        RoomType.Chest => 5 + turn,
+        RoomType.Puzzle => 10 + 2 * turn,
+        _ => 0,
     };
 
     private static bool IsWounded(Party party) =>

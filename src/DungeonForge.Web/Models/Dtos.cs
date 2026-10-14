@@ -43,7 +43,17 @@ public sealed record ExploreResponse(
     bool ScenarioPending = false,
     IReadOnlyList<LockStatusDto>? LockStatus = null,
     IReadOnlyList<ActionBeat>? Beats = null,
-    bool Success = false);
+    bool Success = false,
+    IReadOnlyList<HitDto>? Hits = null,
+    NarrationBrief? Brief = null);
+
+// Prompts for the browser's local model; sent only to the request that claimed the narration slot.
+public sealed record NarrationBrief(int Turn, string Kind, string System, string User, string? JsonSchema, int MaxTokens);
+
+public sealed record SubmitNarrationRequest(int Turn, string? Text, bool? Declined);
+
+// One member's own damage from a failed action; TargetName/Damage on the response mirror the first hit.
+public sealed record HitDto(string Name, int Damage);
 
 public enum ActionVerb
 {
@@ -58,7 +68,7 @@ public sealed record ActionBeat(string Name, CharacterClass Class, ActionVerb Ve
 
 public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 
-public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null, string? NextScene = null);
+public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null, string? NextScene = null, string? Source = null);
 
 public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null);
 

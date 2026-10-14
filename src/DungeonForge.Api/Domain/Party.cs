@@ -25,6 +25,7 @@ public sealed class Party
     private int _turn;
     private PendingEncounter? _pending;
     private RoomType? _awaitingRoom;
+    private int _awaitingTurn;
     private readonly List<PlayerAction> _locks = [];
 
     public Lock SyncRoot { get; } = new();
@@ -144,6 +145,22 @@ public sealed class Party
             }
 
             _awaitingRoom = room;
+            _awaitingTurn = _turn;
+            return true;
+        }
+    }
+
+    // Compare-and-set completion: only the first writer for the claimed turn wins (client submit vs. server deadline).
+    public bool TryCompleteScenario(int turn, PendingEncounter encounter)
+    {
+        lock (SyncRoot)
+        {
+            if (_awaitingRoom is null || _awaitingTurn != turn)
+            {
+                return false;
+            }
+
+            CompleteScenario(encounter);
             return true;
         }
     }
@@ -309,6 +326,26 @@ public sealed class Party
             AdvanceTurn(gold);
             _pending = null;
             return hit;
+        }
+    }
+
+    // Applies a resolved turn where each failed member took their own hit: damage per named member, gold, turn advance,
+    // pending cleared. Unknown or already-defeated members are skipped; the applied hits are returned in order.
+    public IReadOnlyList<DamageResult> ApplyMemberOutcomes(IReadOnlyList<DamageResult> hits, int gold)
+    {
+        lock (SyncRoot)
+        {
+            var applied = new List<DamageResult>();
+            foreach (var hit in hits)
+            {
+                var member = Members.FirstOrDefault(m => m.Name == hit.TargetName);
+                if (member is null || member.IsDefeated || hit.Damage <= 0) continue;
+                applied.Add(new DamageResult(member.Name, member.TakeDamage(hit.Damage)));
+            }
+
+            AdvanceTurn(gold);
+            _pending = null;
+            return applied;
         }
     }
 

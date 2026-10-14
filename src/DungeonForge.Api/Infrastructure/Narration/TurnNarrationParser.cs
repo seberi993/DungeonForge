@@ -7,7 +7,7 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 // caller can fall back per part. Null when nothing usable is present.
 public static class TurnNarrationParser
 {
-    public const int MaxOutcomeLength = 500;
+    public const int MaxOutcomeLength = 700;
     public const int MaxScenarioLength = 1400;
 
     private static readonly JsonDocumentOptions Lenient = new()

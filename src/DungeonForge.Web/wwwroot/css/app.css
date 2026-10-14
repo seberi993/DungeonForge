@@ -50,7 +50,12 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 
 .scenario { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; background: var(--bg-panel); border-left: 3px solid var(--gold); padding: .75rem 1rem; border-radius: 0 var(--radius) var(--radius) 0; }
 .scenario.loading { font-style: italic; opacity: 0.7; }
+.local-narrator { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
+.local-narrator small { opacity: .7; flex-basis: 100%; }
+.local-narrator progress { flex: 1; min-width: 8rem; }
+.fallback-note { font-size: .85rem; opacity: .65; font-style: italic; }
 .action-box textarea { width: 100%; }
+.action-box textarea::placeholder { color: hsl(var(--sugg-hue, 40) 85% 68% / .5); font-style: italic; transition: color .6s; }
 .action-buttons { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
 
 /* Party lock status */

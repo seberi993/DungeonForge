@@ -480,6 +480,39 @@ public class GameSessionTests
     }
 
     [Fact]
+    public void ApplyNarration_RemembersWhereTheOutcomeCameFrom_UntilTheNextTurn()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.Apply(Turn(1, RoomType.Chest, null, 0, 5, 5));
+
+        sut.ApplyNarration(Id, 1, "Canned.", "Next. What do you do?", RoomType.Combat, null, "fallback");
+
+        sut.NarrationSource.Should().Be("fallback");
+        sut.Apply(Turn(2, RoomType.Chest, null, 0, 5, 10));
+        sut.NarrationSource.Should().BeNull();
+    }
+
+    [Fact]
+    public void ApplyPartyState_SameTurnWithNewMember_AddsThemWithoutTouchingTheScene()
+    {
+        var sut = new GameSession();
+        sut.Start(Party());
+        sut.ApplyPrompt(Prompt(0));
+        var changed = 0;
+        sut.Changed += () => changed++;
+
+        var applied = sut.ApplyPartyState(new PartyStateDto(Id, "Heroes",
+            [Member("A", CharacterClass.Warrior, 30, 30), Member("B", CharacterClass.Mage, 16, 16), Member("C", CharacterClass.Bard, 20, 20)],
+            DateTimeOffset.UtcNow, 0, 0, false));
+
+        applied.Should().BeTrue();
+        sut.Members.Select(m => m.Name).Should().Equal("A", "B", "C");
+        sut.HasScenario.Should().BeTrue();
+        changed.Should().Be(1);
+    }
+
+    [Fact]
     public void ApplyPartyState_Newer_ClearsScenario()
     {
         var sut = new GameSession();

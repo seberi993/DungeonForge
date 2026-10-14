@@ -31,6 +31,8 @@ public static class MasterPromptBuilder
     {
         var sb = new StringBuilder(Header(ctx, "Current scene", ctx.Room))
             .Append(" Result: the party's plan ").Append(success ? "succeeded" : "failed").Append('.');
+        AppendNames(sb, " Members whose own action failed and who were hurt: ", ctx.Failed);
+        AppendNames(sb, " Fallen heroes (describe them as down or dead): ", ctx.Downed);
         if (ctx.NextRoom is { } next)
         {
             sb.Append(" Next scene: ").Append(Scene(next)).Append('.');
@@ -57,6 +59,14 @@ public static class MasterPromptBuilder
         }
 
         return sb.ToString();
+    }
+
+    private static void AppendNames(StringBuilder sb, string label, IReadOnlyList<string> names)
+    {
+        if (names.Count == 0) return;
+        sb.Append(label)
+            .AppendJoin(", ", names.Select(n => NarrationText.Sanitize(n, MaxNameLength, NeutralMember)))
+            .Append('.');
     }
 
     private static string Header(NarrationContext ctx, string sceneLabel, RoomType room) =>

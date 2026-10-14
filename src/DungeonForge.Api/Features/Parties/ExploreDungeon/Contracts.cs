@@ -82,7 +82,16 @@ public sealed record ExploreResponse(
     bool ScenarioPending = false,
     IReadOnlyList<LockStatusDto>? LockStatus = null,
     IReadOnlyList<ActionBeat>? Beats = null,
-    bool Success = false);
+    bool Success = false,
+    IReadOnlyList<HitDto>? Hits = null,
+    NarrationBrief? Brief = null);
+
+// Handed only to the request that triggered a narration slot when client narration is on: the prompts the browser's
+// local model should run. Kind is "scenario" (plain prose) or "turn" (JSON). The reply goes back via POST .../narration.
+public sealed record NarrationBrief(int Turn, string Kind, string System, string User, string? JsonSchema, int MaxTokens);
+
+// One member's own damage from a failed action this turn. TargetName/Damage on the response mirror the first hit.
+public sealed record HitDto(string Name, int Damage);
 
 // What one member does on screen when the turn resolves; the client animates these in order. Purely presentational.
 public enum ActionVerb
@@ -103,7 +112,15 @@ public sealed record NarrationReady(
     string Outcome,
     string? NextScenario = null,
     RoomType? NextRoomType = null,
-    string? NextScene = null);
+    string? NextScene = null,
+    string? Source = null);
+
+public enum ClientNarrationStatus
+{
+    Accepted,
+    NotFound,
+    Conflict,
+}
 
 public enum ExploreStatus
 {

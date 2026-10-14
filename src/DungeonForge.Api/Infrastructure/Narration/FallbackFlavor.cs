@@ -1,3 +1,5 @@
+using System.Globalization;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
@@ -24,38 +26,38 @@ public static class FallbackFlavor
 
     private static readonly string[] CombatSuccess =
     [
-        "Your nerve holds and the foe falls back, battered and broken.",
-        "A decisive blow ends the fight before it can turn.",
+        "Somehow your nerve holds and the foe falls back. Don't let it go to your heads; it was a low bar.",
+        "A decisive blow ends the fight. Pure luck, but sure, call it skill.",
     ];
 
     private static readonly string[] CombatFailure =
     [
-        "The plan unravels and the enemy lands a painful strike.",
-        "You misjudge the moment and pay for it in blood.",
+        "The plan unravels and the enemy lands a painful strike. Shocking, truly.",
+        "You misjudged the moment and paid for it in blood. Who could have seen that coming? Everyone.",
     ];
 
     private static readonly string[] ChestSuccess =
     [
-        "The lid gives way and coins spill into your hands.",
-        "Your gamble pays off; the treasure is yours.",
+        "The lid gives way and coins spill out. Congratulations on the accident.",
+        "Your gamble pays off and the treasure is yours. Try not to look so smug about it.",
     ];
 
     private static readonly string[] ChestFailure =
     [
-        "The mechanism jams and the treasure slips away.",
-        "Nothing but dust and splinters rewards the effort.",
+        "The mechanism jams and the treasure slips away. Greed, meet consequences.",
+        "Nothing but dust and splinters for your trouble. Fitting.",
     ];
 
     private static readonly string[] PuzzleSuccess =
     [
-        "The mechanism clicks, the way opens, and a hidden cache glitters inside.",
-        "Together you crack the riddle and the vault yields its treasure.",
+        "The mechanism clicks and the way opens. A blind goat could have stumbled into it, but fine.",
+        "Together you crack the riddle, and it only took the combined effort of all of you.",
     ];
 
     private static readonly string[] PuzzleFailure =
     [
-        "The trap springs and a jolt of force sweeps through the party.",
-        "A wrong move triggers the lock's defenses, and stone and sparks fly.",
+        "The trap springs and a jolt of force sweeps through the party. Next time, try thinking first.",
+        "A wrong move triggers the lock's defenses. Stone and sparks fly, and so does my patience.",
     ];
 
     // Deterministic, descriptive scenario used whenever the model is unavailable or returns nothing usable.
@@ -79,14 +81,58 @@ public static class FallbackFlavor
         return set[Index(turn, set.Length)];
     }
 
+    private static readonly string[] AttackJabs =
+    [
+        "{0} charges in swinging, because subtlety is for people with brains.",
+        "{0} decided violence was a plan. Adorable.",
+    ];
+
+    private static readonly string[] EvadeJabs =
+    [
+        "{0} edges toward the exit, and honestly, the dungeon expected nothing braver.",
+        "{0} tries to dodge the danger. Running: the one skill you all practise.",
+    ];
+
+    private static readonly string[] LootJabs =
+    [
+        "{0} lunges for the shiny thing, greed leading the way as always.",
+        "{0} sees treasure and forgets every lesson ever learned. Riveting.",
+    ];
+
+    private static readonly string[] OtherJabs =
+    [
+        "{0} had an idea. Everyone is as surprised as you are.",
+        "{0} chimed in with a plan, and the walls sighed.",
+    ];
+
+    // A scoff aimed at the first member idea, chosen by keyword; empty when nobody offered an idea.
+    public static string Jab(IReadOnlyList<PlayerAction> actions, int turn)
+    {
+        var first = actions.FirstOrDefault(a => !string.IsNullOrWhiteSpace(a.Text));
+        if (first is null) return string.Empty;
+
+        var set = ActionOdds.Classify(first.Text) switch
+        {
+            ActionKind.Attack => AttackJabs,
+            ActionKind.Evade => EvadeJabs,
+            ActionKind.Loot => LootJabs,
+            _ => OtherJabs,
+        };
+        return string.Format(CultureInfo.InvariantCulture, set[Index(turn, set.Length)], first.Name);
+    }
+
     // Fills each blank part of a (possibly partial) model reply independently with deterministic flavor.
     public static TurnNarration Complete(TurnNarration? partial, bool success, NarrationContext ctx)
     {
-        var outcome = string.IsNullOrWhiteSpace(partial?.Outcome) ? Outcome(ctx.Room, success, ctx.Turn) : partial.Outcome;
+        var filledOutcome = string.IsNullOrWhiteSpace(partial?.Outcome);
+        var outcome = filledOutcome
+            ? $"{Jab(ctx.Actions, ctx.Turn)} {Outcome(ctx.Room, success, ctx.Turn)}".Trim()
+            : partial!.Outcome;
+        var filledNext = ctx.NextRoom is not null && string.IsNullOrWhiteSpace(partial?.Next);
         var next = ctx.NextRoom is not { } room
             ? string.Empty
-            : string.IsNullOrWhiteSpace(partial?.Next) ? Scenario(room, ctx.Turn + 1) : partial.Next;
-        return new TurnNarration(outcome, next, partial?.NextScene ?? string.Empty);
+            : filledNext ? Scenario(room, ctx.Turn + 1) : partial!.Next;
+        return new TurnNarration(outcome, next, partial?.NextScene ?? string.Empty) { FromFallback = filledOutcome || filledNext };
     }
 
     private static int Index(int turn, int length) => (int)(Math.Abs((long)turn) % length);

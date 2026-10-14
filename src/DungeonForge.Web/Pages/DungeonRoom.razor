@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject IDungeonHubClient Hub
+@inject IServiceProvider Services
 @implements IAsyncDisposable
 
 @if (Session.HasParty)
@@ -39,9 +40,33 @@
         </div>
     </details>
 
+    @if (_local is { State: not (LocalNarratorState.Unknown or LocalNarratorState.Unsupported) })
+    {
+        <div id="local-narrator" class="card local-narrator">
+            @switch (_local.State)
+            {
+                case LocalNarratorState.Idle:
+                    <button id="enable-local-narrator" type="button" @onclick="_local.EnableAsync">Write the narration on my own GPU</button>
+                    <small>Optional: a one-time ~1 GB download that stays in your browser. Needs a WebGPU browser (recent Chrome or Edge).</small>
+                    break;
+                case LocalNarratorState.Downloading:
+                    <label for="local-narrator-progress">Summoning the narrator: @_local.Status</label>
+                    <progress id="local-narrator-progress" max="100" value="@_local.Progress"></progress>
+                    break;
+                case LocalNarratorState.Ready:
+                    <span id="local-narrator-ready">@(_localWriting ? "The local narrator is writing..." : "Local narrator ready")</span>
+                    break;
+                case LocalNarratorState.Failed:
+                    <span class="error">The local narrator could not start: @_local.Status</span>
+                    <button id="retry-local-narrator" type="button" @onclick="_local.EnableAsync">Try again</button>
+                    break;
+            }
+        </div>
+    }
+
     <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene" Narration="Session.Scenario"
                 Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" />
-    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" />
+    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" OnSpellsLoaded="OnSpellsLoaded" />
 
     @if (_offline)
     {
@@ -59,6 +84,10 @@
     else if (Session.LastOutcome is { } outcome)
     {
         <p id="last-outcome" class="outcome"><TypewriterText Text="@outcome" OnComplete="() => _outcomeTyped = outcome" /></p>
+        @if (Session.NarrationSource == "fallback")
+        {
+            <p id="fallback-note" class="fallback-note">The narrator is out of words, so this was canned text.</p>
+        }
     }
 
     @if (Session.IsDefeated)
@@ -74,7 +103,7 @@
             <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
-                <textarea id="action-text" maxlength="200" disabled="@IsLocked" @bind="_actionText" @bind:event="oninput"></textarea>
+                <textarea id="action-text" maxlength="200" disabled="@IsLocked" placeholder="@_suggestion" style="--sugg-hue: @_suggestionHue" @bind="_actionText" @bind:event="oninput"></textarea>
                 <div class="action-buttons">
                     <button id="toggle-spellbook" type="button" @onclick="() => _spellbookOpen = !_spellbookOpen">Spellbook</button>
                     <button id="lock-in" disabled="@(_busy || IsLocked || string.IsNullOrWhiteSpace(_actionText))" @onclick="LockInAsync">@(IsLocked ? "Locked in" : "Lock in")</button>
@@ -155,13 +184,65 @@
     private string _actionText = "";
     private CancellationTokenSource? _narrationCts;
 
+    // Faint rotating hint shown while the action box is empty.
+    private readonly Random _rng = new();
+    private IReadOnlyList<string>? _spellNames;
+    private string _suggestion = "";
+    private int _suggestionHue;
+    private Timer? _suggestionTimer;
+
+    private void Reroll()
+    {
+        _suggestion = ActionSuggestions.Pick(_rng, _spellNames);
+        _suggestionHue = ActionSuggestions.PickHue(_rng);
+    }
+
+    private void OnSpellsLoaded(IReadOnlyList<string> names) => _spellNames = names;
+
+    private void StartSuggestionTimer() =>
+        _suggestionTimer = new Timer(_ => Dispatch(() =>
+        {
+            if (!string.IsNullOrEmpty(_actionText)) return false;
+            Reroll();
+            return true;
+        }), null, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(8));
+
     // The stage tells us when it has acted out a turn; until then the outcome and next scenario stay hidden.
     private int _showDoneTurn;
     private bool ShowActive => Session.Show is { } show && show.Turn > _showDoneTurn;
 
     private void OnShowComplete(int turn) => _showDoneTurn = Math.Max(_showDoneTurn, turn);
 
-    [Parameter] public TimeSpan NarrationTimeout { get; set; } = TimeSpan.FromSeconds(20);
+    // Longer than the server's client-narration deadline plus its own narrator call, so a slow local model is not abandoned early.
+    [Parameter] public TimeSpan NarrationTimeout { get; set; } = TimeSpan.FromSeconds(60);
+
+    private ILocalNarrator? _local;
+    private bool _localWriting;
+
+    private void OnLocalChanged() => Dispatch(() => true);
+
+    // Runs the server's prompts on this browser's model and hands the text back; no model (or a decline) lets the server write it.
+    private async Task NarrateLocallyAsync(NarrationBrief brief)
+    {
+        string? text = null;
+        if (_local is { State: LocalNarratorState.Ready })
+        {
+            _localWriting = true;
+            await InvokeAsync(StateHasChanged);
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                text = await _local.GenerateAsync(brief, cts.Token);
+            }
+            finally
+            {
+                _localWriting = false;
+                if (!_disposed) await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        await Api.SubmitNarrationAsync(Session.PartyId, brief.Turn, text, declined: text is null);
+    }
 
     private async Task CopyInviteAsync()
     {
@@ -188,6 +269,15 @@
         {
             Nav.NavigateTo("/");
             return;
+        }
+
+        Reroll();
+        StartSuggestionTimer();
+        _local = Services.GetService(typeof(ILocalNarrator)) as ILocalNarrator;
+        if (_local is not null)
+        {
+            _local.Changed += OnLocalChanged;
+            _ = _local.InitializeAsync();
         }
 
         Hub.TurnResolved += OnTurnResolved;
@@ -224,7 +314,7 @@
     }
 
     private void OnNarrationReady(NarrationReady narration) =>
-        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario, narration.NextRoomType, narration.NextScene));
+        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario, narration.NextRoomType, narration.NextScene, narration.Source));
 
     private void OnDiscussionUpdated(Guid partyId, IReadOnlyList<PlayerAction> actions) =>
         Dispatch(() => Session.ApplyDiscussion(partyId, actions));
@@ -293,6 +383,8 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        _suggestionTimer?.Dispose();
+        if (_local is not null) _local.Changed -= OnLocalChanged;
         Hub.TurnResolved -= OnTurnResolved;
         Hub.PartyUpdated -= OnPartyUpdated;
         Hub.NarrationReady -= OnNarrationReady;
@@ -370,11 +462,14 @@
                 case ApiStatus.Success:
                     var response = result.Value!;
                     var lockedAtTurn = Session.Turn;
+                    // Only the request that claimed the narration slot is briefed; the server falls back if we never answer.
+                    if (response.Brief is { } brief) _ = NarrateLocallyAsync(brief);
                     // The last lock-in resolves the turn server-side and answers with the resolved (newer) turn.
                     if (Session.Apply(response))
                     {
                         _scroll = true;
                         _actionText = "";
+                        Reroll();
                         _lockedTurn = null;
                         WatchNarration();
                     }

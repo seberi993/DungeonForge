@@ -170,7 +170,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_CombatFailure_DamagesWarriorByTwoPlusTurnMod3()
+    public async Task Explore_CombatFailure_EveryFailedMemberTakesTheirOwnSixPlusHit()
     {
         var client = ClientWithRoll(0, Fail);
         var id = await PartyTestData.CreatePartyAsync(client);
@@ -178,19 +178,22 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         using var t1 = await TurnAsync(client, id);
         t1.RootElement.GetProperty("roomType").GetString().Should().Be("combat");
         t1.RootElement.GetProperty("targetName").GetString().Should().Be("Conan");
-        t1.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
+        t1.RootElement.GetProperty("damage").GetInt32().Should().Be(6);
+        t1.RootElement.GetProperty("hits").EnumerateArray()
+            .Select(h => (h.GetProperty("name").GetString(), h.GetProperty("damage").GetInt32()))
+            .Should().Equal(("Conan", 6), ("Merlin", 6), ("Mercy", 6));
         t1.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0);
         t1.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeFalse();
         t1.RootElement.GetProperty("flavorEvent").GetString().Should().NotBeNullOrWhiteSpace();
 
         using var t2 = await TurnAsync(client, id);
-        t2.RootElement.GetProperty("damage").GetInt32().Should().Be(3);
+        t2.RootElement.GetProperty("damage").GetInt32().Should().Be(7);
         t2.RootElement.GetProperty("gold").GetInt32().Should().Be(0);
 
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        Member(state, 0).GetProperty("hp").GetInt32().Should().Be(25);
-        Member(state, 1).GetProperty("hp").GetInt32().Should().Be(16);
-        Member(state, 2).GetProperty("hp").GetInt32().Should().Be(20);
+        Member(state, 0).GetProperty("hp").GetInt32().Should().Be(17);
+        Member(state, 1).GetProperty("hp").GetInt32().Should().Be(3);
+        Member(state, 2).GetProperty("hp").GetInt32().Should().Be(7);
     }
 
     [Fact]
@@ -227,7 +230,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     }
 
     [Fact]
-    public async Task Explore_ChestFailure_FindsNoGoldAndDealsNoDamage_ButAdvancesTurn()
+    public async Task Explore_ChestFailure_FindsNoGoldAndTrapsEachFailedMember_AndAdvancesTurn()
     {
         var client = ClientWithRoll(1, Fail);
         var id = await PartyTestData.CreatePartyAsync(client);
@@ -236,39 +239,39 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
 
         t1.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
         t1.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0);
-        t1.RootElement.GetProperty("damage").GetInt32().Should().Be(0);
+        t1.RootElement.GetProperty("damage").GetInt32().Should().Be(4);
         t1.RootElement.GetProperty("gold").GetInt32().Should().Be(0);
     }
 
     [Fact]
-    public async Task Explore_CombatFailuresUntilWarriorDown_FallsThroughToNextMember()
+    public async Task Explore_FailingEveryTurn_DownsTheSquishyHeroesFirst_ThenTheWholeParty()
     {
         var client = ClientWithRoll(0, Fail);
         var id = await PartyTestData.CreatePartyAsync(client);
 
-        // Warrior (30 HP) absorbs 2,3,4 x3 = 27 over 9 turns (3 left); turn 10 deals 2 (1 left); turn 11 would deal 3 but clamps to 1 (0 left).
-        var targets = new List<string?>();
-        var damages = new List<int>();
-        for (var i = 0; i < 11; i++)
+        // Hits are 6,7,8,7 then 8: Merlin (16) and Mercy (20) are down on turn 3; Conan (30) falls on turn 5.
+        var hits = new List<int>();
+        JsonDocument? last = null;
+        for (var i = 0; i < 4; i++)
         {
-            using var doc = await TurnAsync(client, id);
-            targets.Add(doc.RootElement.GetProperty("targetName").GetString());
-            damages.Add(doc.RootElement.GetProperty("damage").GetInt32());
+            last?.Dispose();
+            last = await TurnAsync(client, id);
+            hits.Add(last.RootElement.GetProperty("damage").GetInt32());
+            last.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeFalse();
         }
 
-        targets.Should().OnlyContain(t => t == "Conan");
-        damages.Should().Equal(2, 3, 4, 2, 3, 4, 2, 3, 4, 2, 1);
+        last!.Dispose();
+        hits.Should().Equal(6, 7, 8, 7);
 
-        using var twelfth = await TurnAsync(client, id);
-        twelfth.RootElement.GetProperty("targetName").GetString().Should().Be("Merlin");
-        twelfth.RootElement.GetProperty("damage").GetInt32().Should().Be(4);
-        twelfth.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeFalse();
+        using var fourth = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
+        Member(fourth, 0).GetProperty("hp").GetInt32().Should().Be(2);
+        Member(fourth, 1).GetProperty("isDefeated").GetBoolean().Should().BeTrue();
+        Member(fourth, 2).GetProperty("isDefeated").GetBoolean().Should().BeTrue();
 
-        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        Member(state, 0).GetProperty("isDefeated").GetBoolean().Should().BeTrue();
-        Member(state, 0).GetProperty("hp").GetInt32().Should().Be(0);
-        Member(state, 1).GetProperty("hp").GetInt32().Should().Be(12);
-        state.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeFalse();
+        using var fifth = await TurnAsync(client, id);
+        fifth.RootElement.GetProperty("targetName").GetString().Should().Be("Conan");
+        fifth.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
+        fifth.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -277,10 +280,10 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         var client = ClientWithRoll(0, Fail);
         var id = await CreateSoloMagePartyAsync(client);
 
-        // Mage 16 HP: damage 2,3,4,2,3 = 14 -> 2 HP left; turn 6 would deal 4 but clamps to 2.
+        // Mage 16 HP: damage 6,7 = 13 -> 3 HP left; turn 3 would deal 8 but clamps to 3.
         var damages = new List<int>();
         JsonDocument? last = null;
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 3; i++)
         {
             last?.Dispose();
             last = await TurnAsync(client, id);
@@ -289,7 +292,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
 
         using (last)
         {
-            damages.Should().Equal(2, 3, 4, 2, 3, 2);
+            damages.Should().Equal(6, 7, 3);
             last!.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeTrue();
         }
 
@@ -304,7 +307,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
     {
         var client = ClientWithRoll(0, Fail);
         var id = await CreateSoloMagePartyAsync(client);
-        for (var i = 0; i < 6; i++)
+        for (var i = 0; i < 3; i++)
         {
             using var _ = await TurnAsync(client, id);
         }
@@ -312,7 +315,7 @@ public sealed class ExploreDungeonTests(WebApplicationFactory<Program> factory) 
         (await PromptAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await ResolveAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.Conflict);
         using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
-        state.RootElement.GetProperty("turn").GetInt32().Should().Be(6);
+        state.RootElement.GetProperty("turn").GetInt32().Should().Be(3);
     }
 
     // ---- Concurrency ----

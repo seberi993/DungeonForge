@@ -44,6 +44,7 @@
     [Parameter] public CharacterClass Class { get; set; }
     [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<IReadOnlyList<string>> OnSpellsLoaded { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -55,7 +56,11 @@
         var forClass = Class;
         var result = await Api.GetSpellsAsync(forClass);
         if (forClass != Class) return;
-        if (result.IsSuccess) _spells = result.Value;
+        if (result.IsSuccess)
+        {
+            _spells = result.Value;
+            await OnSpellsLoaded.InvokeAsync(_spells!.Select(s => s.Name).ToList());
+        }
         else _error = result.Error ?? "The spellbook could not be opened.";
     }
 }

@@ -208,7 +208,8 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         await notifier.NarrationAsync;
 
         narrator.SeenSuccess.Should().BeFalse();
-        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(2);
+        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(6);
+        narrator.SeenTurnContext!.Failed.Should().Equal("Conan", "Merlin", "Mercy");
         doc.RootElement.TryGetProperty("lastOutcome", out _).Should().BeFalse();
     }
 
@@ -224,7 +225,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var ready = await notifier.NarrationAsync;
 
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
-        ready.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Chest, false, 0));
+        ready.Outcome.Should().EndWith(FallbackFlavor.Outcome(RoomType.Chest, false, 0));
         ready.NextScenario.Should().Be(FallbackFlavor.Scenario(RoomType.Chest, 1));
         using var next = await PromptWhenReadyAsync(client, id);
         next.RootElement.GetProperty("scenario").GetString().Should().Be(ready.NextScenario);
@@ -241,7 +242,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         using var _ = await TurnAsync(client, id);
         var ready = await notifier.NarrationAsync;
 
-        ready.Outcome.Should().Be(FallbackFlavor.Outcome(RoomType.Chest, true, 0));
+        ready.Outcome.Should().EndWith(FallbackFlavor.Outcome(RoomType.Chest, true, 0));
         ready.NextScenario.Should().Be("A new hall. What do you do?");
     }
 
@@ -320,13 +321,13 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         using var derived = With(narrator, new FixedRoller(0, Fail));
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client, members: [new { name = "Merlin", @class = "mage" }]);
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < 2; i++)
         {
             using var _ = await TurnAsync(client, id);
         }
 
         var before = narrator.TurnCalls;
-        using var final = await TurnAsync(client, id); // mage (16 HP) falls on the sixth failure
+        using var final = await TurnAsync(client, id); // mage (16 HP) falls on the third failure
 
         final.RootElement.GetProperty("isPartyDefeated").GetBoolean().Should().BeTrue();
         var deadline = DateTime.UtcNow.AddSeconds(5);

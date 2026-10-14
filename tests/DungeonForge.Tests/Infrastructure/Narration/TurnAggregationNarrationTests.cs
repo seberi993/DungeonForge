@@ -114,7 +114,7 @@ public class FallbackFlavorTests
         var ctx = new NarrationContext(RoomType.Combat, "H", 2, false) { NextRoom = RoomType.Chest };
 
         FallbackFlavor.Complete(null, false, ctx).Should().Be(
-            new TurnNarration(FallbackFlavor.Outcome(RoomType.Combat, false, 2), FallbackFlavor.Scenario(RoomType.Chest, 3)));
+            new TurnNarration(FallbackFlavor.Outcome(RoomType.Combat, false, 2), FallbackFlavor.Scenario(RoomType.Chest, 3)) { FromFallback = true });
     }
 
     [Fact]
@@ -123,9 +123,10 @@ public class FallbackFlavorTests
         var ctx = new NarrationContext(RoomType.Combat, "H", 2, false) { NextRoom = RoomType.Puzzle };
 
         FallbackFlavor.Complete(new TurnNarration("Mine", " "), true, ctx)
-            .Should().Be(new TurnNarration("Mine", FallbackFlavor.Scenario(RoomType.Puzzle, 3)));
+            .Should().Be(new TurnNarration("Mine", FallbackFlavor.Scenario(RoomType.Puzzle, 3)) { FromFallback = true });
         FallbackFlavor.Complete(new TurnNarration("", "Mine too"), true, ctx)
-            .Should().Be(new TurnNarration(FallbackFlavor.Outcome(RoomType.Combat, true, 2), "Mine too"));
+            .Should().Be(new TurnNarration(FallbackFlavor.Outcome(RoomType.Combat, true, 2), "Mine too") { FromFallback = true });
+        FallbackFlavor.Complete(new TurnNarration("Mine", "Mine too"), true, ctx).FromFallback.Should().BeFalse();
     }
 
     [Fact]
@@ -135,6 +136,41 @@ public class FallbackFlavorTests
 
         FallbackFlavor.Complete(new TurnNarration("Down.", "ignored"), false, ctx).Next.Should().BeEmpty();
         FallbackFlavor.Complete(null, false, ctx).Next.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("I attack the goblin", "charges in|violence")]
+    [InlineData("I run away screaming", "exit|Running")]
+    [InlineData("I grab the chest", "shiny|treasure")]
+    [InlineData("I hum a tune", "idea|plan")]
+    public void Jab_MocksTheFirstMemberByNameAndChoice(string text, string pattern)
+    {
+        var actions = new[] { new PlayerAction(Guid.NewGuid(), "Bork", text) };
+
+        var jabs = Enumerable.Range(0, 2).Select(t => FallbackFlavor.Jab(actions, t)).ToList();
+
+        jabs.Should().OnlyContain(j => j.Contains("Bork"));
+        jabs.Should().Contain(j => System.Text.RegularExpressions.Regex.IsMatch(j, pattern));
+    }
+
+    [Fact]
+    public void Complete_WithActions_PrefixesTheJab_AndWithoutActionsDoesNot()
+    {
+        var actions = new[] { new PlayerAction(Guid.NewGuid(), "Bork", "I attack") };
+        var ctx = new NarrationContext(RoomType.Combat, "H", 2, false) { Actions = actions };
+
+        var outcome = FallbackFlavor.Complete(null, true, ctx).Outcome;
+
+        outcome.Should().StartWith(FallbackFlavor.Jab(actions, 2)).And.EndWith(FallbackFlavor.Outcome(RoomType.Combat, true, 2));
+        outcome.Length.Should().BeLessThanOrEqualTo(TurnNarrationParser.MaxOutcomeLength);
+        FallbackFlavor.Jab([], 2).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Prompts_AskTheNarratorToMockTheParty()
+    {
+        NarrationPrompts.Turn(RoomType.Combat).Should().Contain("Mock the party").And.Contain("rude");
+        NarrationPrompts.Turn(null).Should().Contain("Mock the party");
     }
 }
 
@@ -163,6 +199,6 @@ public sealed class StaticDungeonNarratorTests
 
         var result = await new StaticDungeonNarrator().NarrateTurnAsync(success, ctx, CancellationToken.None);
 
-        result.Should().Be(new TurnNarration(FallbackFlavor.Outcome(room, success, 4), FallbackFlavor.Scenario(RoomType.Chest, 5)));
+        result.Should().Be(new TurnNarration(FallbackFlavor.Outcome(room, success, 4), FallbackFlavor.Scenario(RoomType.Chest, 5)) { FromFallback = true });
     }
 }

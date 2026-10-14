@@ -39,6 +39,8 @@ public sealed class GameSession
     public string? Scene { get; private set; }
     public bool ScenarioPending { get; private set; }
     public string? LastOutcome { get; private set; }
+    // Where the latest outcome came from: "model" (a browser's local model), "server", or "fallback" (canned text).
+    public string? NarrationSource { get; private set; }
     public IReadOnlyList<PlayerAction> Discussion { get; private set; } = [];
     public IReadOnlyList<LockStatusDto> LockStatus { get; private set; } = [];
     public int LockedCount => LockStatus.Count(s => s.LockedIn);
@@ -80,9 +82,10 @@ public sealed class GameSession
     }
 
     // Matches by turn; narration landing before the resolve response is held until that turn is applied.
-    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null, RoomType? nextRoomType = null, string? nextScene = null)
+    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null, RoomType? nextRoomType = null, string? nextScene = null, string? source = null)
     {
         if (partyId != PartyId) return false;
+        if (turn == Turn && !string.IsNullOrEmpty(outcome)) NarrationSource = source;
         if (string.IsNullOrEmpty(outcome)) return ApplyScenarioOnly(turn, nextScenario, nextRoomType, nextScene);
         var index = _log.FindIndex(e => e.Turn == turn);
         if (index < 0)
@@ -165,6 +168,7 @@ public sealed class GameSession
         var finishedScene = Scene;
         ClearScenario();
         LastOutcome = result.LastOutcome;
+        NarrationSource = null;
         Discussion = [];
         LockStatus = [];
         PendingRoom = null;
@@ -173,7 +177,15 @@ public sealed class GameSession
         Gold = result.Gold;
         IsDefeated = result.IsPartyDefeated;
         ScenarioPending = !IsDefeated;
-        ApplyDamage(result.TargetName, result.Damage);
+        if (result.Hits is { Count: > 0 } hits)
+        {
+            foreach (var hit in hits) ApplyDamage(hit.Name, hit.Damage);
+        }
+        else
+        {
+            ApplyDamage(result.TargetName, result.Damage);
+        }
+
         Show = result.Beats is { Count: > 0 } beats
             ? new StageShow(result.Turn, result.RoomType, finishedScene, beats, result.Success, result.TargetName, result.Damage, result.GoldFound)
             : null;
@@ -212,7 +224,8 @@ public sealed class GameSession
     // Ignores broadcasts that are not strictly newer than what we already show (out-of-order delivery).
     public bool ApplyPartyState(PartyStateDto party)
     {
-        if (party.PartyId != PartyId || party.Turn <= Turn) return false;
+        if (party.PartyId != PartyId || party.Turn < Turn) return false;
+        if (party.Turn == Turn) return ApplyRoster(party);
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
@@ -221,6 +234,19 @@ public sealed class GameSession
         IsDefeated = party.IsPartyDefeated;
         LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
         PendingRoom = null;
+        Changed?.Invoke();
+        return true;
+    }
+
+    // Same-turn broadcast (e.g. someone joined): refresh who is in the party without touching the running scene,
+    // so every player's stage shows the same heroes.
+    private bool ApplyRoster(PartyStateDto party)
+    {
+        var members = party.Members;
+        // Only joins count here; HP is trusted from resolved turns, not same-turn rebroadcasts.
+        if (members.Count <= _members.Count) return false;
+        _members = [.. members];
+        if (party.LockStatus is not null) LockStatus = [.. party.LockStatus];
         Changed?.Invoke();
         return true;
     }
@@ -247,6 +273,7 @@ public sealed class GameSession
         _log.Clear();
         ClearScenario();
         LastOutcome = null;
+        NarrationSource = null;
         Discussion = [];
         LockStatus = [];
         PendingRoom = null;

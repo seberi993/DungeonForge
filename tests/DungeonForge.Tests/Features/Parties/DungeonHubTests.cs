@@ -87,7 +87,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         turn.Turn.Should().Be(1);
         turn.RoomType.Should().Be(RoomType.Combat);
         turn.TargetName.Should().Be("Conan");
-        turn.Damage.Should().Be(2);
+        turn.Damage.Should().Be(6);
         turn.IsPartyDefeated.Should().BeFalse();
         turn.Gold.Should().Be(0);
         turn.FlavorEvent.Should().NotBeNullOrWhiteSpace();
@@ -100,7 +100,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         state.Members.Should().HaveCount(3);
         state.Members[0].Name.Should().Be("Conan");
         state.Members[0].Class.Should().Be(CharacterClass.Warrior);
-        state.Members[0].Hp.Should().Be(28);
+        state.Members[0].Hp.Should().Be(24);
         state.Members[0].MaxHp.Should().Be(30);
         state.Members[0].IsDefeated.Should().BeFalse();
     }

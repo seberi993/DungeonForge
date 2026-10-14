@@ -82,7 +82,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
 
         using var doc = await TurnAsync(client, id);
 
-        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(4);
+        doc.RootElement.GetProperty("damage").GetInt32().Should().Be(7);
         doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0);
     }
 
@@ -154,36 +154,59 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
         narrator.TurnCalls.Should().Be(0);
     }
 
-    // ---- Resolution math: base 55% + 5% per distinct acting member (max +15) ----
+    // ---- Resolution math: each action rolls on its own; base 50%, +10% per teammate doing the same, -10% per clash ----
 
     private static Task<Guid> CreatePartyOfAsync(HttpClient client, int size) =>
         PartyTestData.CreatePartyAsync(client, members: Enumerable.Range(0, size).Select(i => (object)new { name = $"Hero{i}", @class = "warrior" }).ToArray());
 
     [Theory]
-    [InlineData(59, 1, true)]   // 60 > 59
-    [InlineData(60, 1, false)]
-    [InlineData(64, 2, true)]   // 65 > 64
-    [InlineData(65, 2, false)]
-    [InlineData(69, 3, true)]   // 70 > 69
-    [InlineData(70, 3, false)]
-    [InlineData(70, 6, false)]  // bonus is capped at 15
-    public async Task Resolve_DistinctActionsAddCappedBonus(int roll, int distinctActions, bool expectSuccess)
+    [InlineData(49, "idea one", "idea two", true)]            // unrelated plans: 50% each, 49 < 50
+    [InlineData(50, "idea one", "idea two", false)]
+    [InlineData(59, "attack the door", "smash it open", true)] // same plan: teamwork 60% each
+    [InlineData(60, "attack the door", "smash it open", false)]
+    [InlineData(39, "attack the door", "run away", true)]      // clashing plans: 40% each
+    [InlineData(40, "attack the door", "run away", false)]
+    public async Task Resolve_OddsDependOnWhatTeammatesLockedIn(int roll, string first, string second, bool expectSuccess)
     {
         var (client, _, _, scope) = Arrange(PuzzleRoom, roll);
         using var _s = scope;
-        var id = await CreatePartyOfAsync(client, distinctActions);
+        var id = await CreatePartyOfAsync(client, 2);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
-        var actions = Enumerable.Range(0, distinctActions).Select(i => Act($"idea {i}", member: Guid.NewGuid())).ToArray();
 
-        using var doc = await ReadAsync(await ResolveAsync(client, id, actions));
+        using var doc = await ReadAsync(await ResolveAsync(client, id,
+            Act(first, "Hero0", Guid.NewGuid()), Act(second, "Hero1", Guid.NewGuid())));
 
         doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(expectSuccess ? 10 : 0);
     }
 
     [Fact]
+    public async Task Resolve_EachFailedMemberTakesTheirOwnHit_AndNobodyElseDoes()
+    {
+        var (client, _, _, scope) = Arrange(PuzzleRoom, 40);
+        using var _s = scope;
+        var id = await CreatePartyOfAsync(client, 3);
+        (await PromptAsync(client, id)).EnsureSuccessStatusCode();
+
+        // Two attackers back each other against one clashing runner: attackers roll 50%, the runner only 30%.
+        // A roll of 40 saves both attackers and fails the runner, so only Hero2 is hurt, and the majority wins the room.
+        using var doc = await ReadAsync(await ResolveAsync(client, id,
+            Act("attack the door", "Hero0", Guid.NewGuid()),
+            Act("smash the door", "Hero1", Guid.NewGuid()),
+            Act("run away", "Hero2", Guid.NewGuid())));
+
+        doc.RootElement.GetProperty("success").GetBoolean().Should().BeTrue();
+        doc.RootElement.GetProperty("hits").EnumerateArray().Select(h => h.GetProperty("name").GetString())
+            .Should().Equal("Hero2");
+        using var state = await ReadAsync(await client.GetAsync($"/api/parties/{id}"));
+        state.RootElement.GetProperty("members").EnumerateArray()
+            .Select(m => m.GetProperty("maxHp").GetInt32() - m.GetProperty("hp").GetInt32())
+            .Should().Equal(0, 0, 7);
+    }
+
+    [Fact]
     public async Task Resolve_DuplicateMemberActions_CountOnce()
     {
-        var (client, _, _, scope) = Arrange(PuzzleRoom, 60);
+        var (client, _, _, scope) = Arrange(PuzzleRoom, 50);
         using var _s = scope;
         var id = await CreatePartyOfAsync(client, 1);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
@@ -191,13 +214,13 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
 
         using var doc = await ReadAsync(await ResolveAsync(client, id, Act("a", member: member), Act("b", member: member)));
 
-        doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0); // one distinct => 60 threshold, roll 60 fails
+        doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0); // one distinct action => 50%, roll 50 fails
     }
 
     [Fact]
     public async Task Resolve_UsesActionsSubmittedEarlierFromOtherMembers()
     {
-        var (client, _, _, scope) = Arrange(PuzzleRoom, 64);
+        var (client, _, _, scope) = Arrange(PuzzleRoom, 49);
         using var _s = scope;
         var id = await CreatePartyOfAsync(client, 2);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
@@ -205,7 +228,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
 
         using var doc = await ReadAsync(await ResolveAsync(client, id, Act("idea two", "Merlin", Guid.NewGuid())));
 
-        doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(10); // 2 distinct => 65 threshold, roll 64 succeeds
+        doc.RootElement.GetProperty("goldFound").GetInt32().Should().Be(10); // both earlier and new action roll 49 < 50
     }
 
     // ---- Two-phase narration ----
