@@ -127,7 +127,7 @@ public sealed class GeminiNarratorServiceTests
         using var doc = JsonDocument.Parse(handler.Body!);
         GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(0.85);
         GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeGreaterThanOrEqualTo(600);
-        GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingBudget").GetInt32().Should().Be(0);
+        GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString().Should().Be("minimal");
     }
 
     [Fact]
@@ -300,7 +300,7 @@ public sealed class GeminiNarratorServiceTests
         using var doc = JsonDocument.Parse(handler.Body!);
         GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(0.85);
         GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeGreaterThanOrEqualTo(1200);
-        GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingBudget").GetInt32().Should().Be(0);
+        GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString().Should().Be("minimal");
     }
 
     [Fact]

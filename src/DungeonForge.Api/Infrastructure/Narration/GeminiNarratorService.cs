@@ -78,7 +78,7 @@ public sealed class GeminiNarratorService(
             var body = new GenerateRequest(
                 new Content(null, [new Part(system)]),
                 [new Content("user", [new Part(userPrompt)])],
-                new GenerationConfig(_options.Temperature, maxTokens, new ThinkingConfig(0)));
+                new GenerationConfig(_options.Temperature, maxTokens, new ThinkingConfig("minimal")));
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1beta/models/{_options.Model}:generateContent")
             {
                 Content = JsonContent.Create(body),
@@ -109,7 +109,8 @@ public sealed class GeminiNarratorService(
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Narration API returned {Status}.", (int)response.StatusCode);
+                var error = await response.Content.ReadAsStringAsync(timeout.Token);
+                logger.LogWarning("Narration API returned {Status}: {Body}", (int)response.StatusCode, error.Length > 500 ? error[..500] : error);
             }
 
             response.EnsureSuccessStatusCode();
@@ -152,14 +153,14 @@ public sealed class GeminiNarratorService(
     private sealed record Part(
         [property: JsonPropertyName("text")] string? Text);
 
-    // thinkingBudget 0 stops Gemini 2.5 from spending the small output budget on hidden reasoning.
+    // thinkingLevel minimal stops the model from spending the small output budget on hidden reasoning.
     private sealed record GenerationConfig(
         [property: JsonPropertyName("temperature")] double Temperature,
         [property: JsonPropertyName("maxOutputTokens")] int MaxOutputTokens,
         [property: JsonPropertyName("thinkingConfig")] ThinkingConfig ThinkingConfig);
 
     private sealed record ThinkingConfig(
-        [property: JsonPropertyName("thinkingBudget")] int ThinkingBudget);
+        [property: JsonPropertyName("thinkingLevel")] string ThinkingLevel);
 
     private sealed record GenerateResponse(
         [property: JsonPropertyName("candidates")] List<Candidate>? Candidates);
