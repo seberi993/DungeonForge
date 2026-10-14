@@ -1,5 +1,7 @@
 namespace DungeonForge.Api.Domain;
 
+public sealed record MemberLockStatus(string Name, bool LockedIn);
+
 public sealed record MemberSnapshot(string Name, CharacterClass Class, int Hp, int MaxHp, bool IsDefeated);
 
 public sealed record PartySnapshot(
@@ -10,4 +12,5 @@ public sealed record PartySnapshot(
     int Gold,
     int Turn,
     bool IsPartyDefeated,
-    IReadOnlyList<MemberSnapshot> Members);
+    IReadOnlyList<MemberSnapshot> Members,
+    IReadOnlyList<MemberLockStatus> LockStatus);

@@ -30,6 +30,12 @@ public sealed class DungeonApiClient(HttpClient http)
             ? http.PostAsync($"/api/parties/{partyId}/explore", null, ct)
             : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(actions, submitOnly ? true : null), Json, ct), ct);
 
+    public Task<ApiResult<IReadOnlyList<SpellDto>>> GetSpellsAsync(CharacterClass characterClass, CancellationToken ct = default) =>
+        SendAsync<IReadOnlyList<SpellDto>>(() => http.GetAsync($"/api/classes/{characterClass.ToString().ToLowerInvariant()}/spells", ct), ct);
+
+    public Task<ApiResult<UnlockResponse>> UnlockAsync(Guid partyId, Guid memberId, CancellationToken ct = default) =>
+        SendAsync<UnlockResponse>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/unlock", new UnlockRequest(memberId), Json, ct), ct);
+
     private static async Task<ApiResult<T>> SendAsync<T>(Func<Task<HttpResponseMessage>> send, CancellationToken ct) where T : class
     {
         try
@@ -40,7 +46,9 @@ public sealed class DungeonApiClient(HttpClient http)
                 case HttpStatusCode.NotFound:
                     return new(ApiStatus.NotFound, Error: "Not found.");
                 case HttpStatusCode.Conflict:
-                    return new(ApiStatus.Conflict, Error: "Conflict.");
+                    return await IsWaitingBodyAsync(response, ct)
+                        ? new(ApiStatus.Waiting, Error: "Waiting for party members.")
+                        : new(ApiStatus.Conflict, Error: "Conflict.");
                 case HttpStatusCode.BadRequest:
                     return new(ApiStatus.ValidationError, Error: await ReadValidationMessageAsync(response, ct));
             }
@@ -56,6 +64,23 @@ public sealed class DungeonApiClient(HttpClient http)
         catch (Exception ex) when (ex is HttpRequestException or JsonException or NotSupportedException or TaskCanceledException)
         {
             return new(ApiStatus.Failed, Error: "Could not reach the server.");
+        }
+    }
+
+    // A 409 with {"status":"waiting"} means other members have not locked in yet; any other 409 means the party is defeated.
+    private static async Task<bool> IsWaitingBodyAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty("status", out var status) &&
+                   status.ValueKind == JsonValueKind.String &&
+                   status.GetString() == "waiting";
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

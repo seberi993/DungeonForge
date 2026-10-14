@@ -39,6 +39,7 @@ builder.Services.AddSingleton<GetPartyStateHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinByCode.JoinByCodeHandler>();
 builder.Services.TryAddSingleton<IRoller, RandomRoller>();
 builder.Services.AddSingleton<ExploreDungeonHandler>();
+builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.UnlockTurn.UnlockTurnHandler>();
 builder.Services.AddOptions<NarrationOptions>()
     .Bind(builder.Configuration.GetSection("Narration"))
     .PostConfigure(o =>

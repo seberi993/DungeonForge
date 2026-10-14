@@ -48,6 +48,8 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private async Task<(ExploreDungeonHandler Handler, Guid Id, IDisposable Scope)> ArrangeAsync(RecordingNotifier notifier)
@@ -86,7 +88,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var _ = scope;
         await handler.HandleAsync(id, null);
 
-        var result = await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act()]));
+        var result = await handler.HandleAsync(id, new ExploreRequest(ExploreTestSupport.WholeParty()));
 
         result.Status.Should().Be(ExploreStatus.Explored);
         notifier.TurnResolvedCalls.Should().Be(1);
@@ -103,7 +105,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act()]), cts.Token);
+        await handler.HandleAsync(id, new ExploreRequest(ExploreTestSupport.WholeParty()), cts.Token);
 
         notifier.TurnResolvedCalls.Should().Be(1);
         notifier.PartyUpdatedCalls.Should().Be(1);

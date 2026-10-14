@@ -1,4 +1,5 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Infrastructure.Narration;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
@@ -56,8 +57,9 @@ public static class ExploreRequestLimits
     }
 }
 
-// Optional body. No actions (or an empty body) = ask for the pending scenario; actions = resolve the turn with the
-// party's aggregated free-text plan; actions + SubmitOnly = share tactical input with the party (no turn change).
+// Optional body. No actions (or an empty body) = ask for the pending scenario;
+// actions = lock those members in and answer 409 "waiting" until every member is locked (then the turn resolves);
+// actions + SubmitOnly = lock in without the 409: answers the prompt with lock status, or the resolved turn on the last lock.
 public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool SubmitOnly = false);
 
 // Prompt step: Scenario set, Turn unchanged, no deltas. When the next scenario is still being narrated, Scenario is
@@ -77,7 +79,8 @@ public sealed record ExploreResponse(
     string? LastOutcome = null,
     IReadOnlyList<PlayerAction>? Discussion = null,
     bool NarrationPending = false,
-    bool ScenarioPending = false);
+    bool ScenarioPending = false,
+    IReadOnlyList<LockStatusDto>? LockStatus = null);
 
 // Phase two of a resolved turn. Turn matches ExploreResponse.Turn of the resolve response. NextScenario/NextRoomType are
 // null when the party was defeated (there is no next encounter).
@@ -94,6 +97,20 @@ public enum ExploreStatus
     NotFound,
     Defeated,
     InvalidRequest,
+    Waiting,
 }
 
-public readonly record struct ExploreResult(ExploreStatus Status, ExploreResponse? Response = null, string? Error = null);
+// Waiting: not every member has locked in yet (HTTP 409). Waiting carries the 409 body.
+public readonly record struct ExploreResult(
+    ExploreStatus Status,
+    ExploreResponse? Response = null,
+    string? Error = null,
+    WaitingForPartyResponse? Waiting = null);
+
+// 409 body of a direct resolve while members are still missing.
+public sealed record WaitingForPartyResponse(
+    Guid PartyId,
+    int Locked,
+    int Required,
+    IReadOnlyList<LockStatusDto> LockStatus,
+    string Status = "waiting");

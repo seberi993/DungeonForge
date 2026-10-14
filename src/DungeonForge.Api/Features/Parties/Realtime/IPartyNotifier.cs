@@ -14,4 +14,7 @@ public interface IPartyNotifier
 
     // The pending encounter's submitted member actions changed.
     Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default);
+
+    // Who has locked in changed (lock, unlock, or cleared by the resolve).
+    Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default);
 }

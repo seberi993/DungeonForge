@@ -14,6 +14,10 @@ internal sealed class FakeDungeonHubClient : IDungeonHubClient
     public event Action<NarrationReady>? NarrationReady;
     public event Action<Guid, IReadOnlyList<PlayerAction>>? DiscussionUpdated;
 
+    public event Action<Guid, IReadOnlyList<LockStatusDto>>? TurnLockUpdated;
+
+    public void RaiseLock(Guid id, IReadOnlyList<LockStatusDto> s) => TurnLockUpdated?.Invoke(id, s);
+
     public Task ConnectAsync(Guid partyId, CancellationToken ct = default)
     {
         if (FailConnect) throw new HttpRequestException("offline");

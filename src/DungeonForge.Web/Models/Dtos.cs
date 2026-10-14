@@ -40,7 +40,8 @@ public sealed record ExploreResponse(
     IReadOnlyList<PlayerAction>? Discussion = null,
     bool NarrationPending = false,
     string? Scenario = null,
-    bool ScenarioPending = false);
+    bool ScenarioPending = false,
+    IReadOnlyList<LockStatusDto>? LockStatus = null);
 
 public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 
@@ -58,4 +59,22 @@ public sealed record PartyStateDto(
     int Gold,
     int Turn,
     bool IsPartyDefeated,
-    string InviteCode = "");
+    string InviteCode = "",
+    IReadOnlyList<LockStatusDto>? LockStatus = null);
+
+public sealed record LockStatusDto(string Name, bool LockedIn);
+
+public sealed record UnlockRequest(Guid MemberId);
+
+public sealed record UnlockResponse(Guid PartyId, IReadOnlyList<LockStatusDto> LockStatus);
+
+public enum ElementType
+{
+    Physical,
+    Fire,
+    Ice,
+    Holy,
+    Unholy
+}
+
+public sealed record SpellDto(string Name, CharacterClass ClassId, ElementType Element, int ManaCost, string Description);

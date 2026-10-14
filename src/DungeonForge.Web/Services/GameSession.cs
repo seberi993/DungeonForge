@@ -35,10 +35,22 @@ public sealed class GameSession
     public bool ScenarioPending { get; private set; }
     public string? LastOutcome { get; private set; }
     public IReadOnlyList<PlayerAction> Discussion { get; private set; } = [];
+    public IReadOnlyList<LockStatusDto> LockStatus { get; private set; } = [];
+    public int LockedCount => LockStatus.Count(s => s.LockedIn);
+    public RoomType? PendingRoom { get; private set; }
+    public CharacterClass PlayerClass => _members.Count > 0 ? _members[0].Class : CharacterClass.Warrior;
+
+    public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
+    {
+        if (partyId != PartyId) return false;
+        LockStatus = [.. status];
+        Changed?.Invoke();
+        return true;
+    }
     public bool NarrationPending { get; private set; }
     public bool HasScenario => Scenario is not null;
     private int _narrationTurn;
-    private (int Turn, string Outcome, string? NextScenario)? _earlyNarration;
+    private (int Turn, string Outcome, string? NextScenario, RoomType? NextRoomType)? _earlyNarration;
     private const string NarrationPlaceholder = "The dungeon falls quiet; the tale of this moment is lost to the mist.";
 
     public bool ApplyDiscussion(Guid partyId, IReadOnlyList<PlayerAction> actions)
@@ -61,15 +73,15 @@ public sealed class GameSession
     }
 
     // Matches by turn; narration landing before the resolve response is held until that turn is applied.
-    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null)
+    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null, RoomType? nextRoomType = null)
     {
         if (partyId != PartyId) return false;
-        if (string.IsNullOrEmpty(outcome)) return ApplyScenarioOnly(turn, nextScenario);
+        if (string.IsNullOrEmpty(outcome)) return ApplyScenarioOnly(turn, nextScenario, nextRoomType);
         var index = _log.FindIndex(e => e.Turn == turn);
         if (index < 0)
         {
             if (turn <= Turn) return false;
-            _earlyNarration = (turn, outcome, nextScenario);
+            _earlyNarration = (turn, outcome, nextScenario, nextRoomType);
             return false;
         }
 
@@ -78,6 +90,7 @@ public sealed class GameSession
         {
             LastOutcome = outcome;
             Scenario = nextScenario;
+            if (nextRoomType is { } nextRoom) PendingRoom = nextRoom;
             ScenarioPending = false;
         }
         if (turn == _narrationTurn) NarrationPending = false;
@@ -86,10 +99,11 @@ public sealed class GameSession
     }
 
     // Empty-outcome broadcast (first-turn scenario): only fills a missing scenario for the current turn; never logs an outcome.
-    private bool ApplyScenarioOnly(int turn, string? nextScenario)
+    private bool ApplyScenarioOnly(int turn, string? nextScenario, RoomType? nextRoomType)
     {
         if (turn != Turn || nextScenario is null || Scenario is not null) return false;
         Scenario = nextScenario;
+        if (nextRoomType is { } scenarioRoom) PendingRoom = scenarioRoom;
         ScenarioPending = false;
         Changed?.Invoke();
         return true;
@@ -121,6 +135,8 @@ public sealed class GameSession
         Scenario = result.Scenario;
         ScenarioPending = result.Scenario is null;
         if (result.Discussion is not null) Discussion = [.. result.Discussion];
+        PendingRoom = result.RoomType;
+        if (result.LockStatus is not null) LockStatus = [.. result.LockStatus];
         Changed?.Invoke();
         return true;
     }
@@ -138,6 +154,8 @@ public sealed class GameSession
         ClearScenario();
         LastOutcome = result.LastOutcome;
         Discussion = [];
+        LockStatus = [];
+        PendingRoom = null;
         NarrationPending = result.NarrationPending && result.LastOutcome is null;
         _narrationTurn = result.Turn;
         Gold = result.Gold;
@@ -151,6 +169,7 @@ public sealed class GameSession
             _log[^1] = _log[^1] with { Outcome = early.Outcome };
             NarrationPending = false;
             Scenario = early.NextScenario;
+            if (early.NextRoomType is { } earlyRoom) PendingRoom = earlyRoom;
             ScenarioPending = false;
         }
         _earlyNarration = null;
@@ -170,6 +189,7 @@ public sealed class GameSession
         Gold = party.Gold;
         Turn = party.Turn;
         IsDefeated = party.IsPartyDefeated;
+        LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
     }
 
     // Ignores broadcasts that are not strictly newer than what we already show (out-of-order delivery).
@@ -182,6 +202,8 @@ public sealed class GameSession
         ClearScenario();
         Discussion = [];
         IsDefeated = party.IsPartyDefeated;
+        LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
+        PendingRoom = null;
         Changed?.Invoke();
         return true;
     }
@@ -208,6 +230,8 @@ public sealed class GameSession
         ClearScenario();
         LastOutcome = null;
         Discussion = [];
+        LockStatus = [];
+        PendingRoom = null;
         NarrationPending = false;
         _narrationTurn = 0;
         _earlyNarration = null;

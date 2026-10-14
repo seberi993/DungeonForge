@@ -1,0 +1,63 @@
+@using DungeonForge.Web.Models
+@using DungeonForge.Web.Services
+@inject DungeonApiClient Api
+
+<aside id="spellbook" class="spellbook-drawer@(Open ? " open" : "")" aria-hidden="@(Open ? "false" : "true")">
+    @if (Open)
+    {
+        <header class="spellbook-header">
+            <h2>Spellbook</h2>
+            <button type="button" class="spellbook-close" aria-label="Close spellbook" @onclick="OnClose">&times;</button>
+        </header>
+
+        @if (_error is not null)
+        {
+            <p class="spellbook-error">@_error</p>
+        }
+        else if (_spells is null)
+        {
+            <p class="spellbook-loading">Opening the tome...</p>
+        }
+        else
+        {
+            <ul class="spell-list">
+                @foreach (var spell in _spells)
+                {
+                    <li>
+                        <button type="button" class="spell" @onclick="() => OnSelect.InvokeAsync(spell)">
+                            <span class="spell-name">@spell.Name</span>
+                            <span class="spell-element element-@spell.Element.ToString().ToLowerInvariant()">@spell.Element</span>
+                            <span class="spell-mana">Mana @spell.ManaCost</span>
+                            <span class="spell-description">@spell.Description</span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    }
+</aside>
+
+@code {
+    private IReadOnlyList<SpellDto>? _spells;
+    private string? _error;
+    private CharacterClass? _loadedFor;
+
+    [Parameter] public CharacterClass Class { get; set; }
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<SpellDto> OnSelect { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Open || (_loadedFor == Class && _error is null)) return;
+
+        _loadedFor = Class;
+        _spells = null;
+        _error = null;
+        var forClass = Class;
+        var result = await Api.GetSpellsAsync(forClass);
+        if (forClass != Class) return;
+        if (result.IsSuccess) _spells = result.Value;
+        else _error = result.Error ?? "The spellbook could not be opened.";
+    }
+}

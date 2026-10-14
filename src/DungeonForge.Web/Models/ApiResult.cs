@@ -6,6 +6,7 @@ public enum ApiStatus
     ValidationError,
     NotFound,
     Conflict,
+    Waiting,
     Failed
 }
 

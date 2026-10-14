@@ -21,6 +21,7 @@ public sealed class Party
     private int _turn;
     private PendingEncounter? _pending;
     private RoomType? _awaitingRoom;
+    private readonly List<PlayerAction> _locks = [];
 
     public Lock SyncRoot { get; } = new();
 
@@ -91,6 +92,7 @@ public sealed class Party
         {
             _turn++;
             _gold += goldFound;
+            _locks.Clear();
         }
     }
 
@@ -129,6 +131,7 @@ public sealed class Party
         lock (SyncRoot)
         {
             _awaitingRoom = null;
+            _locks.Clear();
             return _pending = encounter;
         }
     }
@@ -173,6 +176,95 @@ public sealed class Party
         }
     }
 
+    // ---- Synchronized turn locks, keyed by the client-generated MemberId ----
+
+    // Locks the member in with their action (a re-lock replaces the text). False when no encounter is pending or the
+    // discussion is full.
+    public bool TryLockIn(PlayerAction action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        lock (SyncRoot)
+        {
+            if (!TrySubmitAction(action))
+            {
+                return false;
+            }
+
+            var at = _locks.FindIndex(a => a.MemberId == action.MemberId);
+            if (at >= 0)
+            {
+                _locks[at] = action;
+            }
+            else
+            {
+                _locks.Add(action);
+            }
+
+            return true;
+        }
+    }
+
+    public bool Unlock(Guid memberId)
+    {
+        lock (SyncRoot)
+        {
+            return _locks.RemoveAll(a => a.MemberId == memberId) > 0;
+        }
+    }
+
+    public void ClearLocks()
+    {
+        lock (SyncRoot)
+        {
+            _locks.Clear();
+        }
+    }
+
+    public int LockedCount { get { lock (SyncRoot) { return _locks.Count; } } }
+
+    // Defeated members cannot act, so they never hold the party up.
+    public int RequiredLocks { get { lock (SyncRoot) { return Math.Max(1, Members.Count(m => !m.IsDefeated)); } } }
+
+    public bool AllLockedIn { get { lock (SyncRoot) { return _pending is not null && _locks.Count >= RequiredLocks; } } }
+
+    // Per roster member. Locked actions are matched to members by name first; any left over (a client playing under another
+    // name) fill the remaining unlocked slots in roster order so the displayed count always equals LockedCount.
+    public IReadOnlyList<MemberLockStatus> LockStatus
+    {
+        get
+        {
+            lock (SyncRoot)
+            {
+                var locked = new bool[Members.Count];
+                var leftover = 0;
+                foreach (var action in _locks)
+                {
+                    var free = Enumerable.Range(0, locked.Length).FirstOrDefault(i => !locked[i] && Members[i].Name == action.Name, -1);
+                    if (free >= 0)
+                    {
+                        locked[free] = true;
+                    }
+                    else
+                    {
+                        leftover++;
+                    }
+                }
+
+                for (var i = 0; i < locked.Length && leftover > 0; i++)
+                {
+                    if (!locked[i])
+                    {
+                        locked[i] = true;
+                        leftover--;
+                    }
+                }
+
+                return Members.Select((m, i) => new MemberLockStatus(m.Name, locked[i])).ToArray();
+            }
+        }
+    }
+
     // Distinct acting members in the pending discussion, capped at the roster size (bonus basis).
     public int ActionBonusCount
     {
@@ -204,7 +296,8 @@ public sealed class Party
         {
             return new PartySnapshot(
                 Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
-                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated)).ToArray());
+                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated)).ToArray(),
+                LockStatus);
         }
     }
 }

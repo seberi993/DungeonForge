@@ -4,6 +4,8 @@ namespace DungeonForge.Api.Features.Parties;
 
 public sealed record MemberDto(string Name, CharacterClass Class, int Hp, int MaxHp, bool IsDefeated);
 
+public sealed record LockStatusDto(string Name, bool LockedIn);
+
 public sealed record GetPartyStateResponse(
     Guid PartyId,
     string Name,
@@ -12,4 +14,5 @@ public sealed record GetPartyStateResponse(
     int Gold,
     int Turn,
     bool IsPartyDefeated,
-    string InviteCode = "");
+    string InviteCode = "",
+    IReadOnlyList<LockStatusDto>? LockStatus = null);

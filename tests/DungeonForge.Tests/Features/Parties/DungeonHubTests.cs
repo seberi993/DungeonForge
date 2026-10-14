@@ -30,6 +30,9 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
 
         public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
             throw new InvalidOperationException("boom");
+
+        public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default) =>
+            throw new InvalidOperationException("boom");
     }
 
     private WebApplicationFactory<Program> WithFixedRoller() =>
@@ -175,5 +178,49 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         response.IsSuccessStatusCode.Should().BeTrue();
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Lock_BroadcastsTurnLockUpdated_ToEveryConnectionInTheParty()
+    {
+        using var f = WithFixedRoller();
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+
+        await using var a = Connect(f);
+        await using var b = Connect(f);
+        var got = new TaskCompletionSource<(Guid, List<LockStatusDto>)>();
+        b.On<Guid, List<LockStatusDto>>("TurnLockUpdated", (pid, s) => got.TrySetResult((pid, s)));
+        await a.StartAsync();
+        await b.StartAsync();
+        await a.InvokeAsync("JoinParty", id);
+        await b.InvokeAsync("JoinParty", id);
+
+        (await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.WholeParty()[0])).EnsureSuccessStatusCode();
+
+        var (partyId, status) = await got.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        partyId.Should().Be(id);
+        status.Select(s => (s.Name, s.LockedIn)).Should().Equal(("Conan", true), ("Merlin", false), ("Mercy", false));
+    }
+
+    [Fact]
+    public async Task Lock_DoesNotNotifyConnectionsOfOtherParties()
+    {
+        using var f = WithFixedRoller();
+        var client = f.CreateClient();
+        var id = await CreatePartyAsync(client);
+        var otherId = await CreatePartyAsync(client);
+        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        await using var other = Connect(f);
+        var count = 0;
+        other.On<Guid, List<LockStatusDto>>("TurnLockUpdated", (_, _) => Interlocked.Increment(ref count));
+        await other.StartAsync();
+        await other.InvokeAsync("JoinParty", otherId);
+
+        (await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.WholeParty()[0])).EnsureSuccessStatusCode();
+
+        await Task.Delay(300);
+        count.Should().Be(0);
     }
 }

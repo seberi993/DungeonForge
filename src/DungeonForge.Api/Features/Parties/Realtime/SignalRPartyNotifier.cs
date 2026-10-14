@@ -17,4 +17,7 @@ public sealed class SignalRPartyNotifier(IHubContext<DungeonHub> hub) : IPartyNo
 
     public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
         hub.Clients.Group(partyId.ToString()).SendAsync("DiscussionUpdated", partyId, actions, ct);
+
+    public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default) =>
+        hub.Clients.Group(partyId.ToString()).SendAsync("TurnLockUpdated", partyId, status, ct);
 }

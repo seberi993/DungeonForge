@@ -180,12 +180,12 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var id = await PartyTestData.CreatePartyAsync(client);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        (await ResolveAsync(client, id, Act("flank them", "Conan"), Act("cast a light", "Merlin", Guid.NewGuid()))).EnsureSuccessStatusCode();
+        (await ResolveAsync(client, id, Act("flank them", "Conan"), Act("cast a light", "Merlin", Guid.NewGuid()), Act("hold the line", "Mercy", Guid.NewGuid()))).EnsureSuccessStatusCode();
         var ready = await notifier.NarrationAsync;
 
         narrator.SeenTurnContext!.Room.Should().Be(RoomType.Combat);
         narrator.SeenTurnContext.NextRoom.Should().Be(RoomType.Puzzle);
-        narrator.SeenTurnContext.Actions.Select(a => a.Text).Should().Equal("flank them", "cast a light");
+        narrator.SeenTurnContext.Actions.Select(a => a.Text).Should().Equal("flank them", "cast a light", "hold the line");
         narrator.SeenSuccess.Should().BeTrue();
         ready.PartyId.Should().Be(id);
         ready.Turn.Should().Be(1);
@@ -389,7 +389,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
             NullLogger<ExploreDungeonHandler>.Instance);
 
         (await handler.HandleAsync(id, null)).Status.Should().Be(ExploreStatus.Explored);
-        var resolved = await handler.HandleAsync(id, new ExploreRequest([Act()]));
+        var resolved = await handler.HandleAsync(id, new ExploreRequest(WholeParty()));
         resolved.Status.Should().Be(ExploreStatus.Explored);
 
         var ready = await notifier.NarrationAsync;
@@ -471,10 +471,14 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
             throw new InvalidOperationException("boom");
         public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default) =>
             Task.CompletedTask;
+        public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class NoopNotifier : IPartyNotifier
     {
+        public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default) =>
+            Task.CompletedTask;
         public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) => Task.CompletedTask;
         public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default) => Task.CompletedTask;
         public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default) => Task.CompletedTask;

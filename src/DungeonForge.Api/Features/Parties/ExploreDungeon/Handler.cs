@@ -26,18 +26,21 @@ public sealed class ExploreDungeonHandler(
     private const int MaxActionBonusPercent = 15;
 
     public Task<ExploreResult> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
-        request?.Actions is { Count: > 0 } actions && !request.SubmitOnly
-            ? ResolveAsync(id, actions)
-            : PromptAsync(id, request is { SubmitOnly: true } ? request.Actions : null, ct);
+        request?.Actions is not { Count: > 0 } actions
+            ? PromptCoreAsync(id, ct)
+            : request.SubmitOnly
+                ? LockInAsync(id, actions, ct)
+                : ResolveAsync(id, actions, waitingIsConflict: true);
 
     // ---- Step 1: present (or re-present) the scenario. Never advances the turn. ----
 
-    private async Task<ExploreResult> PromptAsync(Guid id, IReadOnlyList<PlayerAction>? actions, CancellationToken ct)
+    // Lock-in without the 409: answers the prompt (with lock status) until the last member locks in, which resolves the turn.
+    private async Task<ExploreResult> LockInAsync(Guid id, IReadOnlyList<PlayerAction> actions, CancellationToken ct)
     {
-        var result = await PromptCoreAsync(id, ct);
-        return actions is { Count: > 0 } && result.Status == ExploreStatus.Explored
-            ? await SubmitActionsAsync(id, actions) ?? result
-            : result;
+        var prompt = await PromptCoreAsync(id, ct);
+        return prompt is { Status: ExploreStatus.Explored, Response.ScenarioPending: false }
+            ? await ResolveAsync(id, actions, waitingIsConflict: false)
+            : prompt;
     }
 
     private async Task<ExploreResult> PromptCoreAsync(Guid id, CancellationToken ct)
@@ -125,7 +128,8 @@ public sealed class ExploreDungeonHandler(
 
     private static ExploreResponse PromptResponse(Party party, PendingEncounter pending) =>
         new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Scenario, party.Gold, party.IsPartyDefeated,
-            Scenario: pending.Scenario, Discussion: pending.Discussion);
+            Scenario: pending.Scenario, Discussion: pending.Discussion,
+            LockStatus: PartyMapping.ToLockDtos(party.LockStatus));
 
     private static ExploreResponse AwaitingResponse(Party party, RoomType room) =>
         new(party.Id, party.Turn, room, null, 0, 0, string.Empty, party.Gold, party.IsPartyDefeated, ScenarioPending: true);
@@ -133,7 +137,8 @@ public sealed class ExploreDungeonHandler(
     // ---- Step 2: resolve the party's aggregated plan in C# and return the mechanics immediately. ----
     // Phase two (narration + next scenario) runs in the background and is pushed to the party as NarrationReady.
 
-    private async Task<ExploreResult> ResolveAsync(Guid id, IReadOnlyList<PlayerAction> actions)
+    // Locks the supplied actions in; the turn resolves only once every member is locked, otherwise the party keeps waiting.
+    private async Task<ExploreResult> ResolveAsync(Guid id, IReadOnlyList<PlayerAction> actions, bool waitingIsConflict)
     {
         if (!actions.Any(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
         {
@@ -141,6 +146,12 @@ public sealed class ExploreDungeonHandler(
         }
 
         var (result, context, success, snapshot) = Mutate(id, actions);
+        if (result.Status == ExploreStatus.Waiting && result.Response is { } waiting && snapshot is not null)
+        {
+            await BroadcastLockAsync(id, waiting.Discussion ?? [], snapshot.LockStatus ?? []);
+            return waitingIsConflict ? result : result with { Status = ExploreStatus.Explored, Waiting = null };
+        }
+
         if (result.Response is not { } response || context is null || snapshot is null)
         {
             return result;
@@ -233,31 +244,9 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
-    // Submits tactical input to the pending encounter without resolving it. Null when the party/encounter vanished.
-    private async Task<ExploreResult?> SubmitActionsAsync(Guid id, IReadOnlyList<PlayerAction> actions)
+    // Outside the lock; failures are logged, never thrown.
+    private async Task BroadcastLockAsync(Guid id, IReadOnlyList<PlayerAction> discussion, IReadOnlyList<LockStatusDto> status)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
-        {
-            return null;
-        }
-
-        ExploreResponse response;
-        IReadOnlyList<PlayerAction> discussion;
-        lock (party.SyncRoot)
-        {
-            if (party.Pending is null)
-            {
-                return null;
-            }
-
-            SubmitAll(party, actions);
-            var pending = party.Pending!;
-            discussion = pending.Discussion ?? [];
-            response = PromptResponse(party, pending);
-        }
-
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
-
         try
         {
             await notifier.DiscussionUpdatedAsync(id, discussion, CancellationToken.None);
@@ -267,7 +256,19 @@ public sealed class ExploreDungeonHandler(
             logger.LogWarning(ex, "Failed to broadcast DiscussionUpdated for party {PartyId}", id);
         }
 
-        return new ExploreResult(ExploreStatus.Explored, response);
+        await BroadcastLockStatusAsync(id, status);
+    }
+
+    private async Task BroadcastLockStatusAsync(Guid id, IReadOnlyList<LockStatusDto> status)
+    {
+        try
+        {
+            await notifier.TurnLockUpdatedAsync(id, status, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to broadcast TurnLockUpdated for party {PartyId}", id);
+        }
     }
 
     private static void SubmitAll(Party party, IReadOnlyList<PlayerAction>? actions)
@@ -281,7 +282,7 @@ public sealed class ExploreDungeonHandler(
             }
 
             var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
-            party.TrySubmitAction(new PlayerAction(action.MemberId, name, text));
+            party.TryLockIn(new PlayerAction(action.MemberId, name, text));
         }
     }
 
@@ -314,6 +315,15 @@ public sealed class ExploreDungeonHandler(
             if (pending.Discussion is not { Count: > 0 } discussion)
             {
                 return (Invalid("At least one non-empty action is required."), null, false, null);
+            }
+
+            if (!party.AllLockedIn)
+            {
+                cache.Set(key, party, PartyCache.EntryOptions());
+                var waiting = new WaitingForPartyResponse(
+                    party.Id, party.LockedCount, party.RequiredLocks, PartyMapping.ToLockDtos(party.LockStatus));
+                return (new ExploreResult(ExploreStatus.Waiting, PromptResponse(party, pending), Waiting: waiting),
+                    null, false, PartyMapping.ToResponse(party.Snapshot()));
             }
 
             var turnBefore = party.Turn;
@@ -427,5 +437,8 @@ public sealed class ExploreDungeonHandler(
         {
             logger.LogWarning(ex, "Failed to broadcast PartyUpdated for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
         }
+
+        // The resolve cleared every lock.
+        await BroadcastLockStatusAsync(response.PartyId, snapshot.LockStatus ?? []);
     }
 }

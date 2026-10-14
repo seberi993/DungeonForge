@@ -31,6 +31,19 @@ internal static class ExploreTestSupport
 
     public static readonly Guid DefaultMember = Guid.NewGuid();
 
+    /// <summary>Stable member ids of the default three-member party (Conan, Merlin, Mercy).</summary>
+    public static readonly Guid ConanId = DefaultMember;
+    public static readonly Guid MerlinId = Guid.NewGuid();
+    public static readonly Guid MercyId = Guid.NewGuid();
+
+    /// <summary>One action per default party member: submitting these locks the whole party in.</summary>
+    public static PlayerAction[] WholeParty() =>
+    [
+        Act("We press forward carefully", "Conan", ConanId),
+        Act("I weave a ward", "Merlin", MerlinId),
+        Act("I steady the line", "Mercy", MercyId),
+    ];
+
     public static PlayerAction Act(string text = "We press forward carefully", string name = "Conan", Guid? member = null) =>
         new(member ?? DefaultMember, name, text);
 
@@ -39,7 +52,7 @@ internal static class ExploreTestSupport
 
     /// <summary>Resolve step: aggregated actions (defaults to one action).</summary>
     public static Task<HttpResponseMessage> ResolveAsync(HttpClient client, Guid id, params PlayerAction[] actions) =>
-        client.PostAsJsonAsync($"/api/parties/{id}/explore", new { actions = actions.Length == 0 ? [Act()] : actions });
+        client.PostAsJsonAsync($"/api/parties/{id}/explore", new { actions = actions.Length == 0 ? WholeParty() : actions });
 
     /// <summary>Discussion-only submit: no turn change.</summary>
     public static Task<HttpResponseMessage> SubmitAsync(HttpClient client, Guid id, params PlayerAction[] actions) =>
@@ -89,6 +102,7 @@ internal sealed class CapturingNotifier : IPartyNotifier
 
     public List<ExploreResponse> Turns { get; } = [];
     public List<IReadOnlyList<PlayerAction>> Discussions { get; } = [];
+    public List<(Guid PartyId, IReadOnlyList<LockStatusDto> Status)> LockUpdates { get; } = [];
 
     private readonly TaskCompletionSource<NarrationReady> _firstScenario = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -115,6 +129,12 @@ internal sealed class CapturingNotifier : IPartyNotifier
     public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default)
     {
         lock (Discussions) { Discussions.Add(actions); }
+        return Task.CompletedTask;
+    }
+
+    public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default)
+    {
+        lock (LockUpdates) { LockUpdates.Add((partyId, status)); }
         return Task.CompletedTask;
     }
 }

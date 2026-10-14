@@ -1,0 +1,22 @@
+@using DungeonForge.Web.Models
+
+@if (Status.Count > 0)
+{
+    <div class="party-lock-status" role="status">
+        <p class="lock-summary">Waiting for Party Members... (@Status.Count(s => s.LockedIn)/@Status.Count)</p>
+        <ul class="lock-members">
+            @foreach (var member in Status)
+            {
+                <li class="lock-member @(member.LockedIn ? "locked" : "waiting")">
+                    <span class="lock-icon" aria-hidden="true">@((MarkupString)(member.LockedIn ? "&#128274;" : "&#8987;"))</span>
+                    <span class="lock-name">@member.Name</span>
+                    <span class="lock-state">@(member.LockedIn ? "locked in" : "thinking")</span>
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<LockStatusDto> Status { get; set; } = [];
+}

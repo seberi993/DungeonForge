@@ -180,7 +180,7 @@ public class DungeonRoomTests : TestContext
     private static void Resolve(IRenderedComponent<DungeonRoom> cut, string text = "Attack the troll")
     {
         cut.Find("#action-text").Input(text);
-        cut.Find("button#resolve-turn").Click();
+        cut.Find("button#lock-in").Click();
     }
 
     [Fact]
@@ -211,7 +211,7 @@ public class DungeonRoomTests : TestContext
 
         cut.WaitForAssertion(() => cut.Find("#scenario-pending").TextContent.Should().Contain("dungeon shifts"));
         cut.FindAll("#scenario").Should().BeEmpty();
-        cut.FindAll("#resolve-turn").Should().BeEmpty();
+        cut.FindAll("#lock-in").Should().BeEmpty();
     }
 
     [Fact]
@@ -220,26 +220,24 @@ public class DungeonRoomTests : TestContext
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
 
         cut.Find("#action-text").GetAttribute("maxlength").Should().Be("200");
-        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
-        cut.Find("button#submit-action").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
 
         cut.Find("#action-text").Input("   ");
-        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
 
         cut.Find("#action-text").Input("Shield the mage");
-        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeFalse();
-        cut.Find("button#submit-action").HasAttribute("disabled").Should().BeFalse();
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeFalse();
     }
 
     [Fact]
-    public void TeammateSubmittedAction_EnablesResolveWithEmptyTextBox()
+    public void TeammateSubmittedAction_ListedInDiscussion_ButLockInStillNeedsOwnText()
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
 
         cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, [new PlayerAction(Guid.NewGuid(), "Merlin", "Light a torch")]));
 
-        cut.WaitForAssertion(() => cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeFalse());
-        cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch");
+        cut.WaitForAssertion(() => cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch"));
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
     }
 
     [Fact]
@@ -250,7 +248,7 @@ public class DungeonRoomTests : TestContext
         var cut = RenderWithScenario(handler);
 
         cut.Find("#action-text").Input("Press the left rune");
-        cut.Find("button#submit-action").Click();
+        cut.Find("button#lock-in").Click();
 
         cut.WaitForAssertion(() => cut.FindAll("#discussion li").Should().HaveCount(2));
         handler.LastRequestBody.Should().Be($"{{\"actions\":[{{\"memberId\":\"{_session.PlayerId}\",\"name\":\"Conan\",\"text\":\"Press the left rune\"}}],\"submitOnly\":true}}");
@@ -265,12 +263,12 @@ public class DungeonRoomTests : TestContext
         var handler = new FakeHandler(HttpStatusCode.OK, PromptJson());
         var cut = RenderWithScenario(handler);
         cut.Find("#action-text").Input("   ");
-        cut.Find("button#submit-action").Click();
+        cut.Find("button#lock-in").Click();
         handler.LastRequest.Should().BeNull();
     }
 
     [Fact]
-    public void Resolve_SendsOwnActionPlusTeammateActions_WithoutSubmitOnly()
+    public void LockIn_SendsOnlyOwnAction_WithSubmitOnly()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, PendingResolveJson());
         var cut = RenderWithScenario(handler);
@@ -281,8 +279,8 @@ public class DungeonRoomTests : TestContext
         Resolve(cut, "Charge");
 
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
-        handler.LastRequestBody.Should().Contain("\"text\":\"Light a torch\"").And.Contain("\"text\":\"Charge\"");
-        handler.LastRequestBody.Should().NotContain("submitOnly").And.NotContain("selectedChoiceIndex");
+        handler.LastRequestBody.Should().Contain("\"text\":\"Charge\"").And.Contain("\"submitOnly\":true");
+        handler.LastRequestBody.Should().NotContain("Light a torch");
     }
 
     [Fact]
@@ -330,7 +328,7 @@ public class DungeonRoomTests : TestContext
         cut.FindAll("#scenario-pending").Should().BeEmpty();
         cut.Find(".log-outcome").TextContent.Should().Contain("door opens");
         cut.Find("#scenario").TextContent.Should().Be("A vast hall\nstretches ahead.");
-        cut.Find("button#resolve-turn").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
     }
 
     [Fact]
@@ -486,6 +484,127 @@ public class DungeonRoomTests : TestContext
         cut.WaitForAssertion(() => cut.Find(".offline").TextContent.Should().Contain("offline"));
         Resolve(cut);
         cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+    }
+
+    private static string LockedPromptJson() =>
+        $$"""{"partyId":"{{Id}}","turn":0,"roomType":"combat","damage":0,"goldFound":0,"flavorEvent":"x","gold":0,"isPartyDefeated":false,"scenario":"A troll blocks the bridge.\nIt growls.","scenarioPending":false,"lockStatus":[{"name":"Conan","lockedIn":true},{"name":"Merlin","lockedIn":false}]}""";
+
+    [Fact]
+    public void LockIn_DisablesButtonAndInput_ShowsUnlock_AndWaitingStatus()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, LockedPromptJson()));
+
+        cut.Find("#action-text").Input("Charge");
+        cut.Find("button#lock-in").Click();
+
+        cut.WaitForAssertion(() => cut.Find("button#unlock-turn"));
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
+        cut.Find("#action-text").HasAttribute("disabled").Should().BeTrue();
+        cut.Find(".party-lock-status .lock-summary").TextContent.Should().Contain("(1/2)");
+        cut.FindAll(".log-entry").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Unlock_PostsMemberId_ReenablesLockIn_AndUpdatesStatus()
+    {
+        var calls = 0;
+        var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () =>
+            calls++ == 0
+                ? LockedPromptJson()
+                : $$"""{"partyId":"{{Id}}","lockStatus":[{"name":"Conan","lockedIn":false},{"name":"Merlin","lockedIn":false}]}""");
+        var cut = RenderWithScenario(handler);
+        cut.Find("#action-text").Input("Charge");
+        cut.Find("button#lock-in").Click();
+        cut.WaitForAssertion(() => cut.Find("button#unlock-turn"));
+
+        cut.Find("button#unlock-turn").Click();
+
+        cut.WaitForAssertion(() => cut.FindAll("button#unlock-turn").Should().BeEmpty());
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}/unlock");
+        handler.LastRequestBody.Should().Be($"{{\"memberId\":\"{_session.PlayerId}\"}}");
+        cut.Find("#action-text").HasAttribute("disabled").Should().BeFalse();
+        cut.Find("button#lock-in").HasAttribute("disabled").Should().BeFalse();
+        cut.Find(".lock-summary").TextContent.Should().Contain("(0/2)");
+    }
+
+    [Fact]
+    public void TurnLockUpdated_FromHub_UpdatesWaitingIndicator()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+
+        cut.InvokeAsync(() => _hub.RaiseLock(Id, [new LockStatusDto("Conan", false), new LockStatusDto("Merlin", true)]));
+
+        cut.WaitForAssertion(() => cut.Find(".lock-summary").TextContent.Should().Contain("(1/2)"));
+    }
+
+    [Fact]
+    public void LastLockIn_ResolvesTurn_ClearsLockedState()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.FindAll(".log-entry").Should().HaveCount(1));
+        cut.FindAll("button#unlock-turn").Should().BeEmpty();
+        cut.FindAll(".party-lock-status").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Waiting409_KeepsLockedState_WithoutDefeat()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.Conflict,
+            $$"""{"partyId":"{{Id}}","locked":1,"required":2,"lockStatus":[],"status":"waiting"}"""));
+
+        cut.Find("#action-text").Input("Charge");
+        cut.Find("button#lock-in").Click();
+
+        cut.WaitForAssertion(() => cut.Find("button#unlock-turn"));
+        _session.IsDefeated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SpellbookToggle_OpensDrawer_AndSelectingSpellAppendsCastToActionBox()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK,
+            """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]""");
+        var cut = RenderWithScenario(handler);
+        cut.FindAll(".spell").Should().BeEmpty();
+
+        cut.Find("button#toggle-spellbook").Click();
+        cut.WaitForAssertion(() => cut.FindAll(".spell").Should().HaveCount(1));
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/classes/warrior/spells");
+        cut.Find("#action-text").Input("Charge");
+        cut.Find(".spell").Click();
+
+        cut.Find("#action-text").GetAttribute("value").Should().Be("Charge. Cast Smite");
+    }
+
+    [Fact]
+    public void NarrationReady_WithNextRoomType_ShowsUnexplored_PendingTileWithMarker()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+        Resolve(cut);
+        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
+
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "The door opens.", "A vast hall.", RoomType.Chest)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var tile = cut.FindAll(".minimap .tile").ToList().Last();
+            tile.ClassList.Should().Contain("unexplored");
+            tile.QuerySelector(".unknown")!.TextContent.Should().Be("?");
+            tile.QuerySelector(".marker").Should().BeNull();
+        });
+    }
+
+    [Fact]
+    public void Minimap_RendersTilesForLog_AndTokensPerMember()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote", 7)));
+
+        cut.WaitForAssertion(() => cut.FindAll(".minimap .tile").Should().NotBeEmpty());
+        cut.FindAll(".minimap .token").Should().HaveCount(2);
     }
 
     [Fact]

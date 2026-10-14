@@ -1,6 +1,7 @@
 @page "/dungeon"
 @using DungeonForge.Web.Models
 @using DungeonForge.Web.Services
+@using DungeonForge.Web.Components
 @inject DungeonApiClient Api
 @inject GameSession Session
 @inject NavigationManager Nav
@@ -36,6 +37,9 @@
         </div>
     </div>
 
+    <DungeonMinimap Log="Session.Log" Members="Session.Members" PendingRoom="Session.PendingRoom" />
+    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnSelect="CastSpell" OnClose="() => _spellbookOpen = false" />
+
     @if (_offline)
     {
         <p class="offline">Live updates offline. You can still explore.</p>
@@ -51,12 +55,17 @@
             <p id="scenario" class="scenario">@Session.Scenario</p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
-                <textarea id="action-text" maxlength="200" @bind="_actionText" @bind:event="oninput"></textarea>
+                <textarea id="action-text" maxlength="200" disabled="@IsLocked" @bind="_actionText" @bind:event="oninput"></textarea>
                 <div class="action-buttons">
-                    <button id="submit-action" disabled="@(_busy || string.IsNullOrWhiteSpace(_actionText))" @onclick="SubmitActionAsync">Share with party</button>
-                    <button id="resolve-turn" disabled="@(_busy || !CanResolve)" @onclick="ResolveAsync">Resolve turn</button>
+                    <button id="toggle-spellbook" type="button" @onclick="() => _spellbookOpen = !_spellbookOpen">Spellbook</button>
+                    <button id="lock-in" disabled="@(_busy || IsLocked || string.IsNullOrWhiteSpace(_actionText))" @onclick="LockInAsync">@(IsLocked ? "Locked in" : "Lock in")</button>
+                    @if (IsLocked)
+                    {
+                        <button id="unlock-turn" disabled="@_busy" @onclick="UnlockAsync">Unlock</button>
+                    }
                 </div>
             </div>
+            <PartyLockStatus Status="Session.LockStatus" />
             @if (Session.Discussion.Count > 0)
             {
                 <ul id="discussion" class="discussion">
@@ -158,6 +167,7 @@
         Hub.PartyUpdated += OnPartyUpdated;
         Hub.NarrationReady += OnNarrationReady;
         Hub.DiscussionUpdated += OnDiscussionUpdated;
+        Hub.TurnLockUpdated += OnTurnLockUpdated;
         try
         {
             await Hub.ConnectAsync(Session.PartyId);
@@ -187,7 +197,7 @@
     }
 
     private void OnNarrationReady(NarrationReady narration) =>
-        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario));
+        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario, narration.NextRoomType));
 
     private void OnDiscussionUpdated(Guid partyId, IReadOnlyList<PlayerAction> actions) =>
         Dispatch(() => Session.ApplyDiscussion(partyId, actions));
@@ -260,6 +270,7 @@
         Hub.PartyUpdated -= OnPartyUpdated;
         Hub.NarrationReady -= OnNarrationReady;
         Hub.DiscussionUpdated -= OnDiscussionUpdated;
+        Hub.TurnLockUpdated -= OnTurnLockUpdated;
         _narrationCts?.Cancel();
         _narrationCts?.Dispose();
         await Hub.DisposeAsync();
@@ -272,13 +283,28 @@
         await JS.InvokeVoidAsync("dungeonForge.scrollToBottom", "log");
     }
 
-    private bool CanResolve => Session.BuildActions(_actionText).Count > 0;
+    private const int MaxActionLength = 200;
+    private bool _spellbookOpen;
+    private int? _lockedTurn;
+
+    private bool IsLocked => _lockedTurn == Session.Turn;
+
+    private void OnTurnLockUpdated(Guid partyId, IReadOnlyList<LockStatusDto> status) =>
+        Dispatch(() => Session.ApplyLockStatus(partyId, status));
+
+    private void CastSpell(SpellDto spell)
+    {
+        if (IsLocked) return;
+        var cast = $"Cast {spell.Name}";
+        var text = _actionText.Trim();
+        var combined = text.Length == 0 ? cast : $"{text}. {cast}";
+        _actionText = combined.Length <= MaxActionLength ? combined : cast;
+        _spellbookOpen = false;
+    }
 
     private Task ExploreAsync() => SendAsync(null);
 
-    private Task ResolveAsync() => SendAsync(Session.BuildActions(_actionText));
-
-    private Task SubmitActionAsync()
+    private Task LockInAsync()
     {
         var text = _actionText.Trim();
         return text.Length == 0
@@ -286,11 +312,39 @@
             : SendAsync([new PlayerAction(Session.PlayerId, Session.PlayerName, text)], submitOnly: true);
     }
 
+    private async Task UnlockAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.UnlockAsync(Session.PartyId, Session.PlayerId);
+            switch (result.Status)
+            {
+                case ApiStatus.Success:
+                    _lockedTurn = null;
+                    Session.ApplyLockStatus(Session.PartyId, result.Value!.LockStatus);
+                    break;
+                case ApiStatus.NotFound:
+                    Session.Clear();
+                    Nav.NavigateTo("/");
+                    break;
+                default:
+                    _error = result.Error ?? "Something went wrong. Try again.";
+                    break;
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private async Task SendAsync(IReadOnlyList<PlayerAction>? actions, bool submitOnly = false)
     {
         _busy = true;
         _error = null;
-        var resolving = actions is { Count: > 0 } && !submitOnly;
+        var locking = actions is { Count: > 0 } && submitOnly;
         try
         {
             var result = await Api.ExploreAsync(Session.PartyId, actions, submitOnly);
@@ -298,19 +352,23 @@
             {
                 case ApiStatus.Success:
                     var response = result.Value!;
-                    if (resolving)
+                    var lockedAtTurn = Session.Turn;
+                    // The last lock-in resolves the turn server-side and answers with the resolved (newer) turn.
+                    if (Session.Apply(response))
                     {
-                        if (Session.Apply(response))
-                        {
-                            _scroll = true;
-                            _actionText = "";
-                            WatchNarration();
-                        }
-                    }
-                    else if (Session.ApplyPrompt(response))
-                    {
+                        _scroll = true;
+                        _actionText = "";
+                        _lockedTurn = null;
                         WatchNarration();
                     }
+                    else
+                    {
+                        if (locking) _lockedTurn = lockedAtTurn;
+                        if (Session.ApplyPrompt(response)) WatchNarration();
+                    }
+                    break;
+                case ApiStatus.Waiting:
+                    if (locking) _lockedTurn = Session.Turn;
                     break;
                 case ApiStatus.Conflict:
                     Session.MarkDefeated();

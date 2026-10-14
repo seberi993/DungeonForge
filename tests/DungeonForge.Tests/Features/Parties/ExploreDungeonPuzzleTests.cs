@@ -156,6 +156,9 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
 
     // ---- Resolution math: base 55% + 5% per distinct acting member (max +15) ----
 
+    private static Task<Guid> CreatePartyOfAsync(HttpClient client, int size) =>
+        PartyTestData.CreatePartyAsync(client, members: Enumerable.Range(0, size).Select(i => (object)new { name = $"Hero{i}", @class = "warrior" }).ToArray());
+
     [Theory]
     [InlineData(59, 1, true)]   // 60 > 59
     [InlineData(60, 1, false)]
@@ -168,7 +171,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
     {
         var (client, _, _, scope) = Arrange(PuzzleRoom, roll);
         using var _s = scope;
-        var id = await PartyTestData.CreatePartyAsync(client);
+        var id = await CreatePartyOfAsync(client, distinctActions);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
         var actions = Enumerable.Range(0, distinctActions).Select(i => Act($"idea {i}", member: Guid.NewGuid())).ToArray();
 
@@ -182,7 +185,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
     {
         var (client, _, _, scope) = Arrange(PuzzleRoom, 60);
         using var _s = scope;
-        var id = await PartyTestData.CreatePartyAsync(client);
+        var id = await CreatePartyOfAsync(client, 1);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
         var member = Guid.NewGuid();
 
@@ -196,7 +199,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
     {
         var (client, _, _, scope) = Arrange(PuzzleRoom, 64);
         using var _s = scope;
-        var id = await PartyTestData.CreatePartyAsync(client);
+        var id = await CreatePartyOfAsync(client, 2);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
         (await SubmitAsync(client, id, Act("idea one", member: Guid.NewGuid()))).EnsureSuccessStatusCode();
 
@@ -212,7 +215,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
     {
         var (client, notifier, narrator, scope) = Arrange(PuzzleRoom, Succeed);
         using var _s = scope;
-        var id = await PartyTestData.CreatePartyAsync(client);
+        var id = await CreatePartyOfAsync(client, 2);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
 
         using var doc = await ReadAsync(await ResolveAsync(client, id,
