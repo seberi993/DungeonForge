@@ -13,7 +13,7 @@ public sealed record NarrationContext(RoomType Room, string PartyName, int Turn,
 }
 
 // Outcome of the resolved turn plus the next scenario, produced by ONE model call. Next is empty when no next room exists.
-public sealed record TurnNarration(string Outcome, string Next);
+public sealed record TurnNarration(string Outcome, string Next, string NextScene = "");
 
 public interface IDungeonNarrator
 {

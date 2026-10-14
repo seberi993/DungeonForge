@@ -40,7 +40,8 @@ public static class TurnNarrationParser
 
             var outcome = Part(doc.RootElement, "outcome", MaxOutcomeLength);
             var next = Part(doc.RootElement, "next", MaxScenarioLength);
-            return outcome.Length == 0 && next.Length == 0 ? null : new TurnNarration(outcome, next);
+            var scene = SceneTags.Normalize(Part(doc.RootElement, "scene", 20));
+            return outcome.Length == 0 && next.Length == 0 ? null : new TurnNarration(outcome, next, scene);
         }
         catch (JsonException)
         {

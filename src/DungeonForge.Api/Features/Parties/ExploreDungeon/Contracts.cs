@@ -89,7 +89,8 @@ public sealed record NarrationReady(
     int Turn,
     string Outcome,
     string? NextScenario = null,
-    RoomType? NextRoomType = null);
+    RoomType? NextRoomType = null,
+    string? NextScene = null);
 
 public enum ExploreStatus
 {

@@ -16,6 +16,13 @@ public static class NarrationPrompts
     private const string Rules =
         "Do not include any number, statistic, rule, or reward; never change the stated result.";
 
+    // The client types these words out in gold; everything else stays plain.
+    private const string Highlight =
+        "Wrap the 2 to 4 nouns or verbs the party must decide on (a creature, a door, a lever, an escape) in double asterisks, like **goblin**; use no other markdown.";
+
+    private static readonly string SceneRule =
+        $"\"scene\": the single best-fitting tag for the NEXT scenario, one of: {string.Join(", ", SceneTags.All)}.";
+
     public static string RoomGuidance(RoomType room) => room switch
     {
         RoomType.Combat =>
@@ -31,17 +38,17 @@ public static class NarrationPrompts
 
     // First turn: plain prose scenario.
     public static string Scenario(RoomType room) =>
-        $"{Persona}Write ONE scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} Reply with plain prose only, no markdown.";
+        $"{Persona}Write ONE scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} {Highlight} Reply with plain prose only.";
 
     // Every later turn: strict JSON with the outcome and (unless the party fell) the next scenario.
     public static string Turn(RoomType? next) => next is { } room
         ? $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
-          "{\"outcome\":\"...\",\"next\":\"...\"}. " +
+          "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"...\"}. " +
           "\"outcome\": 2 to 4 vivid sentences describing how the party's combined plan played out, matching the stated " +
           "result exactly; weave in the member ideas that fit, in the order given. " +
-          $"\"next\": a NEW scenario of {ScenarioShape} {RoomGuidance(room)} {Rules}"
+          $"\"next\": a NEW scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} {Highlight} {SceneRule}"
         : $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
           "{\"outcome\":\"...\"}. " +
           "\"outcome\": 2 to 4 vivid sentences describing how the party's combined plan played out, matching the stated " +
-          "result exactly; weave in the member ideas that fit, in the order given. " + Rules;
+          "result exactly; weave in the member ideas that fit, in the order given. " + Rules + " " + Highlight;
 }

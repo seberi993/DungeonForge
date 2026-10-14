@@ -86,7 +86,7 @@ public static class FallbackFlavor
         var next = ctx.NextRoom is not { } room
             ? string.Empty
             : string.IsNullOrWhiteSpace(partial?.Next) ? Scenario(room, ctx.Turn + 1) : partial.Next;
-        return new TurnNarration(outcome, next);
+        return new TurnNarration(outcome, next, partial?.NextScene ?? string.Empty);
     }
 
     private static int Index(int turn, int length) => (int)(Math.Abs((long)turn) % length);

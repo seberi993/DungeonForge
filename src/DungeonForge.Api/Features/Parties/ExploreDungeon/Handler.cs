@@ -189,7 +189,8 @@ public sealed class ExploreDungeonHandler(
         try
         {
             var ready = new NarrationReady(
-                partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom);
+                partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom,
+                narration.NextScene.Length == 0 ? null : narration.NextScene);
             await notifier.NarrationReadyAsync(ready, CancellationToken.None);
         }
         catch (Exception ex)
