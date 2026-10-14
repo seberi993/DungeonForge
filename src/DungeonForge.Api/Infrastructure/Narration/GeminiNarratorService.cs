@@ -109,8 +109,7 @@ public sealed class GeminiNarratorService(
 
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync(timeout.Token);
-                logger.LogWarning("Narration API returned {Status}: {Body}", (int)response.StatusCode, error.Length > 500 ? error[..500] : error);
+                logger.LogWarning("Narration API returned {Status}.", (int)response.StatusCode);
             }
 
             response.EnsureSuccessStatusCode();
