@@ -45,11 +45,11 @@ public sealed record ExploreResponse(
 
 public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 
-public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null);
+public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null, string? NextScene = null);
 
 public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null);
 
-public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null);
+public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null, string? Scenario = null);
 
 public sealed record PartyStateDto(
     Guid PartyId,

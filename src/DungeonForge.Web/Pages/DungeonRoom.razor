@@ -30,20 +30,33 @@
         }
     </ul>
 
-    <div class="card invite">
-        <label for="invite-code">Invite code (share with friends so they can join)</label>
+    <details class="card invite">
+        <summary>Invite code</summary>
+        <label for="invite-code">Share with friends so they can join</label>
         <div class="invite-row">
             <input id="invite-code" class="invite-code" readonly value="@Session.InviteCode" @onfocus="SelectInvite" />
             <button id="copy-invite" @onclick="CopyInviteAsync">@(_copied ? "Copied!" : "Copy")</button>
         </div>
-    </div>
+    </details>
 
-    <DungeonMinimap Log="Session.Log" Members="Session.Members" PendingRoom="Session.PendingRoom" />
+    <details class="map-panel">
+        <summary>Map</summary>
+        <DungeonMinimap Log="Session.Log" Members="Session.Members" PendingRoom="Session.PendingRoom" />
+    </details>
     <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" />
 
     @if (_offline)
     {
         <p class="offline">Live updates offline. You can still explore.</p>
+    }
+
+    @if (Session.NarrationPending)
+    {
+        <p id="narration-loading" class="outcome loading">The dungeon master is narrating...</p>
+    }
+    else if (Session.LastOutcome is { } outcome)
+    {
+        <p id="last-outcome" class="outcome"><TypewriterText Text="@outcome" OnComplete="() => _outcomeTyped = outcome" /></p>
     }
 
     @if (Session.IsDefeated)
@@ -53,7 +66,8 @@
     else if (Session.HasScenario)
     {
         <div id="scenario-panel" class="scenario-panel">
-            <p id="scenario" class="scenario">@Session.Scenario</p>
+            <AsciiScene Scene="Session.Scene" Room="Session.PendingRoom" />
+            <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
                 <textarea id="action-text" maxlength="200" disabled="@IsLocked" @bind="_actionText" @bind:event="oninput"></textarea>
@@ -87,15 +101,6 @@
         <button id="explore" @onclick="ExploreAsync" disabled="@_busy">Explore Room</button>
     }
 
-    @if (Session.NarrationPending)
-    {
-        <p id="narration-loading" class="outcome loading">The dungeon master is narrating...</p>
-    }
-    else if (Session.LastOutcome is not null)
-    {
-        <p id="last-outcome" class="outcome">@Session.LastOutcome</p>
-    }
-
     @if (Session.IsDefeated)
     {
         <div class="defeated">
@@ -109,19 +114,27 @@
         <p class="error">@_error</p>
     }
 
-    <div id="log" class="log">
-        @foreach (var entry in Session.Log)
-        {
-            <div class="log-entry">
-                <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) @Describe(entry)
-                <div>@entry.FlavorEvent</div>
-                @if (entry.Outcome is not null)
-                {
-                    <div class="log-outcome">@entry.Outcome</div>
-                }
-            </div>
-        }
-    </div>
+    @* Finished rooms live here, closed by default, so the main view only shows what is happening now. *@
+    <details id="audit" class="audit">
+        <summary>Audit history (@Session.Log.Count @(Session.Log.Count == 1 ? "room" : "rooms"))</summary>
+        <div id="log" class="log">
+            @foreach (var entry in Session.Log)
+            {
+                <div class="log-entry">
+                    <strong>Turn @entry.Turn</strong> (@RoomLabel(entry.RoomType)) @Describe(entry)
+                    @if (entry.Scenario is not null)
+                    {
+                        <div class="log-scenario">@((MarkupString)Markup(entry.Scenario))</div>
+                    }
+                    <div>@entry.FlavorEvent</div>
+                    @if (entry.Outcome is not null)
+                    {
+                        <div class="log-outcome">@((MarkupString)Markup(entry.Outcome))</div>
+                    }
+                </div>
+            }
+        </div>
+    </details>
 }
 
 @code {
@@ -198,7 +211,7 @@
     }
 
     private void OnNarrationReady(NarrationReady narration) =>
-        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario, narration.NextRoomType));
+        Dispatch(() => Session.ApplyNarration(narration.PartyId, narration.Turn, narration.Outcome, narration.NextScenario, narration.NextRoomType, narration.NextScene));
 
     private void OnDiscussionUpdated(Guid partyId, IReadOnlyList<PlayerAction> actions) =>
         Dispatch(() => Session.ApplyDiscussion(partyId, actions));
@@ -384,6 +397,13 @@
         Session.Clear();
         Nav.NavigateTo("/");
     }
+
+    // Outcome text last fully typed; the next scenario waits for it so two blocks never type at once.
+    private string? _outcomeTyped;
+
+    // HTML-encoded, with **word** highlights as spans (audit entries are shown whole, not typed).
+    private static string Markup(string text) => string.Concat(TypewriterText.Parse(text).Select(s =>
+        s.Key ? $"<span class=\"key\">{System.Net.WebUtility.HtmlEncode(s.Text)}</span>" : System.Net.WebUtility.HtmlEncode(s.Text)));
 
     private static string RoomLabel(RoomType type) => type switch { RoomType.Chest => "chest", RoomType.Puzzle => "puzzle", _ => "combat" };
 

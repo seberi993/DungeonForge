@@ -580,6 +580,17 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
+    public void FocusedView_ShowsSceneArt_AuditClosedByDefault_AndMarksMyHero()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
+
+        cut.Find("#scenario-panel .ascii-scene").Should().NotBeNull();
+        cut.Find("details#audit").HasAttribute("open").Should().BeFalse();
+        cut.Find("details#audit summary").TextContent.Should().Contain("0 rooms");
+        cut.Find("#member-0").ClassList.Should().Contain("me");
+    }
+
+    [Fact]
     public void NarrationReady_WithNextRoomType_ShowsUnexplored_PendingTileWithMarker()
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));

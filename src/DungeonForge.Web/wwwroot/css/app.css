@@ -81,3 +81,17 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important; }
 }
+
+/* Focused game screen */
+.key { color: var(--gold-bright); font-weight: 700; }
+.typewriter { cursor: pointer; }
+.tw-rest { visibility: hidden; }
+.typewriter.typing::after { content: "\2588"; color: var(--gold); animation: tw-blink 1s steps(2, start) infinite; }
+@keyframes tw-blink { to { visibility: hidden; } }
+.outcome { margin: .75rem 0; padding: .5rem 1rem; border-left: 3px solid var(--parchment-dim); font-style: italic; }
+.ascii-scene { margin: 0 0 .5rem; padding: .5rem 1rem; min-height: 8.5em; background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--gold); font: 1rem/1.15 ui-monospace, Consolas, monospace; overflow-x: auto; }
+.members .me .member-name { color: var(--gold-bright); font-weight: 700; }
+details.card > summary, details.map-panel > summary, details.audit > summary { cursor: pointer; color: var(--parchment-dim); }
+details.map-panel, details.audit { margin: .5rem 0; }
+.log-scenario { color: var(--parchment-dim); margin: .25rem 0; }
+.spellbook-hint { color: var(--parchment-dim); font-size: .9rem; margin: .25rem 0 .5rem; }
