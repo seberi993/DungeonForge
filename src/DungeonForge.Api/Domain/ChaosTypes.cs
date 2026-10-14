@@ -11,7 +11,11 @@ public enum VaultChoice
     Pocket,
 }
 
-public sealed record UnclaimedVault(int Gold, string? Artifact);
+// Artifacts queue up (a later drop never overwrites an earlier one); Artifact is their display text.
+public sealed record UnclaimedVault(int Gold, IReadOnlyList<string> Artifacts)
+{
+    public string? Artifact => Artifacts.Count == 0 ? null : string.Join(" and a ", Artifacts);
+}
 
 public sealed record PocketedLoot(int Gold, string? Artifact);
 
@@ -39,10 +43,11 @@ public enum ConfrontationVote
 public sealed record Confrontation(
     string Accused,
     int Gold,
-    string? Artifact,
+    IReadOnlyList<string> Artifacts,
     IReadOnlyList<string> Spotters,
     IReadOnlyList<string> Voters,
-    IReadOnlyDictionary<string, ConfrontationVote> Votes);
+    IReadOnlyDictionary<string, ConfrontationVote> Votes,
+    DateTimeOffset Deadline);
 
 public enum VoteStatus
 {
@@ -131,13 +136,14 @@ public static class TraitorPact
 
     public static TraitorOutcome Evaluate(TraitorState s)
     {
-        if (s.PartyWiped && s.Floor < WipeDeadlineFloor)
+        if (s.Extracted && s.TraitorAlive && s.TraitorHoldsIdol && s.OthersAlive == 0)
         {
-            return TraitorOutcome.TraitorWinsWipe;
+            return TraitorOutcome.TraitorWinsSoloExtraction;
         }
 
-        return s.Extracted && s.TraitorAlive && s.TraitorHoldsIdol && s.OthersAlive == 0
-            ? TraitorOutcome.TraitorWinsSoloExtraction
+        // A dead or banished traitor never wins the wipe: PartyWiped means every loyalist is down while the traitor still stands.
+        return s.PartyWiped && s.TraitorAlive && s.Floor < WipeDeadlineFloor
+            ? TraitorOutcome.TraitorWinsWipe
             : TraitorOutcome.None;
     }
 }

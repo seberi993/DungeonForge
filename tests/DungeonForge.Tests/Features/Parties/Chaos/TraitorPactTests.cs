@@ -20,7 +20,7 @@ public class TraitorPactRulesTests
     [InlineData(1)]
     [InlineData(4)]
     public void PartyWipeBeforeFloorFive_IsATraitorWin(int floor) =>
-        TraitorPact.Evaluate(State(floor, wiped: true, traitorAlive: false, othersAlive: 0))
+        TraitorPact.Evaluate(State(floor, wiped: true, traitorAlive: true, othersAlive: 0))
             .Should().Be(TraitorOutcome.TraitorWinsWipe);
 
     [Fact]
@@ -85,7 +85,7 @@ public class PartyTraitorTests
     {
         var party = Pact();
         party.TryAssignTraitor(new ScriptedRoller(0));
-        party.ApplyMemberOutcomes([.. party.Members.Select(m => new DamageResult(m.Name, 999))], 0);
+        party.ApplyMemberOutcomes([new("Merlin", 999), new("Lyra", 999), new("Dru", 999)], 0);
 
         party.EvaluateTraitor().Should().Be(TraitorOutcome.TraitorWinsWipe);
     }

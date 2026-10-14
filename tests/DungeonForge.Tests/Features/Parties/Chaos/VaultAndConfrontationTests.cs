@@ -105,7 +105,8 @@ public class PartyVaultTests
         party.DropVault(10, null);
         party.DropVault(5, "Cursed Idol");
 
-        party.Vault.Should().Be(new UnclaimedVault(15, "Cursed Idol"));
+        party.Vault!.Gold.Should().Be(15);
+        party.Vault.Artifact.Should().Be("Cursed Idol");
         party.Gold.Should().Be(0);
     }
 

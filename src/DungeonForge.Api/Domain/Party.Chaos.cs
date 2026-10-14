@@ -13,8 +13,20 @@ public sealed partial class Party
     private Confrontation? _confrontation;
     private string? _traitor;
     private string? _extractedBy;
+    private TraitorOutcome _traitorOutcome;
+    private readonly TimeProvider _time;
+
+    // A confrontation that has not heard from everyone by then resolves anyway; missing voters abstain.
+    public static readonly TimeSpan ConfrontationTimeout = TimeSpan.FromSeconds(60);
 
     public PartyModifiers Modifiers { get; }
+
+    // The latched traitor victory (None until one is reached); EvaluateTraitor reports each victory only once.
+    public TraitorOutcome TraitorResult { get { lock (SyncRoot) { return _traitorOutcome; } } }
+
+    // Banished or extracted members are out of play without being defeated.
+    private bool IsOut(string name) =>
+        _banished.Contains(name) || string.Equals(_extractedBy, name, StringComparison.OrdinalIgnoreCase);
 
     public UnclaimedVault? Vault { get { lock (SyncRoot) { return _vault; } } }
 
@@ -29,7 +41,7 @@ public sealed partial class Party
     public string? ArtifactHolder(string artifact) { lock (SyncRoot) { return _artifactHolders.GetValueOrDefault(artifact); } }
 
     private PartyMember? Active(string name) =>
-        Members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && !m.IsDefeated && !_banished.Contains(m.Name));
+        Members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && !m.IsDefeated && !IsOut(m.Name));
 
     // ---- Unclaimed Vault ----
 
@@ -43,7 +55,19 @@ public sealed partial class Party
 
         lock (SyncRoot)
         {
-            _vault = new UnclaimedVault((_vault?.Gold ?? 0) + Math.Max(0, gold), artifact ?? _vault?.Artifact);
+            IReadOnlyList<string> artifacts = artifact is null ? _vault?.Artifacts ?? [] : [.. _vault?.Artifacts ?? [], artifact];
+            _vault = new UnclaimedVault((_vault?.Gold ?? 0) + Math.Max(0, gold), artifacts);
+            SettleVaultIfWiped();
+        }
+    }
+
+    // Policy: a wiped party can no longer claim, so unclaimed vault gold is banked into the purse (it counts for the score); artifacts are lost.
+    private void SettleVaultIfWiped()
+    {
+        if (_vault is { } vault && IsPartyDefeated)
+        {
+            _gold += vault.Gold;
+            _vault = null;
         }
     }
 
@@ -51,6 +75,7 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
+            TryResolveConfrontation(roller);
             if (_confrontation is not null)
             {
                 return new VaultClaim(VaultClaimStatus.ConfrontationActive);
@@ -67,7 +92,7 @@ public sealed partial class Party
             }
 
             _vault = null;
-            if (vault.Artifact is { } artifact)
+            foreach (var artifact in vault.Artifacts)
             {
                 _artifactHolders[artifact] = member.Name;
             }
@@ -79,7 +104,7 @@ public sealed partial class Party
             }
 
             _pockets[member.Name] = new PocketedLoot(PocketedGold(member.Name) + vault.Gold, vault.Artifact);
-            var observers = Members.Where(m => !m.IsDefeated && !_banished.Contains(m.Name) && m != member).ToArray();
+            var observers = Members.Where(m => !m.IsDefeated && !IsOut(m.Name) && m != member).ToArray();
             var spotters = Perception.Spotters(observers, roller);
             if (spotters.Count == 0)
             {
@@ -87,8 +112,9 @@ public sealed partial class Party
             }
 
             _confrontation = new Confrontation(
-                member.Name, vault.Gold, vault.Artifact, spotters, [.. observers.Select(o => o.Name)],
-                new Dictionary<string, ConfrontationVote>(StringComparer.OrdinalIgnoreCase));
+                member.Name, vault.Gold, vault.Artifacts, spotters, [.. observers.Select(o => o.Name)],
+                new Dictionary<string, ConfrontationVote>(StringComparer.OrdinalIgnoreCase),
+                _time.GetUtcNow() + ConfrontationTimeout);
             return new VaultClaim(VaultClaimStatus.PocketedCaught, vault.Gold, vault.Artifact, spotters);
         }
     }
@@ -110,22 +136,48 @@ public sealed partial class Party
                 return new VoteResult(VoteStatus.NotEligible);
             }
 
-            var votes = new Dictionary<string, ConfrontationVote>(c.Votes, StringComparer.OrdinalIgnoreCase) { [eligible] = vote };
-            var required = c.Voters.Where(v => Active(v) is not null).ToArray();
-            if (!required.All(votes.ContainsKey))
+            // Too late: the deadline passed, so the vote is not counted and the confrontation closes on the ballots already cast.
+            if (TryResolveConfrontation(roller) is { } expired)
             {
-                _confrontation = c with { Votes = votes };
-                return new VoteResult(VoteStatus.Recorded, null, required.Count(votes.ContainsKey), required.Length);
+                return new VoteResult(VoteStatus.Resolved, expired, expired.Tally.Values.Sum(), c.Voters.Count(v => Active(v) is not null));
             }
 
-            var ballots = required.Select(v => votes[v]).ToArray();
-            return new VoteResult(VoteStatus.Resolved, Resolve(c, ballots, roller), ballots.Length, required.Length);
+            var votes = new Dictionary<string, ConfrontationVote>(c.Votes, StringComparer.OrdinalIgnoreCase) { [eligible] = vote };
+            _confrontation = c = c with { Votes = votes };
+            var required = RequiredVoters(c);
+            if (TryResolveConfrontation(roller) is { } resolution)
+            {
+                return new VoteResult(VoteStatus.Resolved, resolution, resolution.Tally.Values.Sum(), required.Length);
+            }
+
+            return new VoteResult(VoteStatus.Recorded, null, required.Count(votes.ContainsKey), required.Length);
+        }
+    }
+
+    // Voters who can still be asked: alive, not banished and not extracted (defeated voters never hold the vote up).
+    private string[] RequiredVoters(Confrontation c) => [.. c.Voters.Where(v => Active(v) is not null)];
+
+    // Closes the confrontation when every remaining eligible voter has voted, nobody is left to ask, or the deadline passed.
+    // Missing ballots abstain; no ballots at all is a Forgive no-op. Null while the vote is still open (or absent).
+    public ConfrontationResolution? TryResolveConfrontation(IRoller roller)
+    {
+        lock (SyncRoot)
+        {
+            if (_confrontation is not { } c)
+            {
+                return null;
+            }
+
+            var required = RequiredVoters(c);
+            var ballots = required.Where(c.Votes.ContainsKey).Select(v => c.Votes[v]).ToArray();
+            var complete = ballots.Length == required.Length;
+            return complete || _time.GetUtcNow() >= c.Deadline ? Resolve(c, ballots, roller) : null;
         }
     }
 
     private ConfrontationResolution Resolve(Confrontation c, ConfrontationVote[] ballots, IRoller roller)
     {
-        var outcome = ConfrontationRules.Decide(ballots, roller);
+        var outcome = ballots.Length == 0 ? ConfrontationVote.Forgive : ConfrontationRules.Decide(ballots, roller);
         var effect = ConfrontationRules.Outcome(outcome, c.Gold);
         var accused = Members.First(m => m.Name == c.Accused);
         var pocket = PocketedGold(c.Accused);
@@ -144,9 +196,12 @@ public sealed partial class Party
             accused.TakeDamage(effect.Damage);
         }
 
-        if (!effect.KeepsArtifact && c.Artifact is { } artifact)
+        if (!effect.KeepsArtifact)
         {
-            _artifactHolders.Remove(artifact);
+            foreach (var artifact in c.Artifacts)
+            {
+                _artifactHolders.Remove(artifact);
+            }
         }
 
         _confrontation = null;
@@ -166,7 +221,7 @@ public sealed partial class Party
                 return false;
             }
 
-            var pool = Members.Where(m => !m.IsDefeated && !_banished.Contains(m.Name)).ToArray();
+            var pool = Members.Where(m => !m.IsDefeated && !IsOut(m.Name)).ToArray();
             if (pool.Length == 0)
             {
                 return false;
@@ -181,12 +236,14 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            if (Active(name) is not { } member)
+            // One-shot, and only for someone still in play; the extractor leaves the dungeon (see IsOut).
+            if (_extractedBy is not null || Active(name) is not { } member)
             {
                 return false;
             }
 
             _extractedBy = member.Name;
+            SettleVaultIfWiped();
             return true;
         }
     }
@@ -195,16 +252,20 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            if (!Modifiers.TraitorPact || _traitor is not { } traitor)
+            // Latch: a victory is reported exactly once; later calls (votes, turns, extractions) return None.
+            if (!Modifiers.TraitorPact || _traitor is not { } traitor || _traitorOutcome != TraitorOutcome.None)
             {
                 return TraitorOutcome.None;
             }
 
-            return TraitorPact.Evaluate(new TraitorState(
+            var traitorStanding = Members.Any(m => string.Equals(m.Name, traitor, StringComparison.OrdinalIgnoreCase)
+                && !m.IsDefeated && !_banished.Contains(m.Name));
+            var othersAlive = Members.Count(m => m.Name != traitor && !m.IsDefeated && !IsOut(m.Name));
+            return _traitorOutcome = TraitorPact.Evaluate(new TraitorState(
                 _floor,
-                IsPartyDefeated,
-                Active(traitor) is not null,
-                Members.Count(m => m.Name != traitor && !m.IsDefeated && !_banished.Contains(m.Name)),
+                othersAlive == 0,
+                traitorStanding,
+                othersAlive,
                 string.Equals(ArtifactHolder(TraitorPact.CursedIdol), traitor, StringComparison.OrdinalIgnoreCase),
                 string.Equals(_extractedBy, traitor, StringComparison.OrdinalIgnoreCase)));
         }

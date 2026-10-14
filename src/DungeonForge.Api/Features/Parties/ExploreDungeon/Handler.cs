@@ -559,6 +559,7 @@ public sealed class ExploreDungeonHandler(
                 return (new ExploreResult(ExploreStatus.Defeated), null, false, null);
             }
 
+            party.TryResolveConfrontation(roller);
             if (party.Confrontation is not null)
             {
                 return (Invalid("A confrontation is in progress; settle the vote before the party moves on."), null, false, null);

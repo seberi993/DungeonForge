@@ -9,7 +9,7 @@ public sealed record FloorProgress(bool BossNext, bool FloorCleared);
 // across a multi-step turn). Members can only be mutated through Party.
 public sealed partial class Party
 {
-    private Party(Guid id, string name, PartyMember[] members, DateTimeOffset createdAt, string inviteCode, PartyModifiers modifiers)
+    private Party(Guid id, string name, PartyMember[] members, DateTimeOffset createdAt, string inviteCode, PartyModifiers modifiers, TimeProvider time)
     {
         Id = id;
         Name = name;
@@ -17,6 +17,7 @@ public sealed partial class Party
         CreatedAt = createdAt;
         InviteCode = inviteCode;
         Modifiers = modifiers;
+        _time = time;
     }
 
     public const int MaxDiscussionEntries = 8;
@@ -86,10 +87,11 @@ public sealed partial class Party
         }
     }
 
-    public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => m.IsDefeated || _banished.Contains(m.Name)); } } }
+    public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => m.IsDefeated || IsOut(m.Name)); } } }
 
     public static Party Create(
-        Guid id, string name, IReadOnlyList<PartyMember> members, DateTimeOffset createdAt, string inviteCode = "", PartyModifiers? modifiers = null)
+        Guid id, string name, IReadOnlyList<PartyMember> members, DateTimeOffset createdAt, string inviteCode = "", PartyModifiers? modifiers = null,
+        TimeProvider? time = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
@@ -98,7 +100,7 @@ public sealed partial class Party
             throw new ArgumentException("A party needs at least one member.", nameof(members));
         }
 
-        return new Party(id, name, members.ToArray(), createdAt, inviteCode, modifiers ?? new PartyModifiers());
+        return new Party(id, name, members.ToArray(), createdAt, inviteCode, modifiers ?? new PartyModifiers(), time ?? TimeProvider.System);
     }
 
     // TODO: resistances are not modeled yet; `element` is accepted but ignored (all elements deal the same damage).
@@ -112,7 +114,7 @@ public sealed partial class Party
             PartyMember? target = null;
             foreach (var m in Members)
             {
-                if (!m.IsDefeated && !_banished.Contains(m.Name) && (target is null || m.Threat > target.Threat))
+                if (!m.IsDefeated && !IsOut(m.Name) && (target is null || m.Threat > target.Threat))
                 {
                     target = m;
                 }
@@ -288,7 +290,7 @@ public sealed partial class Party
     public int LockedCount { get { lock (SyncRoot) { return _locks.Count; } } }
 
     // Defeated members cannot act, so they never hold the party up.
-    public int RequiredLocks { get { lock (SyncRoot) { return Math.Max(1, Members.Count(m => !m.IsDefeated && !_banished.Contains(m.Name))); } } }
+    public int RequiredLocks { get { lock (SyncRoot) { return Math.Max(1, Members.Count(m => !m.IsDefeated && !IsOut(m.Name))); } } }
 
     public bool AllLockedIn { get { lock (SyncRoot) { return _pending is not null && _locks.Count >= RequiredLocks; } } }
 
@@ -349,6 +351,7 @@ public sealed partial class Party
         {
             var hit = damage > 0 ? TakeDamage(damage) : null;
             AdvanceTurn(gold);
+            SettleVaultIfWiped();
             _pending = null;
             return hit;
         }
@@ -369,6 +372,7 @@ public sealed partial class Party
             }
 
             AdvanceTurn(gold);
+            SettleVaultIfWiped();
             _pending = null;
             return applied;
         }
@@ -417,7 +421,7 @@ public sealed partial class Party
         {
             return new PartySnapshot(
                 Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
-                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated || _banished.Contains(m.Name))).ToArray(),
+                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated || IsOut(m.Name))).ToArray(),
                 LockStatus, _floor, _roomsCleared, _bossHp, _bossMaxHp);
         }
     }
