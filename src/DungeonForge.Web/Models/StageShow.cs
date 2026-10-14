@@ -9,4 +9,5 @@ public sealed record StageShow(
     bool Success,
     string? TargetName,
     int Damage,
-    int GoldFound);
+    int GoldFound,
+    IReadOnlyList<RollDto>? Rolls = null);

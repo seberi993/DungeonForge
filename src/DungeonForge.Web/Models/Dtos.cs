@@ -45,7 +45,11 @@ public sealed record ExploreResponse(
     IReadOnlyList<ActionBeat>? Beats = null,
     bool Success = false,
     IReadOnlyList<HitDto>? Hits = null,
-    NarrationBrief? Brief = null);
+    NarrationBrief? Brief = null,
+    IReadOnlyList<RollDto>? Rolls = null);
+
+// One member's d100 roll against their chance (a pass is Roll below Chance); Crit/Fumble are the extremes.
+public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);
 
 // Prompts for the browser's local model; sent only to the request that claimed the narration slot.
 public sealed record NarrationBrief(int Turn, string Kind, string System, string User, string? JsonSchema, int MaxTokens);

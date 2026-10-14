@@ -187,7 +187,7 @@ public sealed class GameSession
         }
 
         Show = result.Beats is { Count: > 0 } beats
-            ? new StageShow(result.Turn, result.RoomType, finishedScene, beats, result.Success, result.TargetName, result.Damage, result.GoldFound)
+            ? new StageShow(result.Turn, result.RoomType, finishedScene, beats, result.Success, result.TargetName, result.Damage, result.GoldFound, result.Rolls)
             : null;
         _log.Add(new LogEntry(result.Turn, result.RoomType, result.TargetName, result.Damage, result.GoldFound, result.FlavorEvent, result.LastOutcome, finishedScenario));
         if (_earlyNarration is { } early && early.Turn == result.Turn && NarrationPending)

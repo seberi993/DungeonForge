@@ -155,6 +155,24 @@ public sealed class StageDirector
         _ => ("NO EFFECT", "st-fxd")
     };
 
+    private static RollDto? RollFor(StageShow show, string name) => show.Rolls?.FirstOrDefault(r => r.Name == name);
+
+    private static (string Text, string Class)? ExtremeTag(RollDto roll) =>
+        roll.Crit ? ("CRIT!", "st-fxy") : roll.Fumble ? ("FUMBLE!", "st-fxr") : null;
+
+    // The die tumbles through random faces, then lands on the real roll beside the number it had to beat.
+    private void DrawDie(CharGrid g, RollDto roll, double cx, double y, double p)
+    {
+        if (p < 0.12) return;
+        var tumbling = p < 0.5;
+        var text = tumbling
+            ? $"d100 {(int)(_clock / 55 * 37 % 100):00}"
+            : $"d100 {roll.Roll:00} vs {roll.Chance}";
+        var cls = tumbling ? "st-fxd" : roll.Crit ? "st-fxy" : roll.Fumble ? "st-fxr" : roll.Roll < roll.Chance ? "st-fxg" : "st-fxr";
+        g.Clear(CharGrid.Round(cx - text.Length / 2.0) - 1, Math.Max(0, CharGrid.Round(y)), text.Length + 2, 1);
+        Float(g, text, cx, y, cls);
+    }
+
     private static string Label(MemberDto h, int max) => h.Name.Length <= max ? h.Name : h.Name[..(max - 1)] + ".";
 
     private static double Ease(double t)
@@ -501,6 +519,12 @@ public sealed class StageDirector
                     break;
             }
 
+            if (RollFor(show, b.Name) is { } roll)
+            {
+                DrawDie(g, roll, home.PlateX, home.Y - 1, p);
+                (tag, tagClass) = ExtremeTag(roll) ?? (tag, tagClass);
+            }
+
             if (p >= 0.58)
             {
                 var rise = (p - 0.58) * 5;
@@ -571,7 +595,8 @@ public sealed class StageDirector
             var b = show.Beats[beat];
             var eff = Effective(show.Room, b.Verb);
             var (tag, tagClass) = Tag(eff, show.Success);
-            return new StageCaption($"{b.Name} · {b.Class}", $"“{b.Text}”", p >= 0.58 ? tag : "", p >= 0.58 ? tagClass : "");
+            if (RollFor(show, b.Name) is { } roll) (tag, tagClass) = ExtremeTag(roll) ?? (tag, tagClass);
+            return new StageCaption($"{b.Name} · {b.Class}",$"“{b.Text}”", p >= 0.58 ? tag : "", p >= 0.58 ? tagClass : "");
         }
 
         if (show is not null && _show is not null)

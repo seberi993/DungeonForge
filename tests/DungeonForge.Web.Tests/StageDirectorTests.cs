@@ -276,4 +276,52 @@ public class StageDirectorTests
         d.Frame().Text.Should().NotBeNullOrEmpty();
         d.Frame().Caption.Who.Should().Be("The hall");
     }
+
+    private static StageDirector DirectorShowing(RollDto roll, bool success)
+    {
+        var d = Director(Hero("Conan"));
+        d.SetRoom(0, RoomType.Combat, "goblin");
+        Run(d, StageDirector.IntroMs + 100);
+        d.StartShow(new StageShow(1, RoomType.Combat, "goblin", [Beat("Conan")], success, null, 0, 0, [roll]));
+        return d;
+    }
+
+    [Fact]
+    public void Beat_TumblesTheDie_ThenLandsOnTheRealRollAgainstTheChance()
+    {
+        var d = DirectorShowing(new RollDto("Conan", 37, 60, false, false), success: true);
+
+        Run(d, 600);
+        d.Frame().Text.Should().Contain("d100");
+        d.Frame().Text.Should().NotContain("37 vs 60");
+
+        Run(d, 1000);
+        d.Frame().Text.Should().Contain("37 vs 60");
+    }
+
+    [Theory]
+    [InlineData(2, 50, true, false, "CRIT!")]
+    [InlineData(97, 50, false, true, "FUMBLE!")]
+    public void Beat_CritAndFumbleOverrideTheResultTag(int roll, int chance, bool crit, bool fumble, string tag)
+    {
+        var d = DirectorShowing(new RollDto("Conan", roll, chance, crit, fumble), success: crit);
+
+        Run(d, 1700);
+
+        d.Frame().Caption.Tag.Should().Be(tag);
+    }
+
+    [Fact]
+    public void Beat_WithoutRolls_KeepsTheVerbTagAndDrawsNoDie()
+    {
+        var d = Director(Hero("Conan"));
+        d.SetRoom(0, RoomType.Combat, "goblin");
+        Run(d, StageDirector.IntroMs + 100);
+        d.StartShow(new StageShow(1, RoomType.Combat, "goblin", [Beat("Conan")], true, null, 0, 0));
+
+        Run(d, 1700);
+
+        d.Frame().Caption.Tag.Should().Be("HIT");
+        d.Frame().Text.Should().NotContain("d100");
+    }
 }
