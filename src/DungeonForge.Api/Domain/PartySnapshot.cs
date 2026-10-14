@@ -13,4 +13,8 @@ public sealed record PartySnapshot(
     int Turn,
     bool IsPartyDefeated,
     IReadOnlyList<MemberSnapshot> Members,
-    IReadOnlyList<MemberLockStatus> LockStatus);
+    IReadOnlyList<MemberLockStatus> LockStatus,
+    int Floor = 1,
+    int RoomsCleared = 0,
+    int BossHp = 0,
+    int BossMaxHp = 0);

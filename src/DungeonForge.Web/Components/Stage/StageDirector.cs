@@ -157,7 +157,9 @@ public sealed class StageDirector
         return (cx - 2, 23, cx, 26);
     }
 
-    private static string Effective(RoomType room, ActionVerb verb) => room == RoomType.Combat
+    private static bool IsFight(RoomType? room) => room is RoomType.Combat or RoomType.Boss;
+
+    private static string Effective(RoomType room, ActionVerb verb) => IsFight(room)
         ? verb switch { ActionVerb.Strike => "strike", ActionVerb.Cast => "cast", ActionVerb.Stab => "stab", _ => "heal" }
         : verb switch { ActionVerb.Strike => "pry", ActionVerb.Cast => "detect", ActionVerb.Stab => "pick", _ => "bless" };
 
@@ -245,7 +247,7 @@ public sealed class StageDirector
         var room = show?.Room ?? _room;
         var scene = show is not null ? show.Scene : _scene;
         var success = show?.Success ?? false;
-        var combat = room == RoomType.Combat;
+        var combat = IsFight(room);
 
         var g = new CharGrid(Corridor.Width, Corridor.Height);
         Corridor.Draw(g, _clock, intro, _decor);
@@ -298,7 +300,7 @@ public sealed class StageDirector
 
     private void DrawFoe(CharGrid g, StageShow? show, Phase phase, int beat, double p, double intro, string? scene, RoomType room, bool success, int killBeat, bool hitWin)
     {
-        var combat = room == RoomType.Combat;
+        var combat = IsFight(room);
         var cls = combat ? "st-foe" : "st-chest";
         IReadOnlyList<string> rows;
         double dy = 0;
@@ -569,9 +571,9 @@ public sealed class StageDirector
         var rp = phase == Phase.Result ? p : 1;
         if (show.Success)
         {
-            var word = room switch { RoomType.Combat => "*  VICTORY  *", RoomType.Chest => "*  UNLOCKED  *", _ => "*  SOLVED  *" };
+            var word = room switch { RoomType.Combat => "*  VICTORY  *", RoomType.Boss => "*  DIRECT HIT  *", RoomType.Chest => "*  UNLOCKED  *", _ => "*  SOLVED  *" };
             if (rp > 0.3 && (int)(_clock / 400) % 3 != 2) Banner(g, word, "st-fxy");
-            if (room != RoomType.Combat && rp > 0.15)
+            if (!IsFight(room) && rp > 0.15)
             {
                 for (var j = 0; j < 9; j++)
                 {
@@ -586,8 +588,8 @@ public sealed class StageDirector
 
         var failWord = "!  SETBACK  !";
         if (rp > 0.3 && (int)(_clock / 400) % 3 != 2) Banner(g, failWord, "st-fxr");
-        if (room != RoomType.Combat && rp is > 0.2 and < 0.55) Burst(g, tx, ty, (rp - 0.2) / 0.35, "st-fxr");
-        if (room != RoomType.Combat && rp > 0.35)
+        if (!IsFight(room) && rp is > 0.2 and < 0.55) Burst(g, tx, ty, (rp - 0.2) / 0.35, "st-fxr");
+        if (!IsFight(room) && rp > 0.35)
         {
             for (var j = 0; j < 5; j++) g.Set(tx - 6 + j * 3, ty - 3 - (rp * 10 + j) % 5, '~', "st-fxd");
         }
@@ -648,12 +650,13 @@ public sealed class StageDirector
         var room = show?.Room ?? _room;
         return room is null
             ? new StageCaption("The hall", "The party waits in the dark.", "", "")
-            : new StageCaption(room == RoomType.Combat ? "Combat" : room == RoomType.Chest ? "Treasure" : "Puzzle", RoomLine(room.Value), "", "");
+            : new StageCaption(room == RoomType.Boss ? "Boss" : IsFight(room) ? "Combat" : room == RoomType.Chest ? "Treasure" : "Puzzle", RoomLine(room.Value), "", "");
     }
 
     private static string RoomLine(RoomType room) => room switch
     {
         RoomType.Combat => "Something stirs ahead.",
+        RoomType.Boss => "The floor guardian awaits.",
         RoomType.Chest => "A chest waits in the dust.",
         _ => "Strange mechanisms line the walls."
     };
@@ -661,8 +664,8 @@ public sealed class StageDirector
     private static string ResultLine(StageShow show)
     {
         var verdict = show.Success
-            ? show.Room switch { RoomType.Combat => "The foe falls.", RoomType.Chest => "The lock gives.", _ => "The mechanism yields." }
-            : show.Room switch { RoomType.Combat => "The foe holds its ground.", RoomType.Chest => "The chest resists.", _ => "The mechanism jams." };
+            ? show.Room switch { RoomType.Boss => "The guardian reels.", RoomType.Combat => "The foe falls.", RoomType.Chest => "The lock gives.", _ => "The mechanism yields." }
+            : show.Room switch { RoomType.Boss => "The guardian shrugs it off.", RoomType.Combat => "The foe holds its ground.", RoomType.Chest => "The chest resists.", _ => "The mechanism jams." };
         if (!show.Success && show.Damage > 0 && show.TargetName is { } name) return $"{verdict} {name} takes {show.Damage}.";
         if (show.Success && show.GoldFound > 0) return $"{verdict} +{show.GoldFound} gold.";
         return verdict;

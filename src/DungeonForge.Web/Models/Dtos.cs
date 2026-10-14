@@ -4,7 +4,8 @@ public enum RoomType
 {
     Combat,
     Chest,
-    Puzzle
+    Puzzle,
+    Boss
 }
 
 public enum CharacterClass
@@ -46,7 +47,11 @@ public sealed record ExploreResponse(
     bool Success = false,
     IReadOnlyList<HitDto>? Hits = null,
     NarrationBrief? Brief = null,
-    IReadOnlyList<RollDto>? Rolls = null);
+    IReadOnlyList<RollDto>? Rolls = null,
+    int Floor = 1,
+    int BossHp = 0,
+    int BossMaxHp = 0,
+    bool FloorCleared = false);
 
 // One member's d100 roll against their chance (a pass is Roll below Chance); Crit/Fumble are the extremes.
 public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);
@@ -87,7 +92,11 @@ public sealed record PartyStateDto(
     int Turn,
     bool IsPartyDefeated,
     string InviteCode = "",
-    IReadOnlyList<LockStatusDto>? LockStatus = null);
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    int Floor = 1,
+    int RoomsCleared = 0,
+    int BossHp = 0,
+    int BossMaxHp = 0);
 
 public sealed record LockStatusDto(string Name, bool LockedIn);
 

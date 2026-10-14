@@ -17,6 +17,7 @@ public static class MasterPromptBuilder
     {
         RoomType.Combat => "a combat encounter",
         RoomType.Puzzle => "a puzzle room",
+        RoomType.Boss => "a boss fight",
         _ => "a treasure chest",
     };
 
@@ -31,6 +32,11 @@ public static class MasterPromptBuilder
     {
         var sb = new StringBuilder(Header(ctx, "Current scene", ctx.Room))
             .Append(" Result: the party's plan ").Append(success ? "succeeded" : "failed").Append('.');
+        if (ctx.FloorCleared)
+        {
+            sb.Append(" The floor's boss has fallen and the party descends deeper.");
+        }
+
         AppendNames(sb, " Members whose own action failed and who were hurt: ", ctx.Failed);
         AppendNames(sb, " Fallen heroes (describe them as down or dead): ", ctx.Downed);
         if (ctx.NextRoom is { } next)
@@ -70,6 +76,6 @@ public static class MasterPromptBuilder
     }
 
     private static string Header(NarrationContext ctx, string sceneLabel, RoomType room) =>
-        $"Party: {NarrationText.Sanitize(ctx.PartyName, MaxNameLength, NeutralPartyName)}. {sceneLabel}: {Scene(room)}. " +
+        $"Party: {NarrationText.Sanitize(ctx.PartyName, MaxNameLength, NeutralPartyName)}. Floor {ctx.Floor}. {sceneLabel}: {Scene(room)}. " +
         $"Mood: the party is {Mood(ctx.PartyWounded)}.";
 }

@@ -26,6 +26,10 @@ public static partial class ActionOdds
     public const int FumbleFrom = 95;
     public const int CritGold = 5;
 
+    // Boss HP each passed roll removes; a crit hits twice as hard.
+    public const int BossHitDamage = 10;
+    public const int BossCritDamage = 20;
+
     public static bool IsCrit(int roll) => roll < CritBelow;
 
     public static bool IsFumble(int roll) => roll >= FumbleFrom;

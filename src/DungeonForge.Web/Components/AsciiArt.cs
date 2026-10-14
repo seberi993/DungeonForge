@@ -188,5 +188,5 @@ public static class AsciiArt
     public static string[] Frames(string? scene, RoomType? room) => Scenes[Tag(scene, room)];
 
     public static string Tag(string? scene, RoomType? room) =>
-        scene is not null && Scenes.ContainsKey(scene) ? scene : room switch { RoomType.Combat => "goblin", RoomType.Chest => "chest", RoomType.Puzzle => "lever", _ => "generic" };
+        scene is not null && Scenes.ContainsKey(scene) ? scene : room switch { RoomType.Combat => "goblin", RoomType.Boss => "dragon", RoomType.Chest => "chest", RoomType.Puzzle => "lever", _ => "generic" };
 }

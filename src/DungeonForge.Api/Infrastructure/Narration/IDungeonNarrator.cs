@@ -12,6 +12,10 @@ public sealed record NarrationContext(RoomType Room, string PartyName, int Turn,
     public IReadOnlyList<string> Failed { get; init; } = [];
     public IReadOnlyList<string> Downed { get; init; } = [];
 
+    // Dungeon depth of the resolved room, and whether this turn felled the floor's boss (flavor input only).
+    public int Floor { get; init; } = 1;
+    public bool FloorCleared { get; init; }
+
     // Room rolled in C# for the next encounter; null when there is none (party defeated) or outside the resolve step.
     public RoomType? NextRoom { get; init; }
 }

@@ -15,4 +15,8 @@ public sealed record GetPartyStateResponse(
     int Turn,
     bool IsPartyDefeated,
     string InviteCode = "",
-    IReadOnlyList<LockStatusDto>? LockStatus = null);
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    int Floor = 1,
+    int RoomsCleared = 0,
+    int BossHp = 0,
+    int BossMaxHp = 0);

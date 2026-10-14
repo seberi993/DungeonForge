@@ -2,6 +2,9 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Domain;
 
+// BossNext: the next room is the boss (woken or still standing). FloorCleared: the boss fell and the party descended.
+public sealed record FloorProgress(bool BossNext, bool FloorCleared);
+
 // Mutable aggregate shared via cache. Mutators and Snapshot() lock SyncRoot internally (re-entrant, so handlers may hold it
 // across a multi-step turn). Members can only be mutated through Party.
 public sealed class Party
@@ -18,11 +21,21 @@ public sealed class Party
     public const int MaxDiscussionEntries = 8;
     public const int MaxMembers = 8;
 
+    // A floor is RoomsPerFloor ordinary rooms followed by a boss that takes several rounds to fell.
+    public const int RoomsPerFloor = 4;
+    public const int BossBaseHp = 30;
+    public const int BossHpPerFloor = 10;
+    public const double FloorHealRatio = 0.4;
+
     // Copy-on-write: a join swaps in a new array, so unlocked readers always enumerate a stable roster.
     private PartyMember[] _members;
 
     private int _gold;
     private int _turn;
+    private int _floor = 1;
+    private int _roomsCleared;
+    private int _bossHp;
+    private int _bossMaxHp;
     private PendingEncounter? _pending;
     private RoomType? _awaitingRoom;
     private int _awaitingTurn;
@@ -41,6 +54,16 @@ public sealed class Party
     public int Gold { get { lock (SyncRoot) { return _gold; } } }
 
     public int Turn { get { lock (SyncRoot) { return _turn; } } }
+
+    public int Floor { get { lock (SyncRoot) { return _floor; } } }
+
+    public int RoomsCleared { get { lock (SyncRoot) { return _roomsCleared; } } }
+
+    public int BossHp { get { lock (SyncRoot) { return _bossHp; } } }
+
+    public int BossMaxHp { get { lock (SyncRoot) { return _bossMaxHp; } } }
+
+    public static int BossHpFor(int floor) => BossBaseHp + BossHpPerFloor * (floor - 1);
 
     public IReadOnlyList<PartyMember> Members => Array.AsReadOnly(Volatile.Read(ref _members));
 
@@ -349,6 +372,43 @@ public sealed class Party
         }
     }
 
+    // Records a resolved room. An ordinary room counts towards the boss; the last one wakes it. In the boss room the
+    // party's passed actions wear the boss down and, once it falls, the party heals and descends to the next floor.
+    public FloorProgress AdvanceProgress(RoomType room, int bossDamage)
+    {
+        lock (SyncRoot)
+        {
+            if (room != RoomType.Boss)
+            {
+                _roomsCleared++;
+                var wakes = _roomsCleared >= RoomsPerFloor;
+                if (wakes)
+                {
+                    _bossMaxHp = BossHpFor(_floor);
+                    _bossHp = _bossMaxHp;
+                }
+
+                return new FloorProgress(wakes, false);
+            }
+
+            _bossHp = Math.Max(0, _bossHp - bossDamage);
+            if (_bossHp > 0)
+            {
+                return new FloorProgress(true, false);
+            }
+
+            foreach (var m in Members)
+            {
+                m.Heal((int)Math.Ceiling(m.MaxHp * FloorHealRatio));
+            }
+
+            _floor++;
+            _roomsCleared = 0;
+            _bossMaxHp = 0;
+            return new FloorProgress(false, true);
+        }
+    }
+
     public PartySnapshot Snapshot()
     {
         lock (SyncRoot)
@@ -356,7 +416,7 @@ public sealed class Party
             return new PartySnapshot(
                 Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
                 Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated)).ToArray(),
-                LockStatus);
+                LockStatus, _floor, _roomsCleared, _bossHp, _bossMaxHp);
         }
     }
 }

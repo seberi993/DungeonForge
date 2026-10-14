@@ -493,11 +493,13 @@ public sealed class ExploreDungeonHandler(
             }
 
             var turnBefore = party.Turn;
+            var floorBefore = party.Floor;
             // Every locked-in action rolls on its own, with odds shifted by what the rest of the party locked in.
             var chances = ActionOdds.For(discussion);
             var failed = new List<DamageResult>();
             var passed = 0;
             var crits = 0;
+            var bossDamage = 0;
             var rolls = new List<RollDto>();
             for (var i = 0; i < discussion.Count; i++)
             {
@@ -509,25 +511,34 @@ public sealed class ExploreDungeonHandler(
                 {
                     passed++;
                     if (crit) crits++;
+                    bossDamage += crit ? ActionOdds.BossCritDamage : ActionOdds.BossHitDamage;
                     continue;
                 }
 
-                var damage = FailDamage(pending.Room, turnBefore);
+                var damage = FailDamage(pending.Room, turnBefore, floorBefore);
                 failed.Add(new DamageResult(discussion[i].Name, fumble ? ActionOdds.FumbleDamage(damage) : damage));
             }
 
             // The room itself needs a strict majority; a tie goes to the dungeon.
             var success = passed > failed.Count;
-            var gold = success ? Gold(pending.Room, turnBefore) + crits * ActionOdds.CritGold : 0;
+            var isBoss = pending.Room == RoomType.Boss;
+            var bossFalls = isBoss && party.BossHp - bossDamage <= 0;
+            success |= bossFalls;
+            var paid = isBoss ? bossFalls : success;
+            var gold = paid ? Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold : 0;
 
             var hits = party.ApplyMemberOutcomes(failed, gold);
             var hit = hits.Count > 0 ? hits[0] : null;
 
-            // The next room is rolled in C# before any narrator call; nothing follows a defeated party.
+            // The next room is rolled in C# before any narrator call; nothing follows a defeated party. A boss
+            // that is awake (or just woken by the floor's last room) is always the next room.
             RoomType? nextRoom = null;
+            var floorCleared = false;
             if (!party.IsPartyDefeated)
             {
-                nextRoom = (RoomType)roller.Next(RoomKinds);
+                var progress = party.AdvanceProgress(pending.Room, bossDamage);
+                floorCleared = progress.FloorCleared;
+                nextRoom = progress.BossNext ? RoomType.Boss : (RoomType)roller.Next(RoomKinds);
                 party.TryBeginScenario(nextRoom.Value);
             }
 
@@ -541,9 +552,12 @@ public sealed class ExploreDungeonHandler(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
                 pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
                 Beats: ToBeats(party, discussion), Success: success,
-                Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))], Rolls: rolls);
+                Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))], Rolls: rolls,
+                Floor: party.Floor, BossHp: party.BossHp, BossMaxHp: party.BossMaxHp, FloorCleared: floorCleared);
             var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
+                Floor = floorBefore,
+                FloorCleared = floorCleared,
                 Actions = discussion,
                 NextRoom = nextRoom,
                 Failed = [.. failed.Select(f => f.TargetName)],
@@ -565,17 +579,21 @@ public sealed class ExploreDungeonHandler(
 
     // Game math lives here, never in the narrator.
     // Each member whose own action failed takes this hit; it grows as the dungeon deepens.
-    private static int FailDamage(RoomType room, int turn) => room switch
+    // The boss hits harder per floor and does not scale with the turn count, so a long floor stays fair.
+    private static int FailDamage(RoomType room, int turn, int floor) => room switch
     {
         RoomType.Combat => 6 + turn % 3 + turn / 3,
         RoomType.Puzzle => 7 + turn % 3 + turn / 3,
+        RoomType.Boss => 8 + 2 * (floor - 1) + turn % 3,
         _ => 4 + turn / 3,
     };
 
-    private static int Gold(RoomType room, int turn) => room switch
+    // Boss gold is only paid when the boss falls.
+    private static int Gold(RoomType room, int turn, int floor) => room switch
     {
         RoomType.Chest => 5 + turn,
         RoomType.Puzzle => 10 + 2 * turn,
+        RoomType.Boss => 25 * floor,
         _ => 0,
     };
 

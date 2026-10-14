@@ -9,6 +9,7 @@ public enum RoomType
     Combat,
     Chest,
     Puzzle,
+    Boss,
 }
 
 public static class ExploreRequestLimits
@@ -85,7 +86,11 @@ public sealed record ExploreResponse(
     bool Success = false,
     IReadOnlyList<HitDto>? Hits = null,
     NarrationBrief? Brief = null,
-    IReadOnlyList<RollDto>? Rolls = null);
+    IReadOnlyList<RollDto>? Rolls = null,
+    int Floor = 1,
+    int BossHp = 0,
+    int BossMaxHp = 0,
+    bool FloorCleared = false);
 
 // One member's d100 roll against their chance (pass when Roll &lt; Chance). Crit/Fumble are the extremes. Presentational for the dice UI.
 public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);

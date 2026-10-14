@@ -41,6 +41,10 @@ public static class NarrationPrompts
         RoomType.Puzzle =>
             "Scene type: puzzle room. Describe a strange mechanism with clues in glyphs, symbols, statues or the " +
             "environment, a looming consequence, and several parts to interact with, so the party can reason together.",
+        RoomType.Boss =>
+            "Scene type: boss fight. Introduce one towering, named floor guardian with a signature attack, a visible " +
+            "weakness or tell, and an arena the party can use, so the party can plan a coordinated assault. If the boss " +
+            "was already fought, show it wounded but still standing.",
         _ =>
             "Scene type: treasure chest. Describe the chest, its surroundings, the lock or fastening, signs of traps or " +
             "guardians, and tempting but risky details, so the party can weigh how to open it.",

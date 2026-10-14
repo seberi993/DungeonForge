@@ -21,6 +21,10 @@ public sealed class GameSession
     public int TotalMaxHp => _members.Sum(m => m.MaxHp);
     public int Gold { get; private set; }
     public int Turn { get; private set; }
+    // Dungeon depth; the boss is awake (BossMaxHp > 0) once the floor's ordinary rooms are cleared.
+    public int Floor { get; private set; } = 1;
+    public int BossHp { get; private set; }
+    public int BossMaxHp { get; private set; }
     public bool IsDefeated { get; private set; }
     public bool HasParty => PartyId != Guid.Empty;
     public IReadOnlyList<LogEntry> Log => _log;
@@ -176,6 +180,9 @@ public sealed class GameSession
         NarrationPending = result.NarrationPending && result.LastOutcome is null;
         _narrationTurn = result.Turn;
         Gold = result.Gold;
+        Floor = result.Floor;
+        BossHp = result.BossHp;
+        BossMaxHp = result.BossMaxHp;
         IsDefeated = result.IsPartyDefeated;
         ScenarioPending = !IsDefeated;
         if (result.Hits is { Count: > 0 } hits)
@@ -218,8 +225,16 @@ public sealed class GameSession
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
+        ApplyDepth(party);
         IsDefeated = party.IsPartyDefeated;
         LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
+    }
+
+    private void ApplyDepth(PartyStateDto party)
+    {
+        Floor = party.Floor;
+        BossHp = party.BossHp;
+        BossMaxHp = party.BossMaxHp;
     }
 
     // Ignores broadcasts that are not strictly newer than what we already show (out-of-order delivery).
@@ -230,6 +245,7 @@ public sealed class GameSession
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
+        ApplyDepth(party);
         ClearScenario();
         Discussion = [];
         IsDefeated = party.IsPartyDefeated;
@@ -306,6 +322,8 @@ public sealed class GameSession
         MyName = null;
         Gold = 0;
         Turn = 0;
+        Floor = 1;
+        BossHp = BossMaxHp = 0;
         IsDefeated = false;
         _passes.Clear();
         _roomsWon = _roomsLost = _crits = _fumbles = _worstHit = 0;

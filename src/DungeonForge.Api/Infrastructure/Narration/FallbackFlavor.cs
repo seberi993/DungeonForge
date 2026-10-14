@@ -24,6 +24,24 @@ public static class FallbackFlavor
         "You step into a gallery where a stone **statue** of a robed sage sits on a throne, one hand outstretched with a silver bowl. Four pedestals surround it, each holding a different object: a cracked mirror, a rusted **key**, a **candle** that burns without heat, and a bowl of dark water. Words are etched around the throne in an old tongue, and the floor tiles shift softly under your boots. The gate behind the statue is locked, and the bowl seems to be waiting for an offering. A low rumbling rolls through the walls whenever someone moves too quickly. The room rewards patience and punishes guesses. What do you do?",
     ];
 
+    private static readonly string[] BossScenarios =
+    [
+        "The passage ends at a vast **cavern** ringed with cracked **pillars**, and at its heart a hulking **ogre** in scorched plate rises from a throne of stacked bones. Its tower-sized **hammer** drags a groove through the floor as it walks, and a wheezing **furnace** glows beneath its breastplate where the armor has split. Torchlight flickers across a floor strewn with the broken shields of earlier challengers. The guardian knows you are here, it is in no hurry, and the glowing seam in its chest looks like the only thing it fears. Your companions spread out between the pillars. What do you do?",
+        "A circular arena opens beneath a shattered dome, and a **dragon** of black scale uncoils from a hoard of melted **coins**, smoke curling from its jaws. Chains snap from its wings as it rises, and an old **ballista** on the far ledge still points at the wound it left in the beast's flank. The floor heats under your boots and the air tastes of ash. The creature is wounded, furious and cornered, which makes it worse. Cover is scarce and the exit is behind you. What do you do?",
+    ];
+
+    private static readonly string[] BossSuccess =
+    [
+        "The guardian staggers and crashes down at last. The way deeper is open, which you will no doubt find a way to regret.",
+        "The final blow lands and the monster collapses. A miracle, and one the dungeon will remember with contempt.",
+    ];
+
+    private static readonly string[] BossFailure =
+    [
+        "The boss shrugs off the assault and answers with something heavy. Still standing, which is more than the plan managed.",
+        "Your attack falters and the guardian presses its advantage. It is hardly even trying.",
+    ];
+
     private static readonly string[] CombatSuccess =
     [
         "Somehow your nerve holds and the foe falls back. Don't let it go to your heads; it was a low bar.",
@@ -63,7 +81,7 @@ public static class FallbackFlavor
     // Deterministic, descriptive scenario used whenever the model is unavailable or returns nothing usable.
     public static string Scenario(RoomType room, int turn)
     {
-        var set = room switch { RoomType.Combat => CombatScenarios, RoomType.Puzzle => PuzzleScenarios, _ => ChestScenarios };
+        var set = room switch { RoomType.Combat => CombatScenarios, RoomType.Puzzle => PuzzleScenarios, RoomType.Boss => BossScenarios, _ => ChestScenarios };
         return set[Index(turn, set.Length)];
     }
 
@@ -73,6 +91,8 @@ public static class FallbackFlavor
         {
             (RoomType.Combat, true) => CombatSuccess,
             (RoomType.Combat, false) => CombatFailure,
+            (RoomType.Boss, true) => BossSuccess,
+            (RoomType.Boss, false) => BossFailure,
             (RoomType.Puzzle, true) => PuzzleSuccess,
             (RoomType.Puzzle, false) => PuzzleFailure,
             (_, true) => ChestSuccess,

@@ -18,6 +18,11 @@
         <span id="stat-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
         <span id="stat-gold">Gold: @Session.Gold</span>
         <span id="stat-turn">Turn: @Session.Turn</span>
+        <span id="stat-floor">Floor: @Session.Floor</span>
+        @if (Session.BossMaxHp > 0)
+        {
+            <span id="stat-boss">Boss: @Session.BossHp/@Session.BossMaxHp</span>
+        }
         <button id="toggle-sound" type="button" class="link-button" aria-pressed="@_muted.ToString().ToLowerInvariant()" @onclick="ToggleSoundAsync">@(_muted ? "Sound off" : "Sound on")</button>
     </div>
 
@@ -552,9 +557,9 @@
     private static string Markup(string text) => string.Concat(TypewriterText.Parse(text).Select(s =>
         s.Key ? $"<span class=\"key\">{System.Net.WebUtility.HtmlEncode(s.Text)}</span>" : System.Net.WebUtility.HtmlEncode(s.Text)));
 
-    private static string RoomLabel(RoomType type) => type switch { RoomType.Chest => "chest", RoomType.Puzzle => "puzzle", _ => "combat" };
+    private static string RoomLabel(RoomType type) => type switch { RoomType.Chest => "chest", RoomType.Puzzle => "puzzle", RoomType.Boss => "boss", _ => "combat" };
 
-    private static string Describe(LogEntry entry) => entry.RoomType == RoomType.Combat
+    private static string Describe(LogEntry entry) => entry.RoomType is RoomType.Combat or RoomType.Boss
         ? (entry.TargetName is null ? "No damage" : $"{entry.TargetName} took {entry.Damage} damage")
         : entry.RoomType == RoomType.Puzzle && entry.GoldFound == 0 && entry.Damage > 0
             ? $"{entry.TargetName ?? "A hero"} took {entry.Damage} damage"
