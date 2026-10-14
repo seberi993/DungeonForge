@@ -15,7 +15,7 @@ public static class FallbackFlavor
     private static readonly string[] ChestScenarios =
     [
         "Beyond a collapsed archway lies a small, circular vault where **water** drips steadily from the ceiling into a black pool. On a stone plinth in the middle sits an iron-banded **chest**, its lid furred with green corrosion and its heavy lock gleaming oddly clean. Scratch marks ring the plinth, and a few brittle **bones** lie scattered nearby, one hand still clutching a bent lockpick. The pool laps close enough to soak anyone who reaches the chest, and something small ripples just beneath the surface. Whatever waits inside is worth the risk to someone, but the vault itself feels like a warning. What do you do?",
-        "A narrow alcove behind a false wall hides a gilded **coffer** resting on a bed of rotting velvet. Thin **wires** run from its hinges into tiny holes in the walls, and the air carries a faint, sweet chemical scent. Two stone **gargoyles** flank the alcove, their mouths open as if ready to speak, and the floor in front of the coffer is made of slightly mismatched tiles. Faint scratching comes from somewhere above the ceiling. The treasure is within easy reach, which is exactly what makes your stomach tighten. Time and torchlight are both running down. What do you do?",
+        "A narrow alcove behind a false wall hides a gilded **coffer** resting on a bed of rotting velvet. Thin **wires** run from its hinges into tiny holes in the walls, and the air carries a faint, sweet chemical scent. Two stone **gargoyles** flank the alcove, their mouths open as if ready to speak, and the floor in front of the coffer is made of slightly mismatched tiles. Faint scratching comes from somewhere above the ceiling. The treasure is within easy reach, which is exactly what makes your stomach tighten. Time and patience are both running down. What do you do?",
     ];
 
     private static readonly string[] PuzzleScenarios =
@@ -26,7 +26,7 @@ public static class FallbackFlavor
 
     private static readonly string[] BossScenarios =
     [
-        "The passage ends at a vast **cavern** ringed with cracked **pillars**, and at its heart a hulking **ogre** in scorched plate rises from a throne of stacked bones. Its tower-sized **hammer** drags a groove through the floor as it walks, and a wheezing **furnace** glows beneath its breastplate where the armor has split. Torchlight flickers across a floor strewn with the broken shields of earlier challengers. The guardian knows you are here, it is in no hurry, and the glowing seam in its chest looks like the only thing it fears. Your companions spread out between the pillars. What do you do?",
+        "The passage ends at a vast **cavern** ringed with cracked **pillars**, and at its heart a hulking **ogre** in scorched plate rises from a throne of stacked bones. Its tower-sized **hammer** drags a groove through the floor as it walks, and a wheezing **furnace** glows beneath its breastplate where the armor has split. Furnace light flickers across a floor strewn with the broken shields of earlier challengers. The guardian knows you are here, it is in no hurry, and the glowing seam in its chest looks like the only thing it fears. Your companions spread out between the pillars. What do you do?",
         "A circular arena opens beneath a shattered dome, and a **dragon** of black scale uncoils from a hoard of melted **coins**, smoke curling from its jaws. Chains snap from its wings as it rises, and an old **ballista** on the far ledge still points at the wound it left in the beast's flank. The floor heats under your boots and the air tastes of ash. The creature is wounded, furious and cornered, which makes it worse. Cover is scarce and the exit is behind you. What do you do?",
     ];
 
@@ -141,6 +141,25 @@ public static class FallbackFlavor
         return string.Format(CultureInfo.InvariantCulture, set[Index(turn, set.Length)], first.Name);
     }
 
+    private static readonly string[] WhisperTemplates =
+    [
+        "{0} took extra gold while you were looking away.",
+        "{0} has smiled at your back for three rooms now. Ask yourself why.",
+        "I saw {0} palm something from the last spoils. Say nothing. Watch.",
+        "{0} asked the walls which of you would fall first. The walls named you.",
+    ];
+
+    // A private rumor for one member about another; needs at least two members. Deterministic per turn.
+    public static IReadOnlyList<Whisper> Whispers(IReadOnlyList<RosterEntry> roster, int turn)
+    {
+        if (roster.Count < 2) return [];
+
+        var target = roster[Index(turn, roster.Count)];
+        var accused = roster[Index(turn + 1, roster.Count)];
+        var text = string.Format(CultureInfo.InvariantCulture, WhisperTemplates[Index(turn, WhisperTemplates.Length)], accused.Name);
+        return [new Whisper(target.Name, text)];
+    }
+
     // Fills each blank part of a (possibly partial) model reply independently with deterministic flavor.
     public static TurnNarration Complete(TurnNarration? partial, bool success, NarrationContext ctx)
     {
@@ -152,7 +171,12 @@ public static class FallbackFlavor
         var next = ctx.NextRoom is not { } room
             ? string.Empty
             : filledNext ? Scenario(room, ctx.Turn + 1) : partial!.Next;
-        return new TurnNarration(outcome, next, partial?.NextScene ?? string.Empty) { FromFallback = filledOutcome || filledNext };
+        IReadOnlyList<Whisper> whispers = partial is { Whispers.Count: > 0 } ? partial.Whispers : Whispers(ctx.Roster, ctx.Turn);
+        return new TurnNarration(outcome, next, partial?.NextScene ?? string.Empty)
+        {
+            FromFallback = filledOutcome || filledNext,
+            Whispers = whispers,
+        };
     }
 
     private static int Index(int turn, int length) => (int)(Math.Abs((long)turn) % length);

@@ -25,7 +25,7 @@ public static class MasterPromptBuilder
 
     // First-turn scenario request.
     public static string BuildScenario(NarrationContext ctx) =>
-        Header(ctx, "Scene", ctx.Room);
+        Header(ctx, "Scene", ctx.Room) + Motifs(ctx);
 
     // Resolve-turn request: result of the party's combined plan, the room it was for, and the room that follows.
     public static string Build(bool success, NarrationContext ctx)
@@ -43,6 +43,10 @@ public static class MasterPromptBuilder
         {
             sb.Append(" Next scene: ").Append(Scene(next)).Append('.');
         }
+
+        sb.Append(Motifs(ctx));
+        AppendRoster(sb, ctx.Roster);
+        AppendTreachery(sb, ctx.Treachery);
 
         var first = true;
         foreach (var action in ctx.Actions)
@@ -65,6 +69,37 @@ public static class MasterPromptBuilder
         }
 
         return sb.ToString();
+    }
+
+    public const int MaxMotifs = 3;
+    public const int MaxMotifLength = 60;
+    public const int MaxTreacheryEntries = 4;
+    public const int MaxTreacheryLength = 160;
+
+    // Injected set dressing (chosen in C# with variance) so the model stops reaching for stock dungeon scenery.
+    private static string Motifs(NarrationContext ctx)
+    {
+        var motifs = ctx.Motifs.Take(MaxMotifs).Select(m => NarrationText.Clean(m, MaxMotifLength)).Where(m => m.Length > 0).ToArray();
+        return motifs.Length == 0 ? string.Empty : $" Weave in at most two of these architectural elements: {string.Join("; ", motifs)}.";
+    }
+
+    // Names for targeted whispers; classes let the model address "the Mage" as well as "Merlin".
+    private static void AppendRoster(StringBuilder sb, IReadOnlyList<RosterEntry> roster)
+    {
+        if (roster.Count == 0) return;
+        sb.Append(" Roster: ")
+            .AppendJoin(", ", roster.Select(r => $"{NarrationText.Sanitize(r.Name, MaxNameLength, NeutralMember)} ({r.Class})"))
+            .Append('.');
+    }
+
+    // Covert plans already resolved in C#; the narrator only describes them as just exposed.
+    private static void AppendTreachery(StringBuilder sb, IReadOnlyList<string> treachery)
+    {
+        var entries = treachery.Take(MaxTreacheryEntries).Select(t => NarrationText.Clean(t, MaxTreacheryLength)).Where(t => t.Length > 0).ToArray();
+        if (entries.Length == 0) return;
+        sb.Append(" Revealed treachery (secret plans just exposed; narrate them, never change them): ")
+            .AppendJoin(" | ", entries)
+            .Append('.');
     }
 
     private static void AppendNames(StringBuilder sb, string label, IReadOnlyList<string> names)

@@ -1,8 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Endpoints;
+using DungeonForge.Api.Features.Parties.CastConfrontationVote;
+using DungeonForge.Api.Features.Parties.Chaos;
+using DungeonForge.Api.Features.Parties.ClaimVault;
 using DungeonForge.Api.Features.Parties.CreateParty;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Api.Features.Parties.ExtractRun;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Features.Scores;
@@ -34,6 +38,7 @@ builder.Services.AddSignalR().AddJsonProtocol(o =>
     o.PayloadSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
     o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
 });
+builder.Services.TryAddSingleton<PlayerConnections>();
 builder.Services.TryAddSingleton<IPartyNotifier, SignalRPartyNotifier>();
 
 builder.Services.TryAddSingleton(TimeProvider.System);
@@ -42,7 +47,14 @@ builder.Services.AddSingleton<GetPartyStateHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinByCode.JoinByCodeHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinParty.JoinPartyHandler>();
 builder.Services.TryAddSingleton<IRoller, RandomRoller>();
+// Chaos systems own their roller so their variance never disturbs the deterministic game-roll order.
+builder.Services.TryAddSingleton(sp => new ChaosDispatcher(
+    sp.GetRequiredService<IPartyNotifier>(), new RandomRoller(), sp.GetRequiredService<ILogger<ChaosDispatcher>>()));
+builder.Services.TryAddSingleton(new VocabularySelector(new RandomRoller()));
 builder.Services.AddSingleton<ExploreDungeonHandler>();
+builder.Services.AddSingleton<ClaimVaultHandler>();
+builder.Services.AddSingleton<CastConfrontationVoteHandler>();
+builder.Services.AddSingleton<ExtractRunHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.UnlockTurn.UnlockTurnHandler>();
 builder.Services.AddOptions<NarrationOptions>()
     .Bind(builder.Configuration.GetSection("Narration"))

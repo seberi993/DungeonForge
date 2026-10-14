@@ -5,9 +5,22 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 // One system prompt per room type. Narration is flavor only: game rules and math stay in C#.
 public static class NarrationPrompts
 {
-    private const string Persona =
-        "You are the narrator of a dark-fantasy dungeon crawl for a cooperative party: bored, contemptuous and sarcastic, " +
-        "and openly unimpressed by everyone in it. ";
+    // Rule shared by every system prompt; PsychologicalPromptTests pin it.
+    public const string ConcisenessRule = "Be strictly concise: 2 to 3 sentences at most, no preamble, no filler. ";
+
+    public static readonly string TropeBan =
+        $"Never mention these overused tropes: {string.Join(", ", GrotesqueVocabulary.ForbiddenTropes)}. ";
+
+    // The whisper line format the parser reads; the model returns these inside a "whispers" array.
+    private static readonly string WhisperRule =
+        "Also add \"whispers\": at most 2 private rumors, each one short string in the exact format " +
+        TurnNarrationParser.WhisperFormat + " (under 20 words), told to one party member from the roster about another, " +
+        "hinting they skimmed gold, lied or plan a betrayal. Rumors only; no numbers or rules. ";
+
+    private static readonly string Persona =
+        "You are the narrator of a dark-fantasy dungeon crawl: a sadistic gossiper who relishes the party's suffering, " +
+        "biting, contemptuous and never kind. Feed their distrust of one another with insinuation and rumor, and push " +
+        "them toward suspicion and backstabbing. " + ConcisenessRule + TropeBan + "Prefer unsettling architecture and flesh-and-metal imagery over stock dungeon scenery. ";
 
     // Flavor only: the mockery never changes the C#-decided result. Insults aim at choices and competence, never at who people are.
     private const string Snark =
@@ -17,8 +30,8 @@ public static class NarrationPrompts
         "Insult their decisions and skill only; no slurs and nothing about real-world traits. ";
 
     private const string ScenarioShape =
-        "about 120 to 180 words in second person plural covering the setting, atmosphere, concrete hazards and features, " +
-        "the stakes, and clear hooks the party can act on. Do not offer a menu of actions; the party must think, plan and " +
+        "2 to 3 sentences in second person plural covering the setting, one concrete hazard and a hook the party can act on. " +
+        "Do not offer a menu of actions; the party must think, plan and " +
         "discuss. End with the open question: What do you do?";
 
     private const string Rules =
@@ -26,7 +39,7 @@ public static class NarrationPrompts
 
     // The client paints every highlighted word into the corridor as an animated prop, so they must be things you can see.
     private const string Highlight =
-        "Wrap the 3 to 5 concrete things the party can see in the corridor (a creature, a torch, dripping water, a lever, " +
+        "Wrap the 2 or 3 concrete things the party can see in the corridor (a creature, an obelisk, dripping water, a lever, " +
         "chains, mist, a door) in double asterisks, like **goblin**, each a single noun, each a different thing; " +
         "use no other markdown.";
 
@@ -57,32 +70,34 @@ public static class NarrationPrompts
         "with sarcasm and scoffs, even when the plan succeeded. Insult only their choices, never who they are. ";
 
     private const string CompactHighlight =
-        "Wrap 3 or 4 things you can see in the corridor in double asterisks, like **goblin**, each a single noun.";
+        "Wrap 2 or 3 things you can see in the corridor in double asterisks, like **goblin**, each a single noun.";
 
     public const int ScenarioCompactMaxTokens = 400;
     public const int TurnCompactMaxTokens = 700;
 
     public static string ScenarioCompact(RoomType room) =>
-        $"{Persona}Write ONE scenario of about 70 to 90 words in second person plural: the setting, a concrete danger and " +
+        $"{Persona}Write ONE scenario of 2 to 3 sentences in second person plural: the setting, a concrete danger and " +
         $"a hook. {RoomGuidance(room)} {CompactHighlight} Do not include numbers or rewards. End with: What do you do? " +
         "Reply with plain prose only.";
 
     public static string TurnCompact(RoomType? next) => next is { } room
         ? $"{Persona}Reply with JSON only, on one line, like this example: " +
-          "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"goblin\"}. " +
-          $"\"outcome\": 3 or 4 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
-          $"\"next\": a NEW scenario of about 70 to 90 words in second person plural, ending with: What do you do? {RoomGuidance(room)} " +
-          $"{CompactHighlight} {SceneRule} Do not include numbers or rewards."
-        : $"{Persona}Reply with JSON only, on one line, like this example: {{\"outcome\":\"...\"}}. " +
-          $"\"outcome\": 3 or 4 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
-          "Do not include numbers or rewards.";
+          "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"goblin\",\"whispers\":[\"...\"]}. " +
+          $"\"outcome\": 2 to 3 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
+          $"\"next\": a NEW scenario of 2 to 3 sentences in second person plural, ending with: What do you do? {RoomGuidance(room)} " +
+          $"{CompactHighlight} {SceneRule} {WhisperRule}Do not include numbers or rewards."
+        : $"{Persona}Reply with JSON only, on one line, like this example: {{\"outcome\":\"...\",\"whispers\":[\"...\"]}}. " +
+          $"\"outcome\": 2 to 3 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
+          $"{WhisperRule}Do not include numbers or rewards.";
 
     // Constrains the local model's decoder so a tiny model still returns the shape TurnNarrationParser expects.
     public static string TurnJsonSchema(bool hasNext) => hasNext
         ? "{\"type\":\"object\",\"properties\":{\"outcome\":{\"type\":\"string\"},\"next\":{\"type\":\"string\"}," +
-          "\"scene\":{\"type\":\"string\",\"enum\":[" + string.Join(",", SceneTags.All.Select(t => $"\"{t}\"")) + "]}}," +
+          "\"scene\":{\"type\":\"string\",\"enum\":[" + string.Join(",", SceneTags.All.Select(t => $"\"{t}\"")) + "]}," +
+          "\"whispers\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}}," +
           "\"required\":[\"outcome\",\"next\",\"scene\"]}"
-        : "{\"type\":\"object\",\"properties\":{\"outcome\":{\"type\":\"string\"}},\"required\":[\"outcome\"]}";
+        : "{\"type\":\"object\",\"properties\":{\"outcome\":{\"type\":\"string\"}," +
+          "\"whispers\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"outcome\"]}";
 
     // First turn: plain prose scenario.
     public static string Scenario(RoomType room) =>
@@ -91,12 +106,13 @@ public static class NarrationPrompts
     // Every later turn: strict JSON with the outcome and (unless the party fell) the next scenario.
     public static string Turn(RoomType? next) => next is { } room
         ? $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
-          "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"...\"}. " +
-          "\"outcome\": 3 to 5 vivid sentences describing how the party's combined plan played out, matching the stated " +
-          "result exactly; weave in the member ideas that fit, in the order given. " + Snark +
-          $"\"next\": a NEW scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} {Highlight} {SceneRule}"
+          "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"...\",\"whispers\":[\"...\"]}. " +
+          "\"outcome\": 2 to 3 sentences describing how the party's combined plan played out, matching the stated " +
+          "result exactly; weave in the member ideas that fit, in the order given, and describe any revealed treachery. " + Snark +
+          $"\"next\": a NEW scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} {Highlight} {SceneRule} {WhisperRule}"
         : $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
-          "{\"outcome\":\"...\"}. " +
-          "\"outcome\": 3 to 5 vivid sentences describing how the party's combined plan played out, matching the stated " +
-          "result exactly; weave in the member ideas that fit, in the order given. " + Snark + Rules + " " + Highlight;
+          "{\"outcome\":\"...\",\"whispers\":[\"...\"]}. " +
+          "\"outcome\": 2 to 3 sentences describing how the party's combined plan played out, matching the stated " +
+          "result exactly; weave in the member ideas that fit, in the order given, and describe any revealed treachery. " +
+          Snark + Rules + " " + Highlight + " " + WhisperRule;
 }

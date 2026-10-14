@@ -80,7 +80,7 @@ public sealed class ClientNarrationTests(WebApplicationFactory<Program> factory)
         var brief = doc.RootElement.GetProperty("brief");
         brief.GetProperty("turn").GetInt32().Should().Be(0);
         brief.GetProperty("kind").GetString().Should().Be("scenario");
-        brief.GetProperty("system").GetString().Should().Contain("70 to 90 words");
+        brief.GetProperty("system").GetString().Should().Contain("2 to 3 sentences");
         brief.GetProperty("user").GetString().Should().Contain("Party:");
         doc.RootElement.GetProperty("scenarioPending").GetBoolean().Should().BeTrue();
         narrator.ScenarioCalls.Should().Be(0);

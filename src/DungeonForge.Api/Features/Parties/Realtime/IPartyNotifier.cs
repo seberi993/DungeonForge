@@ -1,4 +1,5 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 namespace DungeonForge.Api.Features.Parties.Realtime;
@@ -17,4 +18,10 @@ public interface IPartyNotifier
 
     // Who has locked in changed (lock, unlock, or cleared by the resolve).
     Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default);
+
+    // Public chaos-mode event (player ready, vault, confrontation, verdict, traitor reveal). Never carries hidden information.
+    Task ChaosEventAsync(Guid partyId, ChaosEvent chaosEvent, CancellationToken ct = default) => Task.CompletedTask;
+
+    // Delivered to ONE player's connection only (secrets, whispers, the traitor pact). Silently dropped when they are offline.
+    Task SendPrivateAsync(Guid partyId, string playerName, PrivateMessage message, CancellationToken ct = default) => Task.CompletedTask;
 }

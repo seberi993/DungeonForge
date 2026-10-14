@@ -22,7 +22,7 @@ public sealed class CreatePartyHandler(IMemoryCache cache, TimeProvider time)
 
             // Request was validated by the endpoint filter.
             var members = request.Members!.Select(m => new PartyMember(m.Name!.Trim(), m.Class!.Value)).ToList();
-            var party = Party.Create(id, request.Name!.Trim(), members, time.GetUtcNow(), code);
+            var party = Party.Create(id, request.Name!.Trim(), members, time.GetUtcNow(), code, request.Modifiers);
 
             // Party first, then the invite key: a resolvable code never points at a missing party.
             cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());

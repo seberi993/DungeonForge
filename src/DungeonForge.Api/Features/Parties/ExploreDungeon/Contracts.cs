@@ -52,6 +52,13 @@ public static class ExploreRequestLimits
             {
                 return $"Action name must be at most {MaxActionNameLength} characters.";
             }
+
+            if (action.Covert is { } covert
+                && (!Enum.IsDefined(covert.Kind)
+                    || NarrationText.Clean(covert.Target, MaxActionNameLength + 1) is not { Length: > 0 and <= MaxActionNameLength }))
+            {
+                return $"A covert plan needs a valid kind and a target of at most {MaxActionNameLength} characters.";
+            }
         }
 
         return null;
@@ -90,7 +97,8 @@ public sealed record ExploreResponse(
     int Floor = 1,
     int BossHp = 0,
     int BossMaxHp = 0,
-    bool FloorCleared = false);
+    bool FloorCleared = false,
+    IReadOnlyList<string>? CombatLog = null);
 
 // One member's d100 roll against their chance (pass when Roll &lt; Chance). Crit/Fumble are the extremes. Presentational for the dice UI.
 public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
@@ -22,7 +23,9 @@ public sealed class ExploreDungeonHandler(
     IPartyNotifier notifier,
     ILogger<ExploreDungeonHandler> logger,
     IOptions<NarrationOptions>? options = null,
-    IScoreBoard? scores = null)
+    IScoreBoard? scores = null,
+    ChaosDispatcher? chaos = null,
+    VocabularySelector? vocabulary = null)
 {
     private const double WoundedRatio = 0.5;
     private const int RoomKinds = 3;
@@ -95,6 +98,7 @@ public sealed class ExploreDungeonHandler(
         {
             var ready = new NarrationReady(party.Id, party.Turn, string.Empty, pending.Scenario, pending.Room);
             await notifier.NarrationReadyAsync(ready, CancellationToken.None);
+            await DeliverPrivateAsync(party.Id, pending.Room, party.Turn, []);
         }
         catch (Exception ex)
         {
@@ -128,7 +132,11 @@ public sealed class ExploreDungeonHandler(
 
             var room = (RoomType)roller.Next(RoomKinds);
             party.TryBeginScenario(room);
-            return (null, new NarrationContext(room, party.Name, party.Turn, IsWounded(party)));
+            return (null, new NarrationContext(room, party.Name, party.Turn, IsWounded(party))
+            {
+                Roster = Roster(party),
+                Motifs = vocabulary?.Pick() ?? [],
+            });
         }
     }
 
@@ -142,7 +150,7 @@ public sealed class ExploreDungeonHandler(
 
     private static ExploreResponse PromptResponse(Party party, PendingEncounter pending) =>
         new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Scenario, party.Gold, party.IsPartyDefeated,
-            Scenario: pending.Scenario, Discussion: pending.Discussion,
+            Scenario: pending.Scenario, Discussion: party.Modifiers.Chaos ? null : pending.Discussion,
             LockStatus: PartyMapping.ToLockDtos(party.LockStatus));
 
     private static ExploreResponse AwaitingResponse(Party party, RoomType room) =>
@@ -162,7 +170,17 @@ public sealed class ExploreDungeonHandler(
         var (result, context, success, snapshot) = Mutate(id, actions);
         if (result.Status == ExploreStatus.Waiting && result.Response is { } waiting && snapshot is not null)
         {
-            await BroadcastLockAsync(id, waiting.Discussion ?? [], snapshot.LockStatus ?? []);
+            if (IsBlind(id))
+            {
+                // Blind action phase: only "X is ready" goes out; action text and covert plans stay on the server.
+                await BroadcastReadyAsync(id, actions);
+                await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? []);
+            }
+            else
+            {
+                await BroadcastLockAsync(id, waiting.Discussion ?? [], snapshot.LockStatus ?? []);
+            }
+
             return waitingIsConflict ? result : result with { Status = ExploreStatus.Explored, Waiting = null };
         }
 
@@ -173,6 +191,7 @@ public sealed class ExploreDungeonHandler(
 
         response = response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
+        await AnnounceChaosAftermathAsync(response.PartyId);
         if (snapshot.IsPartyDefeated) await RecordScoreAsync(snapshot);
 
         // The browser of whoever resolved the turn writes the narration; a defeat has no next scenario to wait on,
@@ -185,6 +204,53 @@ public sealed class ExploreDungeonHandler(
 
         _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, success, context));
         return result with { Response = response };
+    }
+
+    private bool IsBlind(Guid id) =>
+        cache.TryGetValue(PartyCache.Key(id), out Party? party) && party is { Modifiers.Chaos: true };
+
+    private static IReadOnlyList<RosterEntry> Roster(Party party) =>
+        [.. party.Members.Select(m => new RosterEntry(m.Name, m.Class))];
+
+    private async Task BroadcastReadyAsync(Guid id, IReadOnlyList<PlayerAction> actions)
+    {
+        if (chaos is null) return;
+        foreach (var action in actions.Where(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
+        {
+            var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
+            await chaos.AnnouncePlayerReadyAsync(id, name);
+        }
+    }
+
+    // After the Master Turn resolved: the new unclaimed vault is public, and a traitor win ends the run with a reveal.
+    private async Task AnnounceChaosAftermathAsync(Guid id)
+    {
+        if (chaos is null || !cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        {
+            return;
+        }
+
+        if (party.Modifiers.Chaos && party.Vault is { } vault)
+        {
+            await chaos.AnnounceVaultAsync(id, vault);
+        }
+
+        await chaos.AnnounceTraitorOutcomeAsync(party, party.EvaluateTraitor());
+    }
+
+    // Secrets for the room the party is about to enter and the narrator's whispers; both are private to their targets.
+    private async Task DeliverPrivateAsync(Guid partyId, RoomType? nextRoom, int turn, IReadOnlyList<Whisper> whispers)
+    {
+        if (chaos is null || !cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        {
+            return;
+        }
+
+        await chaos.DispatchWhispersAsync(party, whispers);
+        if (nextRoom is { } room)
+        {
+            await chaos.DispatchRoomSecretsAsync(party, room, turn);
+        }
     }
 
     // Only the resolve that wipes the party reaches here (later resolves answer Defeated), so each run is recorded once.
@@ -258,6 +324,7 @@ public sealed class ExploreDungeonHandler(
             logger.LogWarning(ex, "Failed to broadcast NarrationReady for turn {Turn} of party {PartyId}", turn, partyId);
         }
 
+        await DeliverPrivateAsync(partyId, context.NextRoom, turn + 1, narration.Whispers);
         return true;
     }
 
@@ -457,6 +524,9 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
+    private static CovertIntent? CleanCovert(CovertIntent? covert) =>
+        covert is null ? null : covert with { Target = NarrationText.Clean(covert.Target, ExploreRequestLimits.MaxActionNameLength) };
+
     private static void SubmitAll(Party party, IReadOnlyList<PlayerAction>? actions)
     {
         foreach (var action in actions ?? [])
@@ -468,7 +538,7 @@ public sealed class ExploreDungeonHandler(
             }
 
             var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
-            party.TryLockIn(new PlayerAction(action.MemberId, name, text));
+            party.TryLockIn(new PlayerAction(action.MemberId, name, text, CleanCovert(action.Covert)));
         }
     }
 
@@ -487,6 +557,11 @@ public sealed class ExploreDungeonHandler(
             if (party.IsPartyDefeated)
             {
                 return (new ExploreResult(ExploreStatus.Defeated), null, false, null);
+            }
+
+            if (party.Confrontation is not null)
+            {
+                return (Invalid("A confrontation is in progress; settle the vote before the party moves on."), null, false, null);
             }
 
             if (party.Pending is null)
@@ -516,6 +591,11 @@ public sealed class ExploreDungeonHandler(
             var floorBefore = party.Floor;
             // Every locked-in action rolls on its own, with odds shifted by what the rest of the party locked in.
             var chances = ActionOdds.For(discussion);
+
+            // Secret plans resolve first, in C#; a sabotaged spell fails no matter how well the roll goes.
+            var covert = discussion.Any(a => a.Covert is not null)
+                ? CovertResolver.Resolve(discussion, party.Members.Where(m => !party.IsBanished(m.Name)), roller)
+                : CovertResolution.None;
             var failed = new List<DamageResult>();
             var passed = 0;
             var crits = 0;
@@ -527,7 +607,7 @@ public sealed class ExploreDungeonHandler(
                 var crit = ActionOdds.IsCrit(roll);
                 var fumble = ActionOdds.IsFumble(roll);
                 rolls.Add(new RollDto(discussion[i].Name, roll, chances[i], crit, fumble));
-                if (roll < chances[i])
+                if (roll < chances[i] && !covert.Sabotaged.Contains(discussion[i].Name))
                 {
                     passed++;
                     if (crit) crits++;
@@ -547,7 +627,11 @@ public sealed class ExploreDungeonHandler(
             var paid = isBoss ? bossFalls : success;
             var gold = paid ? Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold : 0;
 
-            var hits = party.ApplyMemberOutcomes(failed, gold);
+            // Chaos parties do not bank drops: gold and the boss's Cursed Idol wait in the Unclaimed Vault.
+            var contested = party.Modifiers.Chaos;
+            var hits = party.ApplyMemberOutcomes([.. failed, .. covert.Hits], contested ? 0 : gold);
+            foreach (var (thief, amount) in covert.Heals) party.Heal(thief, amount);
+            if (contested && (gold > 0 || bossFalls)) party.DropVault(gold, bossFalls ? TraitorPact.CursedIdol : null);
             var hit = hits.Count > 0 ? hits[0] : null;
 
             // The next room is rolled in C# before any narrator call; nothing follows a defeated party. A boss
@@ -573,7 +657,8 @@ public sealed class ExploreDungeonHandler(
                 pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
                 Beats: ToBeats(party, discussion), Success: success,
                 Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))], Rolls: rolls,
-                Floor: party.Floor, BossHp: party.BossHp, BossMaxHp: party.BossMaxHp, FloorCleared: floorCleared);
+                Floor: party.Floor, BossHp: party.BossHp, BossMaxHp: party.BossMaxHp, FloorCleared: floorCleared,
+                CombatLog: covert.Outcomes.Count > 0 ? covert.Log : null);
             var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
                 Floor = floorBefore,
@@ -582,6 +667,9 @@ public sealed class ExploreDungeonHandler(
                 NextRoom = nextRoom,
                 Failed = [.. failed.Select(f => f.TargetName)],
                 Downed = [.. party.Members.Where(m => m.IsDefeated).Select(m => m.Name)],
+                Roster = Roster(party),
+                Motifs = vocabulary?.Pick() ?? [],
+                Treachery = covert.Log,
             };
 
             return (new ExploreResult(ExploreStatus.Explored, response), context, success, PartyMapping.ToResponse(party.Snapshot()));
