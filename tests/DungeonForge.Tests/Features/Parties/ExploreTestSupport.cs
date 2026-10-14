@@ -8,7 +8,7 @@ using DungeonForge.Api.Features.Parties.Realtime;
 namespace DungeonForge.Tests.Features.Parties;
 
 /// <summary>Deterministic roller: Next(3) is the room roll (0 = combat, 1 = chest, 2 = puzzle); any other max is the success roll.</summary>
-internal sealed class FixedRoller(int room, int success = 0) : IRoller
+internal sealed class FixedRoller(int room, int success = ExploreTestSupport.Succeed) : IRoller
 {
     public int Next(int max) => max == 3 ? room : success;
 }
@@ -23,11 +23,11 @@ internal sealed class SequenceRoller(int success, params int[] rooms) : IRoller
 
 internal static class ExploreTestSupport
 {
-    /// <summary>Success roll value that always fails (base 55 + max bonus 15 = 70 &lt; 99).</summary>
-    public const int Fail = 99;
+    /// <summary>Success roll value that always fails without fumbling (above the 85% cap, below the fumble line).</summary>
+    public const int Fail = 90;
 
-    /// <summary>Success roll value that always succeeds.</summary>
-    public const int Succeed = 0;
+    /// <summary>Success roll value that always succeeds without a crit (below the 15% floor, above the crit line).</summary>
+    public const int Succeed = 10;
 
     public static readonly Guid DefaultMember = Guid.NewGuid();
 

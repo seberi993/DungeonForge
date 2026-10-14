@@ -497,15 +497,28 @@ public sealed class ExploreDungeonHandler(
             var chances = ActionOdds.For(discussion);
             var failed = new List<DamageResult>();
             var passed = 0;
+            var crits = 0;
+            var rolls = new List<RollDto>();
             for (var i = 0; i < discussion.Count; i++)
             {
-                if (roller.Next(100) < chances[i]) passed++;
-                else failed.Add(new DamageResult(discussion[i].Name, FailDamage(pending.Room, turnBefore)));
+                var roll = roller.Next(100);
+                var crit = ActionOdds.IsCrit(roll);
+                var fumble = ActionOdds.IsFumble(roll);
+                rolls.Add(new RollDto(discussion[i].Name, roll, chances[i], crit, fumble));
+                if (roll < chances[i])
+                {
+                    passed++;
+                    if (crit) crits++;
+                    continue;
+                }
+
+                var damage = FailDamage(pending.Room, turnBefore);
+                failed.Add(new DamageResult(discussion[i].Name, fumble ? ActionOdds.FumbleDamage(damage) : damage));
             }
 
             // The room itself needs a strict majority; a tie goes to the dungeon.
             var success = passed > failed.Count;
-            var gold = success ? Gold(pending.Room, turnBefore) : 0;
+            var gold = success ? Gold(pending.Room, turnBefore) + crits * ActionOdds.CritGold : 0;
 
             var hits = party.ApplyMemberOutcomes(failed, gold);
             var hit = hits.Count > 0 ? hits[0] : null;
@@ -528,7 +541,7 @@ public sealed class ExploreDungeonHandler(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
                 pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
                 Beats: ToBeats(party, discussion), Success: success,
-                Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))]);
+                Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))], Rolls: rolls);
             var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
                 Actions = discussion,

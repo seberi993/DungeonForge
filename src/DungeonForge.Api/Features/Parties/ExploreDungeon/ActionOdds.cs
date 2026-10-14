@@ -21,6 +21,18 @@ public static partial class ActionOdds
     public const int MinPercent = 15;
     public const int MaxPercent = 85;
 
+    // d100 extremes. CritBelow sits under MinPercent and FumbleFrom above MaxPercent, so they never contradict the odds.
+    public const int CritBelow = 5;
+    public const int FumbleFrom = 95;
+    public const int CritGold = 5;
+
+    public static bool IsCrit(int roll) => roll < CritBelow;
+
+    public static bool IsFumble(int roll) => roll >= FumbleFrom;
+
+    // A fumble hits half again as hard, rounded up.
+    public static int FumbleDamage(int damage) => (damage * 3 + 1) / 2;
+
     [GeneratedRegex(@"\b(attack|stab|strike|hit|slash|smash|punch|kill|charge|fight|shoot|fireball)", RegexOptions.IgnoreCase)]
     private static partial Regex AttackIdea();
 

@@ -84,7 +84,11 @@ public sealed record ExploreResponse(
     IReadOnlyList<ActionBeat>? Beats = null,
     bool Success = false,
     IReadOnlyList<HitDto>? Hits = null,
-    NarrationBrief? Brief = null);
+    NarrationBrief? Brief = null,
+    IReadOnlyList<RollDto>? Rolls = null);
+
+// One member's d100 roll against their chance (pass when Roll &lt; Chance). Crit/Fumble are the extremes. Presentational for the dice UI.
+public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);
 
 // Handed only to the request that triggered a narration slot when client narration is on: the prompts the browser's
 // local model should run. Kind is "scenario" (plain prose) or "turn" (JSON). The reply goes back via POST .../narration.
