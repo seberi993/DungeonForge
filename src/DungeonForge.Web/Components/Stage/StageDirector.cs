@@ -36,6 +36,7 @@ public sealed class StageDirector
     public bool NarrationPending { get; set; }
     public bool IsShowing => _show is not null;
     public event Action<int>? ShowFinished;
+    public event Action<string>? Cue;
 
     public static double BeatMs(int beats) => Math.Clamp(13000.0 / Math.Max(1, beats), 1500, 2400);
 
@@ -100,13 +101,42 @@ public sealed class StageDirector
 
     public void Advance(double dtMs)
     {
+        var before = _clock;
         _clock += Math.Max(0, dtMs);
-        if (_show is not { } show || _clock - _showStart < ShowMs(show)) return;
+        if (_show is not { } show) return;
+        var elapsed = _clock - _showStart;
+        foreach (var cue in CuesBetween(show, before - _showStart, elapsed)) Cue?.Invoke(cue);
+        if (elapsed < ShowMs(show)) return;
         _show = null;
         _ended = show;
         if (_pending is { } p) ApplyRoom(p.Key, p.Room, p.Scene, p.Text);
         ShowFinished?.Invoke(show.Turn);
     }
+
+    // Sound cues, fired as the show passes them: "tick" when a die starts tumbling, the landing ("hit", "miss", "crit",
+    // "fumble") when it settles, then the room's verdict ("win" or "lose") as the result begins.
+    private static IEnumerable<string> CuesBetween(StageShow show, double from, double to)
+    {
+        var beatMs = BeatMs(show.Beats.Count);
+        for (var i = 0; i < show.Beats.Count; i++)
+        {
+            var start = i * beatMs;
+            if (Crosses(start + 0.15 * beatMs, from, to)) yield return "tick";
+            if (Crosses(start + 0.5 * beatMs, from, to)) yield return Landing(show, show.Beats[i]);
+        }
+
+        if (Crosses(show.Beats.Count * beatMs, from, to)) yield return show.Success ? "win" : "lose";
+    }
+
+    private static bool Crosses(double at, double from, double to) => at > from && at <= to;
+
+    private static string Landing(StageShow show, ActionBeat beat) => RollFor(show, beat.Name) switch
+    {
+        { Crit: true } => "crit",
+        { Fumble: true } => "fumble",
+        { } roll => roll.Roll < roll.Chance ? "hit" : "miss",
+        null => show.Success ? "hit" : "miss"
+    };
 
     private enum Phase { Idle, Beat, Result }
 

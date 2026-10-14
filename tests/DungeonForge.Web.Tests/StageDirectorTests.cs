@@ -311,6 +311,60 @@ public class StageDirectorTests
         d.Frame().Caption.Tag.Should().Be(tag);
     }
 
+    private static List<string> CuesOf(StageShow show)
+    {
+        var d = Director(Hero("Conan"), Hero("Merlin", CharacterClass.Mage));
+        d.SetRoom(0, show.Room, "goblin");
+        Run(d, StageDirector.IntroMs + 100);
+        var cues = new List<string>();
+        d.Cue += cues.Add;
+        d.StartShow(show);
+        Run(d, StageDirector.ShowMs(show) + 300, 50);
+        return cues;
+    }
+
+    [Theory]
+    [InlineData(37, 60, false, false, true, "hit", "win")]
+    [InlineData(80, 60, false, false, false, "miss", "lose")]
+    [InlineData(2, 50, true, false, true, "crit", "win")]
+    [InlineData(97, 50, false, true, false, "fumble", "lose")]
+    public void Show_CuesEachBeatsTickAndLanding_ThenTheVerdict(int roll, int chance, bool crit, bool fumble, bool success, string landing, string verdict)
+    {
+        var show = new StageShow(1, RoomType.Combat, "goblin", [Beat("Conan")], success, null, 0, 0,
+            [new RollDto("Conan", roll, chance, crit, fumble)]);
+
+        CuesOf(show).Should().Equal("tick", landing, verdict);
+    }
+
+    [Fact]
+    public void Show_CuesEveryBeat_UsingEachMembersOwnRoll()
+    {
+        var show = new StageShow(1, RoomType.Combat, "goblin", [Beat("Conan"), Beat("Merlin", ActionVerb.Cast, CharacterClass.Mage)], false, null, 0, 0,
+            [new RollDto("Conan", 10, 60, false, false), new RollDto("Merlin", 90, 60, false, false)]);
+
+        CuesOf(show).Should().Equal("tick", "hit", "tick", "miss", "lose");
+    }
+
+    [Fact]
+    public void Show_WithoutRolls_FallsBackToTheRoomOutcome()
+    {
+        var show = new StageShow(1, RoomType.Chest, "chest", [Beat("Conan")], true, null, 0, 5);
+
+        CuesOf(show).Should().Equal("tick", "hit", "win");
+    }
+
+    [Fact]
+    public void NoShow_NoCues()
+    {
+        var d = Director();
+        var cues = new List<string>();
+        d.Cue += cues.Add;
+
+        Run(d, 5000);
+
+        cues.Should().BeEmpty();
+    }
+
     [Fact]
     public void Beat_WithoutRolls_KeepsTheVerbTagAndDrawsNoDie()
     {

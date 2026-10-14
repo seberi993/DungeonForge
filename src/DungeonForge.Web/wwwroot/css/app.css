@@ -132,3 +132,5 @@ details.audit { margin: .5rem 0; }
 .hp-fill.hp-low { background: var(--crimson-bright); animation: hp-pulse 1s ease-in-out infinite; }
 @keyframes hp-pulse { 50% { opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .hp-fill, .hp-fill.hp-low { transition: none; animation: none; } }
+
+.link-button { padding: 0; background: none; border: 0; border-bottom: 1px dotted var(--gold); border-radius: 0; font-family: inherit; font-weight: 400; letter-spacing: 0; font-size: inherit; color: var(--gold-bright); margin-left: auto; }

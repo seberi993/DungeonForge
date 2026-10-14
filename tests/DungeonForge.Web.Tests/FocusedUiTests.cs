@@ -104,6 +104,30 @@ public class FocusedUiTests : TestContext
     }
 
     [Fact]
+    public void AsciiStage_ReportsSoundCuesWhileActingOutTheShow()
+    {
+        var cues = new List<string>();
+        var done = new List<int>();
+        var show = new StageShow(3, RoomType.Combat, "goblin",
+            [new ActionBeat("Conan", CharacterClass.Warrior, ActionVerb.Strike, "I charge the goblin")],
+            true, null, 0, 0);
+        RenderComponent<AsciiStage>(p => p
+            .Add(c => c.Members, Heroes).Add(c => c.Turn, 3).Add(c => c.Show, show).Add(c => c.Speed, 60)
+            .Add(c => c.Interval, TimeSpan.FromMilliseconds(20))
+            .Add(c => c.OnShowComplete, (int turn) => done.Add(turn))
+            .Add(c => c.OnCue, (string cue) => cues.Add(cue)));
+
+        Within(() => done.Count == 1);
+        cues.Should().Equal("tick", "hit", "win");
+    }
+
+    private static void Within(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition() && DateTime.UtcNow < deadline) Thread.Sleep(10);
+    }
+
+    [Fact]
     public void AsciiStage_ActsOutTheShow_ThenReportsItDone()
     {
         var done = new List<int>();

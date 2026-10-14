@@ -18,6 +18,7 @@
         <span id="stat-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
         <span id="stat-gold">Gold: @Session.Gold</span>
         <span id="stat-turn">Turn: @Session.Turn</span>
+        <button id="toggle-sound" type="button" class="link-button" aria-pressed="@_muted.ToString().ToLowerInvariant()" @onclick="ToggleSoundAsync">@(_muted ? "Sound off" : "Sound on")</button>
     </div>
 
     <ul id="members" class="members">
@@ -68,7 +69,7 @@
     }
 
     <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene" Narration="Session.Scenario"
-                Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" />
+                Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" OnCue="PlayCueAsync" />
     <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" OnSpellsLoaded="OnSpellsLoaded" />
 
     @if (_offline)
@@ -403,8 +404,37 @@
         await Hub.DisposeAsync();
     }
 
+    // Sound is a nicety: a blocked or missing audio module must never break the game.
+    private bool _muted;
+
+    private async Task PlayCueAsync(string cue)
+    {
+        try { await JS.InvokeVoidAsync("dungeonForge.sfx.play", cue); }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException) { }
+    }
+
+    private async Task ToggleSoundAsync()
+    {
+        try { _muted = await JS.InvokeAsync<bool>("dungeonForge.sfx.toggle"); }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException) { }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            try
+            {
+                var muted = await JS.InvokeAsync<bool>("dungeonForge.sfx.isMuted");
+                if (muted != _muted)
+                {
+                    _muted = muted;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException) { }
+        }
+
         if (!_scroll) return;
         _scroll = false;
         await JS.InvokeVoidAsync("dungeonForge.scrollToBottom", "log");

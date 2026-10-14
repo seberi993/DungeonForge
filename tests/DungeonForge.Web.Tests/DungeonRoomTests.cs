@@ -1,6 +1,7 @@
 using System.Net;
 using Bunit;
 using Bunit.TestDoubles;
+using DungeonForge.Web.Components;
 using DungeonForge.Web.Models;
 using DungeonForge.Web.Pages;
 using DungeonForge.Web.Services;
@@ -102,6 +103,29 @@ public class DungeonRoomTests : TestContext
         cut.Find("#member-1").TextContent.Should().Contain("16/16");
         cut.Find("#stat-hp").TextContent.Should().Contain("42/46");
         cut.Find(".log-entry").TextContent.Should().Contain("Conan took 4 damage");
+    }
+
+    [Fact]
+    public void SoundToggle_FlipsMuteThroughTheSfxModule_AndShowsTheState()
+    {
+        JSInterop.Setup<bool>("dungeonForge.sfx.isMuted").SetResult(false);
+        JSInterop.Setup<bool>("dungeonForge.sfx.toggle").SetResult(true);
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+
+        cut.Find("#toggle-sound").TextContent.Should().Contain("Sound on");
+        cut.Find("#toggle-sound").Click();
+
+        cut.WaitForAssertion(() => cut.Find("#toggle-sound").TextContent.Should().Contain("Sound off"));
+    }
+
+    [Fact]
+    public async Task StageCues_ArePlayedThroughTheSfxModule()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+
+        await cut.InvokeAsync(() => cut.FindComponent<AsciiStage>().Instance.OnCue.InvokeAsync("crit"));
+
+        JSInterop.Invocations.Should().Contain(i => i.Identifier == "dungeonForge.sfx.play" && (string)i.Arguments[0]! == "crit");
     }
 
     [Fact]
