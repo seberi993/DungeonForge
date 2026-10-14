@@ -26,11 +26,32 @@ public sealed class KeyPoolGeminiNarratorTests
     private sealed class ListLogger : ILogger<GeminiNarratorService>, ILogger<KeyPoolGeminiNarrator>
     {
         public List<string> Messages { get; } = [];
+        public List<string> Warnings { get; } = [];
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
+
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
+            Func<TState, Exception?, string> formatter)
+        {
+            var text = formatter(state, exception);
+            Messages.Add(text);
+            if (logLevel >= LogLevel.Warning)
+            {
+                Warnings.Add(text);
+            }
+        }
     }
+
+    // Mirrors Google's 429 body: RetryInfo.retryDelay plus QuotaFailure.violations[].quotaId.
+    private static HttpResponseMessage Quota429(string retryDelay, string quotaId) =>
+        new(HttpStatusCode.TooManyRequests)
+        {
+            Content = new StringContent(
+                "{\"error\":{\"code\":429,\"status\":\"RESOURCE_EXHAUSTED\",\"details\":["
+                + "{\"@type\":\"type.googleapis.com/google.rpc.QuotaFailure\",\"violations\":[{\"quotaId\":\"" + quotaId + "\"}]},"
+                + "{\"@type\":\"type.googleapis.com/google.rpc.RetryInfo\",\"retryDelay\":\"" + retryDelay + "\"}]}}",
+                Encoding.UTF8, "application/json"),
+        };
 
     private sealed class FakeHandler(Func<string, HttpResponseMessage> respond) : HttpMessageHandler
     {
@@ -187,6 +208,73 @@ public sealed class KeyPoolGeminiNarratorTests
 
         log.Messages.Should().NotBeEmpty();
         log.Messages.Should().NotContain(m => m.Contains(K0) || m.Contains(K1));
+    }
+
+    // ---- 429 body: retryDelay, quota type, log noise ----
+
+    [Fact]
+    public async Task BodyRetryDelay_IsUsedAsCooldown()
+    {
+        var (n, h, clock, _) = Create(k => k == K0 ? Quota429("120s", "GenerateRequestsPerMinutePerProjectPerModel-FreeTier") : Ok("Fine."), K0, K1);
+
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // K0 429 -> K1
+        clock.Now += TimeSpan.FromSeconds(100);
+        h.KeysSeen.Clear();
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        h.KeysSeen.Should().NotContain(K0, "retryDelay of 120s has not elapsed (default would be 60s)");
+
+        clock.Now += TimeSpan.FromSeconds(21);
+        h.KeysSeen.Clear();
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        h.KeysSeen.Should().Contain(K0);
+    }
+
+    [Fact]
+    public async Task DailyQuota_CoolsKeyForAtLeastOneHour_EvenWithShortRetryDelay()
+    {
+        var (n, h, clock, _) = Create(k => k == K0 ? Quota429("20s", "GenerateRequestsPerDayPerProjectPerModel-FreeTier") : Ok("Fine."), K0, K1);
+
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        clock.Now += TimeSpan.FromMinutes(59);
+        h.KeysSeen.Clear();
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        h.KeysSeen.Should().NotContain(K0);
+
+        clock.Now += TimeSpan.FromMinutes(2);
+        h.KeysSeen.Clear();
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        h.KeysSeen.Should().Contain(K0);
+    }
+
+    [Fact]
+    public async Task RateLimitLog_IncludesQuotaId_ButNeverKeyValues()
+    {
+        var (n, _, _, log) = Create(_ => Quota429("10s", "GenerateRequestsPerDayPerProjectPerModel-FreeTier"), K0, K1);
+
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+
+        log.Messages.Should().Contain(m => m.Contains("GenerateRequestsPerDayPerProjectPerModel-FreeTier"));
+        log.Messages.Should().NotContain(m => m.Contains(K0) || m.Contains(K1));
+    }
+
+    [Fact]
+    public async Task Exhaustion_WarnsOnce_NotOnEveryFallbackCall()
+    {
+        var (n, h, _, log) = Create(_ => Status(HttpStatusCode.TooManyRequests), K0, K1);
+
+        await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None); // both keys 429
+        log.Warnings.Clear();
+        for (var i = 0; i < 5; i++)
+        {
+            await n.NarrateOutcomeAsync("a", true, Ctx, CancellationToken.None);
+        }
+
+        h.KeysSeen.Should().HaveCount(2, "all later calls skip HTTP while every key is cooling");
+        log.Warnings.Should().BeEmpty("the exhaustion warning was already emitted once");
     }
 
     // ---- Key resolution ----

@@ -108,10 +108,23 @@ public sealed class GeminiNarratorService(
             using var response = await http.SendAsync(request, timeout.Token);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                logger.LogWarning("Narration API rate limited (429).");
+                var quota = await RateLimitInfo.ReadAsync(response, timeout.Token);
+                logger.LogWarning("Narration API rate limited (429); quota {QuotaId}.", quota.QuotaId ?? "unknown");
                 var retry = response.Headers.RetryAfter;
-                var wait = retry?.Delta ?? (retry?.Date is { } at ? at - _clock.GetUtcNow() : null);
-                return new SendResult(null, true, wait is { } w && w > TimeSpan.Zero ? w : null);
+                TimeSpan? wait = retry?.Delta
+                    ?? (retry?.Date is { } at ? at - _clock.GetUtcNow() : (TimeSpan?)null)
+                    ?? quota.RetryDelay;
+                if (wait is { } w && w <= TimeSpan.Zero)
+                {
+                    wait = null;
+                }
+
+                if (quota.IsDaily)
+                {
+                    wait = wait is { } d && d > RateLimitInfo.DailyCooldown ? d : RateLimitInfo.DailyCooldown;
+                }
+
+                return new SendResult(null, true, wait);
             }
 
             if (!response.IsSuccessStatusCode)

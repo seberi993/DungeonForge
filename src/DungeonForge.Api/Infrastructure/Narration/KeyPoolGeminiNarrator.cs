@@ -9,6 +9,7 @@ public sealed class KeyPoolGeminiNarrator(
     ILogger<KeyPoolGeminiNarrator> logger) : IDungeonNarrator
 {
     private static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(60);
+    private int _exhaustionLogged;
 
     public async Task<EncounterChoice> GenerateChoicesAsync(NarrationContext ctx, CancellationToken ct)
     {
@@ -33,6 +34,8 @@ public sealed class KeyPoolGeminiNarrator(
                 break;
             }
 
+            Volatile.Write(ref _exhaustionLogged, 0);
+
             var result = await call(lease.Key, ct);
             if (!result.RateLimited)
             {
@@ -44,7 +47,16 @@ public sealed class KeyPoolGeminiNarrator(
             logger.LogWarning("Narration key #{KeyIndex} rate limited; cooling for {Seconds}s.", lease.Index, (int)cooldown.TotalSeconds);
         }
 
-        logger.LogWarning("No narration key available; using fallback.");
+        // Warn once per exhaustion episode; repeats while keys keep cooling are debug noise.
+        if (Interlocked.Exchange(ref _exhaustionLogged, 1) == 0)
+        {
+            logger.LogWarning("All narration keys are rate limited; using fallback until one recovers.");
+        }
+        else
+        {
+            logger.LogDebug("No narration key available; using fallback.");
+        }
+
         return null;
     }
 }
