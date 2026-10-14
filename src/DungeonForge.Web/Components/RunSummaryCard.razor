@@ -1,0 +1,28 @@
+@using DungeonForge.Web.Models
+
+@* End-of-run recap shown when the party falls: the numbers, the hero who carried, the blow that hurt most, and the narrator's last word. *@
+<section class="run-summary" aria-label="Run summary">
+    <h3>The run is over</h3>
+    <dl class="run-stats">
+        <div><dt>Turns survived</dt><dd class="run-turns">@Summary.Turns</dd></div>
+        <div><dt>Gold</dt><dd class="run-gold">@Summary.Gold</dd></div>
+        <div><dt>Rooms</dt><dd class="run-rooms">@Summary.RoomsWon won · @Summary.RoomsLost lost</dd></div>
+        <div><dt>Crits · Fumbles</dt><dd class="run-extremes">@Summary.Crits · @Summary.Fumbles</dd></div>
+    </dl>
+    @if (Summary.MvpName is { } mvp)
+    {
+        <p class="run-mvp">MVP: <strong>@mvp</strong> (@Summary.MvpPasses successful @(Summary.MvpPasses == 1 ? "action" : "actions"))</p>
+    }
+    @if (Summary.WorstHitName is { } victim)
+    {
+        <p class="run-worst">Worst blow: <strong>@victim</strong> took @Summary.WorstHit</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(Summary.Verdict))
+    {
+        <blockquote class="run-verdict">@Summary.Verdict</blockquote>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public RunSummary Summary { get; set; } = null!;
+}

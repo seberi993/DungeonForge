@@ -109,3 +109,17 @@ public enum ElementType
 }
 
 public sealed record SpellDto(string Name, CharacterClass ClassId, ElementType Element, int ManaCost, string Description);
+
+// The run so far, tallied client-side from resolved turns for the end-of-run screen. MVP = most passed rolls.
+public sealed record RunSummary(
+    int Turns,
+    int Gold,
+    int RoomsWon,
+    int RoomsLost,
+    int Crits,
+    int Fumbles,
+    string? MvpName,
+    int MvpPasses,
+    string? WorstHitName,
+    int WorstHit,
+    string? Verdict);

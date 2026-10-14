@@ -162,6 +162,7 @@ public class DungeonRoomTests : TestContext
         cut.WaitForAssertion(() => cut.Find(".defeated").TextContent.Should().Contain("defeated"));
         cut.Find("button#explore").HasAttribute("disabled").Should().BeTrue();
         _session.IsDefeated.Should().BeTrue();
+        cut.Find(".defeated .run-summary").Should().NotBeNull();
     }
 
     [Fact]
