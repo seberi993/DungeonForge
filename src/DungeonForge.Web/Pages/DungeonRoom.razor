@@ -23,7 +23,8 @@
         @for (var i = 0; i < Session.Members.Count; i++)
         {
             var member = Session.Members[i];
-            <li id="member-@i" class="member@(member.IsDefeated ? " defeated-member" : "")">
+            var memberClass = "member" + (member.IsDefeated ? " defeated-member" : "") + (member.Name == Session.PlayerName ? " me" : "");
+            <li id="member-@i" class="@memberClass">
                 <span class="member-name">@member.Name</span> (@member.Class) <span class="member-hp">@member.Hp/@member.MaxHp</span>
             </li>
         }

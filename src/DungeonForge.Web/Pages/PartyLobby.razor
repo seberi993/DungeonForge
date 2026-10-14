@@ -38,7 +38,28 @@
 <div class="card">
     <label for="join-id">Join a friend's party (paste their invite code)</label>
     <input id="join-id" @bind="_joinId" placeholder="XXXX-XXXX" maxlength="40" disabled="@_busy" />
-    <button id="join-party" @onclick="JoinAsync" disabled="@_busy">Join Party</button>
+    <button id="join-party" @onclick="FindAsync" disabled="@_busy">Find Party</button>
+    @if (_preview is not null)
+    {
+        <div id="join-preview">
+            <h3>@_preview.Name</h3>
+            <p>Heroes already in this party:</p>
+            <ul id="join-members">
+                @foreach (var m in _preview.Members)
+                {
+                    <li>@m.Name &mdash; @m.Class</li>
+                }
+            </ul>
+            <input id="join-name" @bind="_joinName" maxlength="30" placeholder="Your hero name" disabled="@_busy" />
+            <select id="join-class" @bind="_joinClass" disabled="@_busy">
+                @foreach (var c in Enum.GetValues<CharacterClass>())
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+            <button id="confirm-join" @onclick="ConfirmJoinAsync" disabled="@_busy">Join as Hero</button>
+        </div>
+    }
     @if (_joinError is not null)
     {
         <p class="join-error validation-message">@_joinError</p>
@@ -49,9 +70,48 @@
     private string _joinId = "";
     private string? _joinError;
 
-    private async Task JoinAsync()
+    private PartyStateDto? _preview;
+    private string _joinName = "";
+    private CharacterClass _joinClass = CharacterClass.Warrior;
+
+    private async Task ConfirmJoinAsync()
     {
         _joinError = null;
+        if (_preview is null) return;
+        if (string.IsNullOrWhiteSpace(_joinName))
+        {
+            _joinError = "Enter a hero name.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Api.JoinPartyAsync(_preview.InviteCode, _joinName.Trim(), _joinClass);
+            if (result.IsSuccess)
+            {
+                Session.Join(result.Value!.State, result.Value.MemberName);
+                Nav.NavigateTo("/dungeon");
+                return;
+            }
+
+            _joinError = result.Status switch
+            {
+                ApiStatus.Conflict => "That hero name is taken, or the party is full.",
+                ApiStatus.NotFound => "No party found with that invite code.",
+                _ => result.Error ?? "Could not join the party."
+            };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task FindAsync()
+    {
+        _joinError = null;
+        _preview = null;
         var input = _joinId.Trim();
         if (input.Length == 0)
         {
@@ -68,8 +128,7 @@
                 : await Api.GetPartyByCodeAsync(input);
             if (result.IsSuccess)
             {
-                Session.Join(result.Value!);
-                Nav.NavigateTo("/dungeon");
+                _preview = result.Value;
                 return;
             }
 

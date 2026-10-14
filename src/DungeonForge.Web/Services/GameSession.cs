@@ -9,7 +9,10 @@ public sealed class GameSession
 
     // Stable per browser session; identifies this player's submitted action on the server.
     public Guid PlayerId { get; } = Guid.NewGuid();
-    public string PlayerName => _members.Count > 0 ? _members[0].Name : "Adventurer";
+    // The hero this browser plays: the creator's first hero, or the one a joiner picked.
+    public string? MyName { get; private set; }
+    private MemberDto? Me => _members.FirstOrDefault(m => m.Name == MyName) ?? _members.FirstOrDefault();
+    public string PlayerName => Me?.Name ?? "Adventurer";
     public Guid PartyId { get; private set; }
     public string InviteCode { get; private set; } = "";
     public string Name { get; private set; } = "";
@@ -38,7 +41,7 @@ public sealed class GameSession
     public IReadOnlyList<LockStatusDto> LockStatus { get; private set; } = [];
     public int LockedCount => LockStatus.Count(s => s.LockedIn);
     public RoomType? PendingRoom { get; private set; }
-    public CharacterClass PlayerClass => _members.Count > 0 ? _members[0].Class : CharacterClass.Warrior;
+    public CharacterClass PlayerClass => Me?.Class ?? CharacterClass.Warrior;
 
     public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
     {
@@ -179,7 +182,7 @@ public sealed class GameSession
 
     public event Action? Changed;
 
-    public void Join(PartyStateDto party)
+    public void Join(PartyStateDto party, string? myName = null)
     {
         Clear();
         PartyId = party.PartyId;
@@ -189,6 +192,7 @@ public sealed class GameSession
         Gold = party.Gold;
         Turn = party.Turn;
         IsDefeated = party.IsPartyDefeated;
+        MyName = myName;
         LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
     }
 
@@ -230,6 +234,7 @@ public sealed class GameSession
         ClearScenario();
         LastOutcome = null;
         Discussion = [];
+        MyName = null;
         LockStatus = [];
         PendingRoom = null;
         NarrationPending = false;

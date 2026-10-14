@@ -64,6 +64,10 @@ public sealed record PartyStateDto(
 
 public sealed record LockStatusDto(string Name, bool LockedIn);
 
+public sealed record JoinPartyRequest(string Name, CharacterClass Class);
+
+public sealed record JoinPartyResponse(string MemberName, PartyStateDto State);
+
 public sealed record UnlockRequest(Guid MemberId);
 
 public sealed record UnlockResponse(Guid PartyId, IReadOnlyList<LockStatusDto> LockStatus);

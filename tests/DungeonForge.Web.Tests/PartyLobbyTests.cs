@@ -98,37 +98,68 @@ public class PartyLobbyTests : TestContext
         cut.WaitForAssertion(() => cut.Find(".validation-message").TextContent.Should().NotBeNullOrWhiteSpace());
     }
 
+    private static string StateJson(string members) =>
+        $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{{members}}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false,"inviteCode":"K7F2-9QXM"}""";
+
+    private const string Conan = """{"name":"Conan","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}""";
+    private const string Zed = """{"name":"Zed","class":"mage","hp":16,"maxHp":16,"isDefeated":false}""";
+
     [Fact]
-    public void Join_Success_LoadsStateAndNavigatesToDungeon()
+    public void Join_Find_ShowsHeroesAlreadyInPartyWithoutNavigating()
     {
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false}""");
+        var handler = new FakeHandler(HttpStatusCode.OK, StateJson(Conan));
         var cut = Render(handler);
 
         cut.Find("input#join-id").Change(Id.ToString());
         cut.Find("button#join-party").Click();
 
-        cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
+        cut.WaitForAssertion(() => cut.Find("#join-members").TextContent.Should().Contain("Conan").And.Contain("Warrior"));
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
-        _session.PartyId.Should().Be(Id);
-        _session.TotalHp.Should().Be(9);
-        _session.Turn.Should().Be(3);
+        new Uri(Nav.Uri).AbsolutePath.Should().Be("/");
+        _session.HasParty.Should().BeFalse();
     }
 
     [Fact]
-    public void Join_ByInviteCode_UsesCodeEndpointAndStoresCode()
+    public void Join_Confirm_PostsChosenNameAndClass_AndRemembersMyHero()
     {
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            $$"""{"partyId":"{{Id}}","name":"Heroes","members":[{"name":"A","class":"warrior","hp":9,"maxHp":30,"isDefeated":false}],"createdAt":"2026-01-01T00:00:00+00:00","gold":12,"turn":3,"isPartyDefeated":false,"inviteCode":"K7F2-9QXM"}""");
+        var joined = false;
+        var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () => joined
+            ? $$"""{"memberName":"Zed","state":{{StateJson($"{Conan},{Zed}")}}}"""
+            : StateJson(Conan));
         var cut = Render(handler);
 
         cut.Find("input#join-id").Change(" k7f2-9qxm ");
         cut.Find("button#join-party").Click();
+        cut.WaitForElement("#join-preview");
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/parties/by-code/k7f2-9qxm");
+
+        joined = true;
+        cut.Find("input#join-name").Change("Zed");
+        cut.Find("select#join-class").Change("Mage");
+        cut.Find("button#confirm-join").Click();
 
         cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
-        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/parties/by-code/k7f2-9qxm");
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/parties/by-code/K7F2-9QXM/join");
+        handler.LastRequestBody.Should().Be("""{"name":"Zed","class":"mage"}""");
         _session.PartyId.Should().Be(Id);
         _session.InviteCode.Should().Be("K7F2-9QXM");
+        _session.PlayerName.Should().Be("Zed");
+        _session.PlayerClass.Should().Be(DungeonForge.Web.Models.CharacterClass.Mage);
+    }
+
+    [Fact]
+    public void Join_Confirm_WithoutName_ShowsErrorAndDoesNotPost()
+    {
+        var handler = new FakeHandler(HttpStatusCode.OK, StateJson(Conan));
+        var cut = Render(handler);
+        cut.Find("input#join-id").Change(Id.ToString());
+        cut.Find("button#join-party").Click();
+        cut.WaitForElement("#join-preview");
+
+        cut.Find("button#confirm-join").Click();
+
+        cut.Find(".join-error").TextContent.Should().Contain("hero name");
+        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
     }
 
     [Fact]

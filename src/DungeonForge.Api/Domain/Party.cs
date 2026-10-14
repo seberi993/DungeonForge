@@ -10,12 +10,16 @@ public sealed class Party
     {
         Id = id;
         Name = name;
-        Members = Array.AsReadOnly(members);
+        _members = members;
         CreatedAt = createdAt;
         InviteCode = inviteCode;
     }
 
     public const int MaxDiscussionEntries = 8;
+    public const int MaxMembers = 8;
+
+    // Copy-on-write: a join swaps in a new array, so unlocked readers always enumerate a stable roster.
+    private PartyMember[] _members;
 
     private int _gold;
     private int _turn;
@@ -37,7 +41,25 @@ public sealed class Party
 
     public int Turn { get { lock (SyncRoot) { return _turn; } } }
 
-    public IReadOnlyList<PartyMember> Members { get; }
+    public IReadOnlyList<PartyMember> Members => Array.AsReadOnly(Volatile.Read(ref _members));
+
+    // Adds a hero after creation. False when the roster is full or the name is taken (case-insensitive).
+    public bool TryAddMember(PartyMember member)
+    {
+        ArgumentNullException.ThrowIfNull(member);
+
+        lock (SyncRoot)
+        {
+            if (_members.Length >= MaxMembers
+                || _members.Any(m => string.Equals(m.Name, member.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            Volatile.Write(ref _members, [.. _members, member]);
+            return true;
+        }
+    }
 
     public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => m.IsDefeated); } } }
 

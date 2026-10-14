@@ -23,6 +23,9 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
 
+    public Task<ApiResult<JoinPartyResponse>> JoinPartyAsync(string inviteCode, string name, CharacterClass characterClass, CancellationToken ct = default) =>
+        SendAsync<JoinPartyResponse>(() => http.PostAsJsonAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}/join", new JoinPartyRequest(name, characterClass), Json, ct), ct);
+
     // No actions = request (or re-read) the pending scenario, sent without a body.
     // Actions + submitOnly = share input with the party; actions alone = resolve the turn.
     public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, IReadOnlyList<PlayerAction>? actions = null, bool submitOnly = false, CancellationToken ct = default) =>

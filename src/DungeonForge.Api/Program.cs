@@ -37,6 +37,7 @@ builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<CreatePartyHandler>();
 builder.Services.AddSingleton<GetPartyStateHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinByCode.JoinByCodeHandler>();
+builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.JoinParty.JoinPartyHandler>();
 builder.Services.TryAddSingleton<IRoller, RandomRoller>();
 builder.Services.AddSingleton<ExploreDungeonHandler>();
 builder.Services.AddSingleton<DungeonForge.Api.Features.Parties.UnlockTurn.UnlockTurnHandler>();
