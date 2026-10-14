@@ -563,7 +563,7 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
-    public void SpellbookToggle_OpensDrawer_AndSelectingSpellAppendsCastToActionBox()
+    public void SpellbookToggle_OpensDrawer_SpellsAreReadOnlyAndLeaveActionBoxUntouched()
     {
         var handler = new FakeHandler(HttpStatusCode.OK,
             """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]""");
@@ -574,9 +574,9 @@ public class DungeonRoomTests : TestContext
         cut.WaitForAssertion(() => cut.FindAll(".spell").Should().HaveCount(1));
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/classes/warrior/spells");
         cut.Find("#action-text").Input("Charge");
-        cut.Find(".spell").Click();
 
-        cut.Find("#action-text").GetAttribute("value").Should().Be("Charge. Cast Smite");
+        cut.FindAll(".spell button").Should().BeEmpty();
+        cut.Find("#action-text").GetAttribute("value").Should().Be("Charge");
     }
 
     [Fact]

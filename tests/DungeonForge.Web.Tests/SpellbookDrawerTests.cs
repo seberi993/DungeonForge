@@ -49,18 +49,14 @@ public class SpellbookDrawerTests : TestContext
     }
 
     [Fact]
-    public void SelectingSpell_FiresOnSelect()
+    public void Spells_AreReadOnly_NoButtonsAndHintToTypeThem()
     {
         Setup();
-        SpellDto? picked = null;
-        var cut = RenderComponent<SpellbookDrawer>(p => p
-            .Add(c => c.Class, CharacterClass.Mage).Add(c => c.Open, true)
-            .Add(c => c.OnSelect, s => picked = s));
+        var cut = RenderComponent<SpellbookDrawer>(p => p.Add(c => c.Class, CharacterClass.Mage).Add(c => c.Open, true));
         cut.WaitForAssertion(() => cut.FindAll(".spell").Should().HaveCount(2));
 
-        cut.FindAll(".spell").ToList()[1].Click();
-
-        picked!.Name.Should().Be("Frost Nova");
+        cut.FindAll(".spell button").Should().BeEmpty();
+        cut.Find(".spellbook-hint").TextContent.Should().Contain("I cast Fireball");
     }
 
     [Fact]

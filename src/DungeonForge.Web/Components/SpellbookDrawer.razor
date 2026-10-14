@@ -20,16 +20,15 @@
         }
         else
         {
+            <p class="spellbook-hint">Read-only. Type it in your action, e.g. "I cast @(_spells.FirstOrDefault()?.Name ?? "a spell")".</p>
             <ul class="spell-list">
                 @foreach (var spell in _spells)
                 {
-                    <li>
-                        <button type="button" class="spell" @onclick="() => OnSelect.InvokeAsync(spell)">
-                            <span class="spell-name">@spell.Name</span>
-                            <span class="spell-element element-@spell.Element.ToString().ToLowerInvariant()">@spell.Element</span>
-                            <span class="spell-mana">Mana @spell.ManaCost</span>
-                            <span class="spell-description">@spell.Description</span>
-                        </button>
+                    <li class="spell">
+                        <span class="spell-name">@spell.Name</span>
+                        <span class="spell-element element-@spell.Element.ToString().ToLowerInvariant()">@spell.Element</span>
+                        <span class="spell-mana">Mana @spell.ManaCost</span>
+                        <span class="spell-description">@spell.Description</span>
                     </li>
                 }
             </ul>
@@ -44,7 +43,6 @@
 
     [Parameter] public CharacterClass Class { get; set; }
     [Parameter] public bool Open { get; set; }
-    [Parameter] public EventCallback<SpellDto> OnSelect { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
     protected override async Task OnParametersSetAsync()

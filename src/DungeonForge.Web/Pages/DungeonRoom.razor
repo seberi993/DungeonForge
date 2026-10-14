@@ -39,7 +39,7 @@
     </div>
 
     <DungeonMinimap Log="Session.Log" Members="Session.Members" PendingRoom="Session.PendingRoom" />
-    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnSelect="CastSpell" OnClose="() => _spellbookOpen = false" />
+    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" />
 
     @if (_offline)
     {
@@ -292,16 +292,6 @@
 
     private void OnTurnLockUpdated(Guid partyId, IReadOnlyList<LockStatusDto> status) =>
         Dispatch(() => Session.ApplyLockStatus(partyId, status));
-
-    private void CastSpell(SpellDto spell)
-    {
-        if (IsLocked) return;
-        var cast = $"Cast {spell.Name}";
-        var text = _actionText.Trim();
-        var combined = text.Length == 0 ? cast : $"{text}. {cast}";
-        _actionText = combined.Length <= MaxActionLength ? combined : cast;
-        _spellbookOpen = false;
-    }
 
     private Task ExploreAsync() => SendAsync(null);
 
