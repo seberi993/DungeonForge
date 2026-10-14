@@ -1,0 +1,6 @@
+**/bin/
+**/obj/
+.git/
+.claude/
+tests/
+src/DungeonForge.Web/
