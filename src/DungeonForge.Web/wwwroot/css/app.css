@@ -126,3 +126,9 @@ details.card > summary, details.audit > summary { cursor: pointer; color: var(--
 details.audit { margin: .5rem 0; }
 .log-scenario { color: var(--parchment-dim); margin: .25rem 0; }
 .spellbook-hint { color: var(--parchment-dim); font-size: .9rem; margin: .25rem 0 .5rem; }
+
+.hp-bar { height: .5rem; margin-top: .25rem; background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.hp-fill { height: 100%; background: var(--success); transition: width .6s ease, background-color .3s ease; }
+.hp-fill.hp-low { background: var(--crimson-bright); animation: hp-pulse 1s ease-in-out infinite; }
+@keyframes hp-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .hp-fill, .hp-fill.hp-low { transition: none; animation: none; } }

@@ -27,6 +27,9 @@
             var memberClass = "member" + (member.IsDefeated ? " defeated-member" : "") + (member.Name == Session.PlayerName ? " me" : "");
             <li id="member-@i" class="@memberClass">
                 <span class="member-name">@member.Name</span> (@member.Class) <span class="member-hp">@member.Hp/@member.MaxHp</span>
+                <div class="hp-bar" role="progressbar" aria-valuemin="0" aria-valuenow="@member.Hp" aria-valuemax="@member.MaxHp">
+                    <div class="@HpFillClass(member)" style="width:@HpPercent(member)%"></div>
+                </div>
             </li>
         }
     </ul>
@@ -174,6 +177,11 @@
 }
 
 @code {
+    private static int HpPercent(MemberDto m) =>
+        m.MaxHp <= 0 ? 0 : (int)Math.Round(Math.Clamp(m.Hp, 0, m.MaxHp) * 100.0 / m.MaxHp);
+
+    private static string HpFillClass(MemberDto m) => HpPercent(m) <= 30 ? "hp-fill hp-low" : "hp-fill";
+
     private bool _busy;
     private string? _error;
     private bool _scroll;

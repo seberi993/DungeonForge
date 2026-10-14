@@ -105,6 +105,30 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
+    public void MemberList_ShowsAnHpBarPerMember_FullAtStart()
+    {
+        var cut = Render(new FakeHandler(HttpStatusCode.OK));
+
+        var bars = cut.FindAll("#members .hp-fill");
+        bars.Should().HaveCount(2);
+        bars.Should().OnlyContain(b => b.GetAttribute("style")!.Contains("width:100%") && !b.ClassList.Contains("hp-low"));
+        cut.Find("#member-0 .hp-bar").GetAttribute("aria-valuenow").Should().Be("30");
+        cut.Find("#member-0 .hp-bar").GetAttribute("aria-valuemax").Should().Be("30");
+    }
+
+    [Fact]
+    public void Resolve_ShrinksTheHitMembersBar_AndTurnsItRedWhenLow()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, ExploreJson(1, "combat", "Conan", 22, 0, "Clash", 0)));
+
+        Resolve(cut);
+
+        cut.WaitForAssertion(() => cut.Find("#member-0 .hp-fill").GetAttribute("style").Should().Contain("width:27%"));
+        cut.Find("#member-0 .hp-fill").ClassList.Should().Contain("hp-low");
+        cut.Find("#member-1 .hp-fill").ClassList.Should().NotContain("hp-low");
+    }
+
+    [Fact]
     public void Explore_Conflict_ShowsDefeatedAndOffersNewParty()
     {
         var cut = Render(new FakeHandler(HttpStatusCode.Conflict));
