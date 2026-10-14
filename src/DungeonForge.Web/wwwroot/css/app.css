@@ -89,9 +89,29 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .typewriter.typing::after { content: "\2588"; color: var(--gold); animation: tw-blink 1s steps(2, start) infinite; }
 @keyframes tw-blink { to { visibility: hidden; } }
 .outcome { margin: .75rem 0; padding: .5rem 1rem; border-left: 3px solid var(--parchment-dim); font-style: italic; }
-.ascii-scene { margin: 0 0 .5rem; padding: .5rem 1rem; min-height: 8.5em; background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--gold); font: 1rem/1.15 ui-monospace, Consolas, monospace; overflow-x: auto; }
+/* The hall: 66 columns of art, sized so the whole width fits the column. */
+.ascii-stage { margin: .75rem 0; }
+.ascii-scene { margin: 0; padding: .5rem; background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--parchment-dim); font: clamp(7px, calc((100vw - 4.5rem) / 41), 16px)/1.1 ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; white-space: pre; overflow-x: auto; user-select: none; }
+.stage-caption { margin: .4rem 0 0; min-height: 2.9em; display: flex; flex-wrap: wrap; gap: .1rem .75rem; align-items: baseline; }
+.stage-who { font-family: var(--font-display); color: var(--gold); letter-spacing: .06em; text-transform: uppercase; font-size: .8rem; }
+.stage-say { flex: 1 1 14rem; min-width: 0; }
+.stage-tag { font: 700 .9rem ui-monospace, Consolas, monospace; letter-spacing: .05em; padding: .15rem .5rem; border: 1px solid currentColor; border-radius: 4px; }
+.st-z1 { color: var(--parchment-dim); }
+.st-z2 { color: color-mix(in srgb, var(--parchment-dim) 82%, var(--bg-panel-2)); }
+.st-z3 { color: color-mix(in srgb, var(--parchment-dim) 64%, var(--bg-panel-2)); }
+.st-z4 { color: color-mix(in srgb, var(--parchment-dim) 48%, var(--bg-panel-2)); }
+.st-z5 { color: color-mix(in srgb, var(--parchment-dim) 34%, var(--bg-panel-2)); }
+.st-z6 { color: color-mix(in srgb, var(--parchment-dim) 22%, var(--bg-panel-2)); }
+.st-torch, .st-mk { color: var(--gold-bright); }
+.st-glow { color: #a9742e; }
+.st-warrior { color: #ff8f70; } .st-paladin { color: #f0c674; } .st-mage { color: #8fb5ff; } .st-necromancer { color: #c39be0; }
+.st-druid { color: #8fcf7a; } .st-priest { color: #ffe9a0; } .st-bard { color: #f09ad8; }
+.st-foe { color: #8bd45e; } .st-chest { color: var(--gold); }
+.st-name { color: var(--parchment); } .st-act { font-weight: 700; text-decoration: underline; }
+.st-hpG { color: var(--success); } .st-hpL { color: var(--crimson-bright); }
+.st-fxr { color: #ff6b5a; } .st-fxo { color: #ff9d4d; } .st-fxy { color: var(--gold-bright); } .st-fxg { color: #7bd88f; } .st-fxc { color: #5fd3d0; } .st-fxd { color: var(--parchment-dim); }
 .members .me .member-name { color: var(--gold-bright); font-weight: 700; }
-details.card > summary, details.map-panel > summary, details.audit > summary { cursor: pointer; color: var(--parchment-dim); }
-details.map-panel, details.audit { margin: .5rem 0; }
+details.card > summary, details.audit > summary { cursor: pointer; color: var(--parchment-dim); }
+details.audit { margin: .5rem 0; }
 .log-scenario { color: var(--parchment-dim); margin: .25rem 0; }
 .spellbook-hint { color: var(--parchment-dim); font-size: .9rem; margin: .25rem 0 .5rem; }

@@ -1,0 +1,84 @@
+@implements IDisposable
+@using DungeonForge.Web.Models
+@using DungeonForge.Web.Components.Stage
+
+@* The hall at the heart of the screen: shows the room, acts out each member's plan when a turn resolves, and keeps
+   the scene alive while the narrator writes what happens next. All drawing lives in StageDirector. *@
+<div id="ascii-stage" class="ascii-stage">
+    <pre class="ascii-scene" role="img" aria-label="Animated view of the dungeon hall">@((MarkupString)_frame.Html)</pre>
+    <p class="stage-caption">
+        <span class="stage-who">@_frame.Caption.Who</span>
+        <span class="stage-say">@_frame.Caption.Say</span>
+        @if (_frame.Caption.Tag.Length > 0)
+        {
+            <span class="stage-tag @_frame.Caption.TagClass">@_frame.Caption.Tag</span>
+        }
+    </p>
+</div>
+
+@code {
+    private readonly StageDirector _director = new();
+    private StageFrame _frame = null!;
+    private CancellationTokenSource? _cts;
+
+    [Parameter] public IReadOnlyList<MemberDto> Members { get; set; } = [];
+    // The turn the current room belongs to: a new turn plays the camera push-in even when the room looks the same.
+    [Parameter] public int Turn { get; set; }
+    [Parameter] public RoomType? Room { get; set; }
+    [Parameter] public string? Scene { get; set; }
+    [Parameter] public StageShow? Show { get; set; }
+    [Parameter] public bool NarrationPending { get; set; }
+    [Parameter] public EventCallback<int> OnShowComplete { get; set; }
+    // Plays the show faster than real time (tests).
+    [Parameter] public double Speed { get; set; } = 1;
+    [Parameter] public TimeSpan Interval { get; set; } = TimeSpan.FromMilliseconds(80);
+
+    protected override void OnInitialized()
+    {
+        _director.ShowFinished += OnShowFinished;
+        _cts = new CancellationTokenSource();
+        _frame = _director.Frame();
+        _ = AnimateAsync(_cts.Token);
+    }
+
+    protected override void OnParametersSet()
+    {
+        _director.SetHeroes(Members);
+        _director.NarrationPending = NarrationPending;
+        // The show first: a new room that arrives with it must wait until the actors are done.
+        if (Show is { } show) _director.StartShow(show);
+        _director.SetRoom(Turn, Room, Scene);
+        _frame = _director.Frame();
+    }
+
+    private void OnShowFinished(int turn) => _ = InvokeAsync(() => OnShowComplete.InvokeAsync(turn));
+
+    private async Task AnimateAsync(CancellationToken ct)
+    {
+        try
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var last = clock.Elapsed;
+            using var timer = new PeriodicTimer(Interval);
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var now = clock.Elapsed;
+                // Cap the step so a throttled background tab resumes mid-show instead of skipping it.
+                _director.Advance(Math.Min(250, (now - last).TotalMilliseconds) * Speed);
+                last = now;
+                _frame = _director.Frame();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _director.ShowFinished -= OnShowFinished;
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

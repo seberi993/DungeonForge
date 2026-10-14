@@ -350,7 +350,8 @@ public sealed class ExploreDungeonHandler(
 
             var response = new ExploreResponse(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
-                pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion);
+                pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
+                Beats: ToBeats(party, discussion), Success: success);
             var context = new NarrationContext(pending.Room, party.Name, turnBefore, IsWounded(party))
             {
                 Actions = discussion,
@@ -360,6 +361,13 @@ public sealed class ExploreDungeonHandler(
             return (new ExploreResult(ExploreStatus.Explored, response), context, success, PartyMapping.ToResponse(party.Snapshot()));
         }
     }
+
+    private static ActionBeat[] ToBeats(Party party, IReadOnlyList<PlayerAction> discussion) =>
+        [.. discussion.Select(action =>
+        {
+            var characterClass = party.Members.FirstOrDefault(m => m.Name == action.Name)?.Class ?? CharacterClass.Warrior;
+            return new ActionBeat(action.Name, characterClass, ActionVerbs.Pick(characterClass, action.Text), action.Text);
+        })];
 
     private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidRequest, Error: error);
 

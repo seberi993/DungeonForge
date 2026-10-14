@@ -1,5 +1,6 @@
 using Bunit;
 using DungeonForge.Web.Components;
+using DungeonForge.Web.Components.Stage;
 using DungeonForge.Web.Models;
 using DungeonForge.Web.Services;
 using FluentAssertions;
@@ -77,26 +78,48 @@ public class FocusedUiTests : TestContext
         cut.FindAll(".tw-rest").Should().BeEmpty();
     }
 
-    // ---- AsciiScene ----
+    // ---- AsciiStage ----
+
+    private static readonly MemberDto[] Heroes = [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)];
 
     [Fact]
-    public void AsciiScene_UsesTagArt_FallsBackToRoomArt()
+    public void AsciiStage_DrawsTheHall_AndTheTagArtAtTheFarEnd()
     {
-        var tagged = RenderComponent<AsciiScene>(p => p.Add(c => c.Scene, "dragon").Add(c => c.Room, RoomType.Chest));
-        tagged.Find("pre").GetAttribute("aria-label").Should().Contain("dragon");
-
-        var fallback = RenderComponent<AsciiScene>(p => p.Add(c => c.Scene, "unicorn").Add(c => c.Room, RoomType.Chest));
-        fallback.Find("pre").GetAttribute("aria-label").Should().Contain("chest");
+        var cut = RenderComponent<AsciiStage>(p => p
+            .Add(c => c.Members, Heroes).Add(c => c.Room, RoomType.Combat).Add(c => c.Scene, "skeleton"));
+        cut.Find("pre").GetAttribute("role").Should().Be("img");
+        cut.Find("pre").TextContent.TrimEnd('\n').Split('\n').Should().HaveCount(Corridor.Height);
+        cut.Find(".stage-caption").TextContent.Should().Contain("Combat");
     }
 
     [Fact]
-    public void AsciiScene_AnimatesBetweenFrames()
+    public void AsciiStage_AnimatesWhileIdle()
     {
-        var cut = RenderComponent<AsciiScene>(p => p
-            .Add(c => c.Scene, "ghost").Add(c => c.Interval, TimeSpan.FromMilliseconds(20)));
-        var first = cut.Find("pre").TextContent;
+        var cut = RenderComponent<AsciiStage>(p => p
+            .Add(c => c.Members, Heroes).Add(c => c.Room, RoomType.Combat).Add(c => c.Scene, "ghost")
+            .Add(c => c.Interval, TimeSpan.FromMilliseconds(20)));
+        var first = cut.Find("pre").InnerHtml;
 
-        cut.WaitForAssertion(() => cut.Find("pre").TextContent.Should().NotBe(first), TimeSpan.FromSeconds(3));
+        cut.WaitForAssertion(() => cut.Find("pre").InnerHtml.Should().NotBe(first), TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public void AsciiStage_ActsOutTheShow_ThenReportsItDone()
+    {
+        var done = new List<int>();
+        var show = new StageShow(3, RoomType.Combat, "goblin",
+            [new ActionBeat("Conan", CharacterClass.Warrior, ActionVerb.Strike, "I charge the goblin")],
+            true, null, 0, 0);
+        var cut = RenderComponent<AsciiStage>(p => p
+            .Add(c => c.Members, Heroes).Add(c => c.Turn, 3).Add(c => c.Show, show).Add(c => c.Speed, 60)
+            .Add(c => c.Interval, TimeSpan.FromMilliseconds(20))
+            .Add(c => c.OnShowComplete, (int turn) => done.Add(turn)));
+
+        cut.WaitForAssertion(() => done.Should().Equal(3), TimeSpan.FromSeconds(5));
+        // Re-rendering with the same show does not replay it.
+        cut.SetParametersAndRender(p => p.Add(c => c.Show, show));
+        Thread.Sleep(150);
+        done.Should().Equal(3);
     }
 
     [Fact]

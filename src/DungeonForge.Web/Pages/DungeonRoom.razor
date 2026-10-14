@@ -39,10 +39,8 @@
         </div>
     </details>
 
-    <details class="map-panel">
-        <summary>Map</summary>
-        <DungeonMinimap Log="Session.Log" Members="Session.Members" PendingRoom="Session.PendingRoom" />
-    </details>
+    <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene"
+                Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" />
     <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" />
 
     @if (_offline)
@@ -50,7 +48,11 @@
         <p class="offline">Live updates offline. You can still explore.</p>
     }
 
-    @if (Session.NarrationPending)
+    @if (Session.Show is not null && (ShowActive || Session.NarrationPending))
+    {
+        @* The stage acts the turn out and then waits for the narrator; the text below appears once it is done. *@
+    }
+    else if (Session.NarrationPending)
     {
         <p id="narration-loading" class="outcome loading">The dungeon master is narrating...</p>
     }
@@ -63,10 +65,12 @@
     {
         <button id="explore" disabled>Explore Room</button>
     }
+    else if (ShowActive)
+    {
+    }
     else if (Session.HasScenario)
     {
         <div id="scenario-panel" class="scenario-panel">
-            <AsciiScene Scene="Session.Scene" Room="Session.PendingRoom" />
             <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
@@ -94,7 +98,10 @@
     }
     else if (Session.ScenarioPending)
     {
-        <p id="scenario-pending" class="scenario loading">The dungeon shifts...</p>
+        @if (Session.Show is null)
+        {
+            <p id="scenario-pending" class="scenario loading">The dungeon shifts...</p>
+        }
     }
     else
     {
@@ -147,6 +154,12 @@
     private bool _copied;
     private string _actionText = "";
     private CancellationTokenSource? _narrationCts;
+
+    // The stage tells us when it has acted out a turn; until then the outcome and next scenario stay hidden.
+    private int _showDoneTurn;
+    private bool ShowActive => Session.Show is { } show && show.Turn > _showDoneTurn;
+
+    private void OnShowComplete(int turn) => _showDoneTurn = Math.Max(_showDoneTurn, turn);
 
     [Parameter] public TimeSpan NarrationTimeout { get; set; } = TimeSpan.FromSeconds(20);
 

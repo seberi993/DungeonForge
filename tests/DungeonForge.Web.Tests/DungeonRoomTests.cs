@@ -584,38 +584,39 @@ public class DungeonRoomTests : TestContext
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
 
-        cut.Find("#scenario-panel .ascii-scene").Should().NotBeNull();
+        cut.Find("#ascii-stage .ascii-scene").Should().NotBeNull();
+        cut.Find("#scenario-panel").Should().NotBeNull();
         cut.Find("details#audit").HasAttribute("open").Should().BeFalse();
         cut.Find("details#audit summary").TextContent.Should().Contain("0 rooms");
         cut.Find("#member-0").ClassList.Should().Contain("me");
     }
 
     [Fact]
-    public void NarrationReady_WithNextRoomType_ShowsUnexplored_PendingTileWithMarker()
+    public void TurnWithBeats_ActsItOutOnTheStage_AndHoldsTheTextUntilDone()
     {
-        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK, PendingResolveJson()));
-        Resolve(cut);
-        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+        ExploreResponse resolved = new(Id, 1, RoomType.Combat, "Conan", 3, 0, "Clash", 0, false, NarrationPending: true,
+            Beats: [new ActionBeat("Conan", CharacterClass.Warrior, ActionVerb.Strike, "I charge the troll"), new ActionBeat("Merlin", CharacterClass.Mage, ActionVerb.Cast, "A fireball")],
+            Success: true);
 
-        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "The door opens.", "A vast hall.", RoomType.Chest)));
+        cut.InvokeAsync(() => _hub.RaiseTurn(resolved));
+        cut.InvokeAsync(() => _hub.RaiseNarration(new NarrationReady(Id, 1, "The troll falls.", "A **door** looms.", RoomType.Puzzle, "door")));
 
-        cut.WaitForAssertion(() =>
-        {
-            var tile = cut.FindAll(".minimap .tile").ToList().Last();
-            tile.ClassList.Should().Contain("unexplored");
-            tile.QuerySelector(".unknown")!.TextContent.Should().Be("?");
-            tile.QuerySelector(".marker").Should().BeNull();
-        });
+        cut.WaitForAssertion(() => cut.Find(".stage-caption").TextContent.Should().Contain("Conan").And.Contain("I charge the troll"));
+        cut.FindAll("#last-outcome").Should().BeEmpty();
+        cut.FindAll("#scenario-panel").Should().BeEmpty();
+        cut.FindAll("#narration-loading").Should().BeEmpty();
+        cut.FindAll("#ascii-stage").Should().HaveCount(1);
     }
 
     [Fact]
-    public void Minimap_RendersTilesForLog_AndTokensPerMember()
+    public void TurnWithoutBeats_KeepsTheClassicFlow()
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
-        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Chest, null, 0, 7, "Remote", 7)));
 
-        cut.WaitForAssertion(() => cut.FindAll(".minimap .tile").Should().NotBeEmpty());
-        cut.FindAll(".minimap .token").Should().HaveCount(2);
+        cut.InvokeAsync(() => _hub.RaiseTurn(Turn(1, RoomType.Combat, "Conan", 3, 0, "Clash", 0) with { NarrationPending = true }));
+
+        cut.WaitForAssertion(() => cut.Find("#narration-loading"));
     }
 
     [Fact]

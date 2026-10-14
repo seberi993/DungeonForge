@@ -43,6 +43,8 @@ public sealed class GameSession
     public IReadOnlyList<LockStatusDto> LockStatus { get; private set; } = [];
     public int LockedCount => LockStatus.Count(s => s.LockedIn);
     public RoomType? PendingRoom { get; private set; }
+    // The last resolved turn, acted out on the stage; null when it had no per-member actions (older servers).
+    public StageShow? Show { get; private set; }
     public CharacterClass PlayerClass => Me?.Class ?? CharacterClass.Warrior;
 
     public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
@@ -160,6 +162,7 @@ public sealed class GameSession
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
         var finishedScenario = Scenario;
+        var finishedScene = Scene;
         ClearScenario();
         LastOutcome = result.LastOutcome;
         Discussion = [];
@@ -171,6 +174,9 @@ public sealed class GameSession
         IsDefeated = result.IsPartyDefeated;
         ScenarioPending = !IsDefeated;
         ApplyDamage(result.TargetName, result.Damage);
+        Show = result.Beats is { Count: > 0 } beats
+            ? new StageShow(result.Turn, result.RoomType, finishedScene, beats, result.Success, result.TargetName, result.Damage, result.GoldFound)
+            : null;
         _log.Add(new LogEntry(result.Turn, result.RoomType, result.TargetName, result.Damage, result.GoldFound, result.FlavorEvent, result.LastOutcome, finishedScenario));
         if (_earlyNarration is { } early && early.Turn == result.Turn && NarrationPending)
         {
@@ -244,6 +250,7 @@ public sealed class GameSession
         Discussion = [];
         LockStatus = [];
         PendingRoom = null;
+        Show = null;
         NarrationPending = false;
         _narrationTurn = 0;
         _earlyNarration = null;

@@ -41,7 +41,20 @@ public sealed record ExploreResponse(
     bool NarrationPending = false,
     string? Scenario = null,
     bool ScenarioPending = false,
-    IReadOnlyList<LockStatusDto>? LockStatus = null);
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    IReadOnlyList<ActionBeat>? Beats = null,
+    bool Success = false);
+
+public enum ActionVerb
+{
+    Strike,
+    Cast,
+    Stab,
+    Heal
+}
+
+// One member’s on-screen action for a resolved turn; the stage plays these in order.
+public sealed record ActionBeat(string Name, CharacterClass Class, ActionVerb Verb, string Text);
 
 public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 

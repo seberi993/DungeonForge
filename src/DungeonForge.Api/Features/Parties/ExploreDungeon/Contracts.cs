@@ -80,7 +80,20 @@ public sealed record ExploreResponse(
     IReadOnlyList<PlayerAction>? Discussion = null,
     bool NarrationPending = false,
     bool ScenarioPending = false,
-    IReadOnlyList<LockStatusDto>? LockStatus = null);
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    IReadOnlyList<ActionBeat>? Beats = null,
+    bool Success = false);
+
+// What one member does on screen when the turn resolves; the client animates these in order. Purely presentational.
+public enum ActionVerb
+{
+    Strike,
+    Cast,
+    Stab,
+    Heal,
+}
+
+public sealed record ActionBeat(string Name, CharacterClass Class, ActionVerb Verb, string Text);
 
 // Phase two of a resolved turn. Turn matches ExploreResponse.Turn of the resolve response. NextScenario/NextRoomType are
 // null when the party was defeated (there is no next encounter).
