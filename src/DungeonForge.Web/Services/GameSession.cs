@@ -53,6 +53,58 @@ public sealed class GameSession
     public StageShow? Show { get; private set; }
     public CharacterClass PlayerClass => Me?.Class ?? CharacterClass.Warrior;
 
+    // ---- Mana: a client-side estimate for this player's hero only (the server has no mana pool). ----
+
+    public const int ManaRegenPerTurn = 10;
+
+    public static int MaxManaFor(CharacterClass cls) => cls switch
+    {
+        CharacterClass.Warrior => 20,
+        CharacterClass.Paladin => 40,
+        CharacterClass.Bard => 50,
+        CharacterClass.Druid => 60,
+        CharacterClass.Priest => 60,
+        CharacterClass.Necromancer => 70,
+        CharacterClass.Mage => 80,
+        _ => 40
+    };
+
+    private int? _mana;
+    private int _reservedMana;
+    private IReadOnlyList<SpellDto> _spells = [];
+
+    public int MaxMana => MaxManaFor(PlayerClass);
+    public int Mana => Math.Clamp(_mana ?? MaxMana, 0, MaxMana);
+
+    public bool HasSpells => _spells.Count > 0;
+
+    public void SetSpells(IReadOnlyList<SpellDto> spells) => _spells = [.. spells];
+
+    // Spends the cost of the (longest-named) spell mentioned in the action; a later lock-in replaces an earlier one.
+    public int ReserveMana(string actionText)
+    {
+        ReleaseMana();
+        var spell = _spells
+            .Where(s => actionText.Contains(s.Name, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(s => s.Name.Length)
+            .FirstOrDefault();
+        if (spell is null) return 0;
+
+        var before = Mana;
+        _mana = Math.Max(0, before - spell.ManaCost);
+        _reservedMana = before - _mana.Value;
+        Changed?.Invoke();
+        return spell.ManaCost;
+    }
+
+    public void ReleaseMana()
+    {
+        if (_reservedMana == 0) return;
+        _mana = Math.Min(MaxMana, Mana + _reservedMana);
+        _reservedMana = 0;
+        Changed?.Invoke();
+    }
+
     public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
     {
         if (partyId != PartyId) return false;
@@ -168,6 +220,8 @@ public sealed class GameSession
     {
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
+        _reservedMana = 0;
+        _mana = Math.Min(MaxMana, Mana + ManaRegenPerTurn);
         Tally(result);
         var finishedScenario = Scenario;
         var finishedScene = Scene;
@@ -325,6 +379,9 @@ public sealed class GameSession
         Floor = 1;
         BossHp = BossMaxHp = 0;
         IsDefeated = false;
+        _mana = null;
+        _reservedMana = 0;
+        _spells = [];
         _passes.Clear();
         _roomsWon = _roomsLost = _crits = _fumbles = _worstHit = 0;
         _worstHitName = null;

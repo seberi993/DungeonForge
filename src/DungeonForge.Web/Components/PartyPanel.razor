@@ -1,0 +1,46 @@
+@using DungeonForge.Web.Models
+
+<ul id="members" class="members party-panel">
+    @for (var i = 0; i < Members.Count; i++)
+    {
+        var member = Members[i];
+        var isMe = member.Name == MyName;
+        var css = "member" + (member.IsDefeated ? " defeated-member" : "") + (isMe ? " me" : "") + " class-" + member.Class.ToString().ToLowerInvariant();
+        <li id="member-@i" class="@css">
+            <div class="member-head">
+                <span class="member-icon" aria-hidden="true">@((MarkupString)Icon(member.Class))</span>
+                <span class="member-name">@member.Name</span>
+                <span class="member-class">@member.Class</span>
+                @if (member.IsDefeated)
+                {
+                    <span class="member-ko">KO</span>
+                }
+            </div>
+            <StatBar Kind="hp" Label="HP" Value="member.Hp" Max="member.MaxHp" />
+            @if (isMe && MaxMana > 0)
+            {
+                <StatBar Kind="mana" Label="MP" Value="Mana" Max="MaxMana" />
+            }
+        </li>
+    }
+</ul>
+
+@code {
+    [Parameter] public IReadOnlyList<MemberDto> Members { get; set; } = [];
+    [Parameter] public string? MyName { get; set; }
+    // Mana is tracked for the local player's hero only.
+    [Parameter] public int Mana { get; set; }
+    [Parameter] public int MaxMana { get; set; }
+
+    private static string Icon(CharacterClass cls) => cls switch
+    {
+        CharacterClass.Warrior => "&#9876;&#65039;",
+        CharacterClass.Mage => "&#128302;",
+        CharacterClass.Druid => "&#127807;",
+        CharacterClass.Paladin => "&#128737;&#65039;",
+        CharacterClass.Priest => "&#10024;",
+        CharacterClass.Necromancer => "&#128128;",
+        CharacterClass.Bard => "&#127925;",
+        _ => "&#9733;"
+    };
+}

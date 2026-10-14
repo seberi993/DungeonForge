@@ -12,67 +12,70 @@
 
 @if (Session.HasParty)
 {
-    <h1>Dungeon</h1>
-    <div class="stats">
-        <span id="stat-name">Party: @Session.Name</span>
-        <span id="stat-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
-        <span id="stat-gold">Gold: @Session.Gold</span>
-        <span id="stat-turn">Turn: @Session.Turn</span>
-        <span id="stat-floor">Floor: @Session.Floor</span>
-        @if (Session.BossMaxHp > 0)
-        {
-            <span id="stat-boss">Boss: @Session.BossHp/@Session.BossMaxHp</span>
-        }
-        <button id="toggle-sound" type="button" class="link-button" aria-pressed="@_muted.ToString().ToLowerInvariant()" @onclick="ToggleSoundAsync">@(_muted ? "Sound off" : "Sound on")</button>
+    <div class="room">
+    <header class="game-toolbar">
+        <div class="toolbar-title">
+            <h1>Dungeon</h1>
+            <span id="stat-name" class="party-name">Party: @Session.Name</span>
+        </div>
+        <nav class="toolbar-actions" aria-label="Game menu">
+            <button id="toggle-spellbook" type="button" class="btn btn-secondary" @onclick="() => _spellbookOpen = !_spellbookOpen"><span aria-hidden="true">📖</span> Spellbook</button>
+            <details class="menu invite">
+                <summary class="btn btn-secondary"><span aria-hidden="true">📨</span> Invite</summary>
+                <div class="menu-panel">
+                    <label for="invite-code">Share with friends so they can join</label>
+                    <div class="invite-row">
+                        <input id="invite-code" class="invite-code" readonly value="@Session.InviteCode" @onfocus="SelectInvite" />
+                        <button id="copy-invite" class="btn btn-primary" @onclick="CopyInviteAsync">@(_copied ? "Copied!" : "Copy")</button>
+                    </div>
+                </div>
+            </details>
+            @if (_local is { State: not (LocalNarratorState.Unknown or LocalNarratorState.Unsupported) })
+            {
+                <details class="menu narrator-menu">
+                    <summary class="btn btn-secondary"><span aria-hidden="true">🤖</span> Narrator</summary>
+                    <div id="local-narrator" class="menu-panel local-narrator">
+                        @switch (_local.State)
+                        {
+                            case LocalNarratorState.Idle:
+                                <button id="enable-local-narrator" type="button" class="btn btn-primary" @onclick="_local.EnableAsync">Write the narration on my own GPU</button>
+                                <small>Optional: a one-time ~1 GB download that stays in your browser. Needs a WebGPU browser (recent Chrome or Edge).</small>
+                                break;
+                            case LocalNarratorState.Downloading:
+                                <label for="local-narrator-progress">Summoning the narrator: @_local.Status</label>
+                                <progress id="local-narrator-progress" max="100" value="@_local.Progress"></progress>
+                                break;
+                            case LocalNarratorState.Ready:
+                                <span id="local-narrator-ready">@(_localWriting ? "The local narrator is writing..." : "Local narrator ready")</span>
+                                break;
+                            case LocalNarratorState.Failed:
+                                <span class="error">The local narrator could not start: @_local.Status</span>
+                                <button id="retry-local-narrator" type="button" class="btn btn-primary" @onclick="_local.EnableAsync">Try again</button>
+                                break;
+                        }
+                    </div>
+                </details>
+            }
+            <button id="toggle-sound" type="button" class="btn btn-ghost" aria-pressed="@_muted.ToString().ToLowerInvariant()" @onclick="ToggleSoundAsync"><span aria-hidden="true">@(_muted ? "🔇" : "🔊")</span> @(_muted ? "Sound off" : "Sound on")</button>
+        </nav>
+    </header>
+
+    <div class="hud" role="status">
+        <span id="stat-floor" class="hud-chip chip-floor">Floor: @Session.Floor</span>
+        <span id="stat-turn" class="hud-chip chip-turn">Turn: @Session.Turn</span>
+        <span id="stat-gold" class="hud-chip chip-gold">Gold: @Session.Gold</span>
+        <span id="stat-hp" class="hud-chip chip-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
     </div>
 
-    <ul id="members" class="members">
-        @for (var i = 0; i < Session.Members.Count; i++)
+    <div class="room-grid">
+    <aside class="room-side">
+        <PartyPanel Members="Session.Members" MyName="@Session.PlayerName" Mana="Session.Mana" MaxMana="Session.MaxMana" />
+        @if (Session.BossMaxHp > 0)
         {
-            var member = Session.Members[i];
-            var memberClass = "member" + (member.IsDefeated ? " defeated-member" : "") + (member.Name == Session.PlayerName ? " me" : "");
-            <li id="member-@i" class="@memberClass">
-                <span class="member-name">@member.Name</span> (@member.Class) <span class="member-hp">@member.Hp/@member.MaxHp</span>
-                <div class="hp-bar" role="progressbar" aria-valuemin="0" aria-valuenow="@member.Hp" aria-valuemax="@member.MaxHp">
-                    <div class="@HpFillClass(member)" style="width:@HpPercent(member)%"></div>
-                </div>
-            </li>
+            <div id="stat-boss" class="boss-panel"><StatBar Kind="boss" Label="BOSS" Value="Session.BossHp" Max="Session.BossMaxHp" /></div>
         }
-    </ul>
-
-    <details class="card invite">
-        <summary>Invite code</summary>
-        <label for="invite-code">Share with friends so they can join</label>
-        <div class="invite-row">
-            <input id="invite-code" class="invite-code" readonly value="@Session.InviteCode" @onfocus="SelectInvite" />
-            <button id="copy-invite" @onclick="CopyInviteAsync">@(_copied ? "Copied!" : "Copy")</button>
-        </div>
-    </details>
-
-    @if (_local is { State: not (LocalNarratorState.Unknown or LocalNarratorState.Unsupported) })
-    {
-        <div id="local-narrator" class="card local-narrator">
-            @switch (_local.State)
-            {
-                case LocalNarratorState.Idle:
-                    <button id="enable-local-narrator" type="button" @onclick="_local.EnableAsync">Write the narration on my own GPU</button>
-                    <small>Optional: a one-time ~1 GB download that stays in your browser. Needs a WebGPU browser (recent Chrome or Edge).</small>
-                    break;
-                case LocalNarratorState.Downloading:
-                    <label for="local-narrator-progress">Summoning the narrator: @_local.Status</label>
-                    <progress id="local-narrator-progress" max="100" value="@_local.Progress"></progress>
-                    break;
-                case LocalNarratorState.Ready:
-                    <span id="local-narrator-ready">@(_localWriting ? "The local narrator is writing..." : "Local narrator ready")</span>
-                    break;
-                case LocalNarratorState.Failed:
-                    <span class="error">The local narrator could not start: @_local.Status</span>
-                    <button id="retry-local-narrator" type="button" @onclick="_local.EnableAsync">Try again</button>
-                    break;
-            }
-        </div>
-    }
-
+    </aside>
+    <div class="room-main">
     <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene" Narration="Session.Scenario"
                 Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" OnCue="PlayCueAsync" />
     <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" OnSpellsLoaded="OnSpellsLoaded" />
@@ -101,7 +104,7 @@
 
     @if (Session.IsDefeated)
     {
-        <button id="explore" disabled>Explore Room</button>
+        <button id="explore" class="btn btn-primary btn-big" disabled>Explore Room</button>
     }
     else if (ShowActive)
     {
@@ -112,14 +115,14 @@
             <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
-                <textarea id="action-text" maxlength="200" disabled="@IsLocked" placeholder="@_suggestion" style="--sugg-hue: @_suggestionHue" @bind="_actionText" @bind:event="oninput"></textarea>
+                <textarea id="action-text" maxlength="200" disabled="@IsLocked" placeholder="@_suggestion" @bind="_actionText" @bind:event="oninput"></textarea>
                 <div class="action-buttons">
-                    <button id="toggle-spellbook" type="button" @onclick="() => _spellbookOpen = !_spellbookOpen">Spellbook</button>
-                    <button id="lock-in" disabled="@(_busy || IsLocked || string.IsNullOrWhiteSpace(_actionText))" @onclick="LockInAsync">@(IsLocked ? "Locked in" : "Lock in")</button>
+                    <button id="lock-in" class="btn btn-go btn-big" disabled="@(_busy || IsLocked || string.IsNullOrWhiteSpace(_actionText))" @onclick="LockInAsync">@(IsLocked ? "Locked in" : "Lock in")</button>
                     @if (IsLocked)
                     {
-                        <button id="unlock-turn" disabled="@_busy" @onclick="UnlockAsync">Unlock</button>
+                        <button id="unlock-turn" class="btn btn-ghost" disabled="@_busy" @onclick="UnlockAsync">Unlock</button>
                     }
+                    <span class="char-count">@_actionText.Length/@MaxActionLength</span>
                 </div>
             </div>
             <PartyLockStatus Status="Session.LockStatus" />
@@ -143,16 +146,17 @@
     }
     else
     {
-        <button id="explore" @onclick="ExploreAsync" disabled="@_busy">Explore Room</button>
+        <button id="explore" class="btn btn-primary btn-big" @onclick="ExploreAsync" disabled="@_busy">Explore Room</button>
     }
 
     @if (Session.IsDefeated)
     {
         <div class="defeated">
+            <p class="game-over">GAME OVER</p>
             <p>Your party has been defeated.</p>
             <RunSummaryCard Summary="Session.Summary" />
             <HighScoresCard HighlightParty="@Session.Name" />
-            <button id="new-party" @onclick="NewParty">New Party</button>
+            <button id="new-party" class="btn btn-primary btn-big" @onclick="NewParty">New Party</button>
         </div>
     }
 
@@ -163,7 +167,7 @@
 
     @* Finished rooms live here, closed by default, so the main view only shows what is happening now. *@
     <details id="audit" class="audit">
-        <summary>Audit history (@Session.Log.Count @(Session.Log.Count == 1 ? "room" : "rooms"))</summary>
+        <summary>Journal (@Session.Log.Count @(Session.Log.Count == 1 ? "room" : "rooms"))</summary>
         <div id="log" class="log">
             @foreach (var entry in Session.Log)
             {
@@ -182,14 +186,12 @@
             }
         </div>
     </details>
+    </div>
+    </div>
+    </div>
 }
 
 @code {
-    private static int HpPercent(MemberDto m) =>
-        m.MaxHp <= 0 ? 0 : (int)Math.Round(Math.Clamp(m.Hp, 0, m.MaxHp) * 100.0 / m.MaxHp);
-
-    private static string HpFillClass(MemberDto m) => HpPercent(m) <= 30 ? "hp-fill hp-low" : "hp-fill";
-
     private bool _busy;
     private string? _error;
     private bool _scroll;
@@ -204,16 +206,25 @@
     private readonly Random _rng = new();
     private IReadOnlyList<string>? _spellNames;
     private string _suggestion = "";
-    private int _suggestionHue;
     private Timer? _suggestionTimer;
 
     private void Reroll()
     {
         _suggestion = ActionSuggestions.Pick(_rng, _spellNames);
-        _suggestionHue = ActionSuggestions.PickHue(_rng);
     }
 
     private void OnSpellsLoaded(IReadOnlyList<string> names) => _spellNames = names;
+
+    // Spell costs drive the mana estimate, so they load up front rather than when the spellbook first opens.
+    private async Task LoadSpellsAsync()
+    {
+        try
+        {
+            var result = await Api.GetSpellsAsync(Session.PlayerClass);
+            if (!_disposed && result.IsSuccess) Session.SetSpells(result.Value!);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or ObjectDisposedException) { }
+    }
 
     private void StartSuggestionTimer() =>
         _suggestionTimer = new Timer(_ => Dispatch(() =>
@@ -289,6 +300,7 @@
 
         Reroll();
         StartSuggestionTimer();
+        _ = LoadSpellsAsync();
         _local = Services.GetService(typeof(ILocalNarrator)) as ILocalNarrator;
         if (_local is not null)
         {
@@ -477,6 +489,7 @@
             {
                 case ApiStatus.Success:
                     _lockedTurn = null;
+                    Session.ReleaseMana();
                     Session.ApplyLockStatus(Session.PartyId, result.Value!.LockStatus);
                     break;
                 case ApiStatus.NotFound:
@@ -520,12 +533,20 @@
                     }
                     else
                     {
-                        if (locking) _lockedTurn = lockedAtTurn;
+                        if (locking)
+                        {
+                            _lockedTurn = lockedAtTurn;
+                            Session.ReserveMana(actions![0].Text);
+                        }
                         if (Session.ApplyPrompt(response)) WatchNarration();
                     }
                     break;
                 case ApiStatus.Waiting:
-                    if (locking) _lockedTurn = Session.Turn;
+                    if (locking)
+                    {
+                        _lockedTurn = Session.Turn;
+                        Session.ReserveMana(actions![0].Text);
+                    }
                     break;
                 case ApiStatus.Conflict:
                     Session.MarkDefeated();

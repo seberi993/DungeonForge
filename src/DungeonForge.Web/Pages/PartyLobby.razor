@@ -6,10 +6,14 @@
 @inject GameSession Session
 @inject NavigationManager Nav
 
-<h1>DungeonForge</h1>
-<p>Name your party and descend into the dungeon.</p>
+<div class="lobby-hero">
+    <h1>DungeonForge</h1>
+    <p>Name your party and descend into the dungeon.</p>
+</div>
 
+<div class="lobby-grid">
 <div class="card">
+    <h2>New Party</h2>
     <label for="party-name">Party name</label>
     <input id="party-name" @bind="_name" maxlength="50" disabled="@_busy" />
     <div id="roster" class="roster">
@@ -26,10 +30,12 @@
                 </select>
             </div>
         }
-        <button id="add-member" type="button" @onclick="AddMember" disabled="@(_busy || _roster.Count >= MaxRoster)">Add Member</button>
-        <button id="remove-member" type="button" @onclick="RemoveMember" disabled="@(_busy || _roster.Count <= 1)">Remove Member</button>
+        <div class="roster-actions">
+            <button id="add-member" type="button" class="btn btn-secondary" @onclick="AddMember" disabled="@(_busy || _roster.Count >= MaxRoster)">Add Member</button>
+            <button id="remove-member" type="button" class="btn btn-ghost" @onclick="RemoveMember" disabled="@(_busy || _roster.Count <= 1)">Remove Member</button>
+        </div>
     </div>
-    <button id="create-party" @onclick="CreateAsync" disabled="@_busy">Create Party</button>
+    <button id="create-party" class="btn btn-primary btn-big" @onclick="CreateAsync" disabled="@_busy">Create Party</button>
     @if (_error is not null)
     {
         <p class="validation-message">@_error</p>
@@ -37,9 +43,10 @@
 </div>
 
 <div class="card">
+    <h2>Join a Party</h2>
     <label for="join-id">Join a friend's party (paste their invite code)</label>
     <input id="join-id" @bind="_joinId" placeholder="XXXX-XXXX" maxlength="40" disabled="@_busy" />
-    <button id="join-party" @onclick="FindAsync" disabled="@_busy">Find Party</button>
+    <button id="join-party" class="btn btn-secondary" @onclick="FindAsync" disabled="@_busy">Find Party</button>
     @if (_preview is not null)
     {
         <div id="join-preview">
@@ -58,13 +65,14 @@
                     <option value="@c">@c</option>
                 }
             </select>
-            <button id="confirm-join" @onclick="ConfirmJoinAsync" disabled="@_busy">Join as Hero</button>
+            <button id="confirm-join" class="btn btn-go" @onclick="ConfirmJoinAsync" disabled="@_busy">Join as Hero</button>
         </div>
     }
     @if (_joinError is not null)
     {
         <p class="join-error validation-message">@_joinError</p>
     }
+</div>
 </div>
 
 <HighScoresCard />

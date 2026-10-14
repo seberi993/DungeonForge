@@ -25,6 +25,7 @@ public class DungeonRoomTests : TestContext
 
     private IRenderedComponent<DungeonRoom> Render(FakeHandler handler, bool withParty = true)
     {
+        handler.SeparateSpells = true;
         Services.AddSingleton<IDungeonHubClient>(_hub);
         if (withParty) _session.Start(new PartyResponse(Id, "Heroes",
             [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
@@ -213,6 +214,7 @@ public class DungeonRoomTests : TestContext
 
     private IRenderedComponent<DungeonRoom> RenderWithScenario(FakeHandler handler, TimeSpan? narrationTimeout = null)
     {
+        handler.SeparateSpells = true;
         _session.Start(new PartyResponse(Id, "Heroes",
             [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 16, 16, false)],
             DateTimeOffset.UtcNow, "K7F2-9QXM"));
@@ -554,6 +556,30 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
+    public void Mana_StartsFull_SpendsOnSpellLockIn_AndRefundsOnUnlock()
+    {
+        var calls = 0;
+        var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () =>
+            calls++ == 0
+                ? LockedPromptJson()
+                : $$"""{"partyId":"{{Id}}","lockStatus":[{"name":"Conan","lockedIn":false},{"name":"Merlin","lockedIn":false}]}""")
+        {
+            SpellsBody = """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]"""
+        };
+        var cut = RenderWithScenario(handler);
+        var max = GameSession.MaxManaFor(CharacterClass.Warrior);
+        cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be(max.ToString());
+        cut.WaitForState(() => _session.HasSpells);
+        cut.Find("#action-text").Input("I cast Smite on the troll");
+
+        cut.Find("button#lock-in").Click();
+
+        cut.WaitForAssertion(() => cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be((max - 5).ToString()));
+        cut.Find("button#unlock-turn").Click();
+        cut.WaitForAssertion(() => cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be(max.ToString()));
+    }
+
+    [Fact]
     public void Unlock_PostsMemberId_ReenablesLockIn_AndUpdatesStatus()
     {
         var calls = 0;
@@ -621,7 +647,7 @@ public class DungeonRoomTests : TestContext
 
         cut.Find("button#toggle-spellbook").Click();
         cut.WaitForAssertion(() => cut.FindAll(".spell").Should().HaveCount(1));
-        handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/classes/warrior/spells");
+        handler.LastSpellsRequest!.RequestUri!.AbsolutePath.Should().Be("/api/classes/warrior/spells");
         cut.Find("#action-text").Input("Charge");
 
         cut.FindAll(".spell button").Should().BeEmpty();

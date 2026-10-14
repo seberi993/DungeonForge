@@ -1,5 +1,27 @@
+@using DungeonForge.Web.Services
 @inherits LayoutComponentBase
+@inject GameSession Session
+@implements IDisposable
+
+<header class="app-bar">
+    <NavLink href="" class="brand" Match="NavLinkMatch.All"><span class="brand-icon" aria-hidden="true">⚔️</span> Dungeon<span class="brand-accent">Forge</span></NavLink>
+    <nav class="app-nav" aria-label="Main">
+        <NavLink href="" class="nav-link" Match="NavLinkMatch.All">Lobby</NavLink>
+        @if (Session.HasParty)
+        {
+            <NavLink href="dungeon" class="nav-link">Dungeon</NavLink>
+        }
+    </nav>
+</header>
 
 <main class="app">
     @Body
 </main>
+
+@code {
+    protected override void OnInitialized() => Session.Changed += OnChanged;
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Session.Changed -= OnChanged;
+}
