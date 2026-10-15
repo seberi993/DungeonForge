@@ -18,11 +18,11 @@ public class PsychologicalPromptTests
     ];
 
     [Fact]
-    public void EverySystemPrompt_EnforcesTwoToThreeSentences()
+    public void EverySystemPrompt_EnforcesOneToTwoSentences()
     {
         foreach (var prompt in SystemPrompts())
         {
-            prompt.Should().Contain("2 to 3 sentences");
+            prompt.Should().Contain("1 to 2 short sentences");
             prompt.Should().NotContain("3 to 5").And.NotContain("3 or 4 sentences").And.NotContain("120 to 180");
         }
     }

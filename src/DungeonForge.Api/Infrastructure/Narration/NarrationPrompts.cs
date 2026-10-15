@@ -6,7 +6,7 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 public static class NarrationPrompts
 {
     // Rule shared by every system prompt; PsychologicalPromptTests pin it.
-    public const string ConcisenessRule = "Be strictly concise: 2 to 3 sentences at most, no preamble, no filler. ";
+    public const string ConcisenessRule = "Be brutally brief: 1 to 2 short sentences (under 40 words), no preamble, no filler. ";
 
     public static readonly string TropeBan =
         $"Never mention these overused tropes: {string.Join(", ", GrotesqueVocabulary.ForbiddenTropes)}. ";
@@ -30,7 +30,7 @@ public static class NarrationPrompts
         "Insult their decisions and skill only; no slurs and nothing about real-world traits. ";
 
     private const string ScenarioShape =
-        "2 to 3 sentences in second person plural covering the setting, one concrete hazard and a hook the party can act on. " +
+        "1 to 2 short sentences in second person plural: one vivid setting detail and one concrete hazard. " +
         "Do not offer a menu of actions; the party must think, plan and " +
         "discuss. End with the open question: What do you do?";
 
@@ -76,18 +76,18 @@ public static class NarrationPrompts
     public const int TurnCompactMaxTokens = 700;
 
     public static string ScenarioCompact(RoomType room) =>
-        $"{Persona}Write ONE scenario of 2 to 3 sentences in second person plural: the setting, a concrete danger and " +
+        $"{Persona}Write ONE scenario of 1 to 2 sentences in second person plural: the setting, a concrete danger and " +
         $"a hook. {RoomGuidance(room)} {CompactHighlight} Do not include numbers or rewards. End with: What do you do? " +
         "Reply with plain prose only.";
 
     public static string TurnCompact(RoomType? next) => next is { } room
         ? $"{Persona}Reply with JSON only, on one line, like this example: " +
           "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"goblin\",\"whispers\":[\"...\"]}. " +
-          $"\"outcome\": 2 to 3 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
-          $"\"next\": a NEW scenario of 2 to 3 sentences in second person plural, ending with: What do you do? {RoomGuidance(room)} " +
+          $"\"outcome\": 1 to 2 short sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
+          $"\"next\": a NEW scenario of 1 to 2 sentences in second person plural, ending with: What do you do? {RoomGuidance(room)} " +
           $"{CompactHighlight} {SceneRule} {WhisperRule}Do not include numbers or rewards."
         : $"{Persona}Reply with JSON only, on one line, like this example: {{\"outcome\":\"...\",\"whispers\":[\"...\"]}}. " +
-          $"\"outcome\": 2 to 3 sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
+          $"\"outcome\": 1 to 2 short sentences on how the plan played out, matching the stated result exactly. {CompactSnark}" +
           $"{WhisperRule}Do not include numbers or rewards.";
 
     // Constrains the local model's decoder so a tiny model still returns the shape TurnNarrationParser expects.
@@ -107,12 +107,12 @@ public static class NarrationPrompts
     public static string Turn(RoomType? next) => next is { } room
         ? $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
           "{\"outcome\":\"...\",\"next\":\"...\",\"scene\":\"...\",\"whispers\":[\"...\"]}. " +
-          "\"outcome\": 2 to 3 sentences describing how the party's combined plan played out, matching the stated " +
+          "\"outcome\": 1 to 2 short sentences describing how the party's combined plan played out, matching the stated " +
           "result exactly; weave in the member ideas that fit, in the order given, and describe any revealed treachery. " + Snark +
           $"\"next\": a NEW scenario of {ScenarioShape} {RoomGuidance(room)} {Rules} {Highlight} {SceneRule} {WhisperRule}"
         : $"{Persona}Reply with strict JSON only, no markdown, each string on a single line, in the shape " +
           "{\"outcome\":\"...\",\"whispers\":[\"...\"]}. " +
-          "\"outcome\": 2 to 3 sentences describing how the party's combined plan played out, matching the stated " +
+          "\"outcome\": 1 to 2 short sentences describing how the party's combined plan played out, matching the stated " +
           "result exactly; weave in the member ideas that fit, in the order given, and describe any revealed treachery. " +
           Snark + Rules + " " + Highlight + " " + WhisperRule;
 }

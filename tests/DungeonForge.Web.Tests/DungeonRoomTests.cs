@@ -281,18 +281,19 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
-    public void TeammateSubmittedAction_ListedInDiscussion_ButLockInStillNeedsOwnText()
+    public void TeammateSubmittedAction_IsNeverShown_AndLockInStillNeedsOwnText()
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
 
         cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, [new PlayerAction(Guid.NewGuid(), "Merlin", "Light a torch")]));
 
-        cut.WaitForAssertion(() => cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch"));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Light a torch"));
+        cut.FindAll("#discussion").Should().BeEmpty();
         cut.Find("button#lock-in").HasAttribute("disabled").Should().BeTrue();
     }
 
     [Fact]
-    public void SubmitAction_PostsSubmitOnlyBody_ListsDiscussion_AndKeepsScenario()
+    public void SubmitAction_PostsSubmitOnlyBody_HidesOthersAnswers_AndKeepsScenario()
     {
         var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () =>
             PromptJson($$"""[{"memberId":"{{_session.PlayerId}}","name":"Conan","text":"Press the left rune"},{"memberId":"{{Guid.NewGuid()}}","name":"Merlin","text":"Read the glyphs"}]"""));
@@ -301,9 +302,9 @@ public class DungeonRoomTests : TestContext
         cut.Find("#action-text").Input("Press the left rune");
         cut.Find("button#lock-in").Click();
 
-        cut.WaitForAssertion(() => cut.FindAll("#discussion li").Should().HaveCount(2));
+        cut.WaitForAssertion(() => cut.Find("button#lock-in").TextContent.Should().Contain("Locked in"));
         handler.LastRequestBody.Should().Be($"{{\"actions\":[{{\"memberId\":\"{_session.PlayerId}\",\"name\":\"Conan\",\"text\":\"Press the left rune\"}}],\"submitOnly\":true}}");
-        cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Read the glyphs");
+        cut.Markup.Should().NotContain("Read the glyphs");
         cut.Find("#scenario").Should().NotBeNull();
         cut.FindAll(".log-entry").Should().BeEmpty();
     }
@@ -323,9 +324,6 @@ public class DungeonRoomTests : TestContext
     {
         var handler = new FakeHandler(HttpStatusCode.OK, PendingResolveJson());
         var cut = RenderWithScenario(handler);
-        var mate = Guid.Parse("44444444-4444-4444-4444-444444444444");
-        cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, [new PlayerAction(mate, "Merlin", "Light a torch")]));
-        cut.WaitForAssertion(() => cut.Find("#discussion"));
 
         Resolve(cut, "Charge");
 
@@ -474,14 +472,14 @@ public class DungeonRoomTests : TestContext
     }
 
     [Fact]
-    public void RemoteDiscussionUpdate_ReplacesTeammateList()
+    public void PrivateMessage_ShowsInWhisperPanel()
     {
         var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
-        var actions = new[] { new PlayerAction(Guid.NewGuid(), "Merlin", "Light a torch") };
 
-        cut.InvokeAsync(() => _hub.RaiseDiscussion(Id, actions));
+        cut.InvokeAsync(() => _hub.RaisePrivate(new PrivateMessageDto("whisper", "Merlin pocketed 12 gold.")));
 
-        cut.WaitForAssertion(() => cut.Find("#discussion").TextContent.Should().Contain("Merlin").And.Contain("Light a torch"));
+        cut.WaitForAssertion(() => cut.Markup.Should().NotContain("Light a torch"));
+        cut.FindAll("#discussion").Should().BeEmpty();
     }
 
 

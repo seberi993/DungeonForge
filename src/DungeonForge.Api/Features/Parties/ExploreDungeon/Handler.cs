@@ -150,7 +150,7 @@ public sealed class ExploreDungeonHandler(
 
     private static ExploreResponse PromptResponse(Party party, PendingEncounter pending) =>
         new(party.Id, party.Turn, pending.Room, null, 0, 0, pending.Scenario, party.Gold, party.IsPartyDefeated,
-            Scenario: pending.Scenario, Discussion: party.Modifiers.Chaos ? null : pending.Discussion,
+            Scenario: pending.Scenario, Discussion: null,
             LockStatus: PartyMapping.ToLockDtos(party.LockStatus));
 
     private static ExploreResponse AwaitingResponse(Party party, RoomType room) =>
@@ -170,16 +170,13 @@ public sealed class ExploreDungeonHandler(
         var (result, context, success, snapshot) = Mutate(id, actions);
         if (result.Status == ExploreStatus.Waiting && result.Response is { } waiting && snapshot is not null)
         {
+            // Locked answers are private in every mode: peers learn who is ready, never what they wrote.
             if (IsBlind(id))
             {
-                // Blind action phase: only "X is ready" goes out; action text and covert plans stay on the server.
                 await BroadcastReadyAsync(id, actions);
-                await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? []);
             }
-            else
-            {
-                await BroadcastLockAsync(id, waiting.Discussion ?? [], snapshot.LockStatus ?? []);
-            }
+
+            await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? []);
 
             return waitingIsConflict ? result : result with { Status = ExploreStatus.Explored, Waiting = null };
         }
@@ -247,6 +244,7 @@ public sealed class ExploreDungeonHandler(
         }
 
         await chaos.DispatchWhispersAsync(party, whispers);
+        await chaos.DispatchGaslightingAsync(party);
         if (nextRoom is { } room)
         {
             await chaos.DispatchRoomSecretsAsync(party, room, turn);
@@ -498,20 +496,6 @@ public sealed class ExploreDungeonHandler(
     }
 
     // Outside the lock; failures are logged, never thrown.
-    private async Task BroadcastLockAsync(Guid id, IReadOnlyList<PlayerAction> discussion, IReadOnlyList<LockStatusDto> status)
-    {
-        try
-        {
-            await notifier.DiscussionUpdatedAsync(id, discussion, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast DiscussionUpdated for party {PartyId}", id);
-        }
-
-        await BroadcastLockStatusAsync(id, status);
-    }
-
     private async Task BroadcastLockStatusAsync(Guid id, IReadOnlyList<LockStatusDto> status)
     {
         try

@@ -105,6 +105,20 @@ public sealed class GameSession
         Changed?.Invoke();
     }
 
+    // ---- Chaos mode: private whispers/secrets addressed to this player only, newest last. ----
+
+    public const int MaxPrivateMessages = 5;
+    private readonly List<PrivateMessageDto> _private = [];
+    public IReadOnlyList<PrivateMessageDto> PrivateMessages => _private;
+
+    public void AddPrivateMessage(PrivateMessageDto message)
+    {
+        if (string.IsNullOrWhiteSpace(message.Text)) return;
+        _private.Add(message);
+        if (_private.Count > MaxPrivateMessages) _private.RemoveAt(0);
+        Changed?.Invoke();
+    }
+
     public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
     {
         if (partyId != PartyId) return false;
@@ -386,6 +400,7 @@ public sealed class GameSession
         _roomsWon = _roomsLost = _crits = _fumbles = _worstHit = 0;
         _worstHitName = null;
         _log.Clear();
+        _private.Clear();
         ClearScenario();
         LastOutcome = null;
         NarrationSource = null;

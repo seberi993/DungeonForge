@@ -74,13 +74,13 @@ public class FallbackFlavorTests
     [InlineData(RoomType.Combat)]
     [InlineData(RoomType.Chest)]
     [InlineData(RoomType.Puzzle)]
-    public void Scenario_IsRichDeterministicAndEndsWithOpenQuestion(RoomType room)
+    public void Scenario_IsShortDeterministicAndEndsWithOpenQuestion(RoomType room)
     {
         for (var turn = 0; turn < 4; turn++)
         {
             var text = FallbackFlavor.Scenario(room, turn);
 
-            Words(text).Should().BeGreaterThanOrEqualTo(60);
+            Words(text).Should().BeInRange(12, 45);
             text.Length.Should().BeLessThanOrEqualTo(TurnNarrationParser.MaxScenarioLength);
             text.Should().EndWith("What do you do?");
             FallbackFlavor.Scenario(room, turn).Should().Be(text);

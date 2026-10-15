@@ -123,8 +123,7 @@ public sealed class TurnLockTests(WebApplicationFactory<Program> factory) : ICla
         using var doc = await ReadAsync(await SubmitAsync(client, id, conan with { Text = "actually, retreat" }));
 
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
-        doc.RootElement.GetProperty("discussion").EnumerateArray().Select(d => d.GetProperty("text").GetString())
-            .Should().Equal("actually, retreat");
+        doc.RootElement.ToString().Should().NotContain("actually, retreat");
         Locks(doc.RootElement).Count(l => l.LockedIn).Should().Be(1);
         narrator.TurnCalls.Should().Be(0);
     }

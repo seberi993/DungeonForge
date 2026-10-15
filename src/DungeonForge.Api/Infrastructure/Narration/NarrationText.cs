@@ -11,6 +11,20 @@ public static class NarrationText
         return cleaned.Length > maxLength ? cleaned[..maxLength].TrimEnd() : cleaned;
     }
 
+    // Like Clean, but an over-long value is cut back to its last full sentence (when one fits) instead of mid-word.
+    public static string CleanSentences(string? value, int maxLength)
+    {
+        var cleaned = Collapse(value);
+        if (cleaned.Length <= maxLength)
+        {
+            return cleaned;
+        }
+
+        var cut = cleaned[..maxLength];
+        var end = cut.LastIndexOfAny(['.', '!', '?']);
+        return end >= maxLength / 3 ? cut[..(end + 1)] : cut.TrimEnd();
+    }
+
     public static string Sanitize(string? value, int maxLength, string neutral)
     {
         var cleaned = Clean(value, maxLength);

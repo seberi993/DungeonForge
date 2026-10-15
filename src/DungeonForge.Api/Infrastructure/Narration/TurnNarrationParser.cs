@@ -8,8 +8,8 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 // caller can fall back per part. Null when nothing usable is present.
 public static partial class TurnNarrationParser
 {
-    public const int MaxOutcomeLength = 700;
-    public const int MaxScenarioLength = 1400;
+    public const int MaxOutcomeLength = 280;
+    public const int MaxScenarioLength = 360;
     public const int MaxWhisperLength = 160;
     public const int MaxWhispers = 3;
     public const int MaxWhisperTargetLength = 40;
@@ -45,8 +45,8 @@ public static partial class TurnNarrationParser
                 return null;
             }
 
-            var outcome = Part(doc.RootElement, "outcome", MaxOutcomeLength);
-            var next = Part(doc.RootElement, "next", MaxScenarioLength);
+            var outcome = Part(doc.RootElement, "outcome", MaxOutcomeLength, true);
+            var next = Part(doc.RootElement, "next", MaxScenarioLength, true);
             var scene = SceneTags.Normalize(Part(doc.RootElement, "scene", 20));
             return outcome.Length == 0 && next.Length == 0
                 ? null
@@ -121,14 +121,14 @@ public static partial class TurnNarrationParser
         return target.Length == 0 || text.Length == 0 ? null : new Whisper(target, text);
     }
 
-    private static string Part(JsonElement root, string name, int maxLength)
+    private static string Part(JsonElement root, string name, int maxLength, bool sentences = false)
     {
         foreach (var property in root.EnumerateObject())
         {
             if (property.Value.ValueKind == JsonValueKind.String
                 && string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
             {
-                return NarrationText.Clean(property.Value.GetString(), maxLength);
+                return sentences ? NarrationText.CleanSentences(property.Value.GetString(), maxLength) : NarrationText.Clean(property.Value.GetString(), maxLength);
             }
         }
 

@@ -89,7 +89,7 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
     // ---- Discussion submit (no resolve) ----
 
     [Fact]
-    public async Task SubmitOnly_Request_SubmitsToDiscussion_AndBroadcasts_WithoutAdvancingTurn()
+    public async Task SubmitOnly_Request_LocksAnswerPrivately_WithoutAdvancingTurn()
     {
         var (client, notifier, narrator, scope) = Arrange(PuzzleRoom, Succeed);
         using var _s = scope;
@@ -102,12 +102,8 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = await ReadAsync(response);
         doc.RootElement.GetProperty("turn").GetInt32().Should().Be(0);
-        var discussion = doc.RootElement.GetProperty("discussion");
-        discussion.GetArrayLength().Should().Be(1);
-        discussion[0].GetProperty("memberId").GetGuid().Should().Be(member);
-        discussion[0].GetProperty("name").GetString().Should().Be("Conan");
-        discussion[0].GetProperty("text").GetString().Should().Be("read the runes");
-        notifier.Discussions.Should().ContainSingle().Which.Should().ContainSingle(a => a.Text == "read the runes");
+        doc.RootElement.ToString().Should().NotContain("read the runes");
+        notifier.Discussions.Should().BeEmpty();
         narrator.TurnCalls.Should().Be(0);
     }
 
@@ -123,8 +119,8 @@ public sealed class ExploreDungeonPuzzleTests(WebApplicationFactory<Program> fac
 
         using var doc = await ReadAsync(await SubmitAsync(client, id, Act("second", member: member)));
 
-        doc.RootElement.GetProperty("discussion").EnumerateArray().Select(e => e.GetProperty("text").GetString())
-            .Should().Equal("second");
+        doc.RootElement.GetProperty("lockStatus").EnumerateArray().Count(l => l.GetProperty("lockedIn").GetBoolean()).Should().Be(1);
+        doc.RootElement.ToString().Should().NotContain("second");
     }
 
     // ---- Validation (filter) ----

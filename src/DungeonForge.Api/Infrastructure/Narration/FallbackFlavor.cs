@@ -8,26 +8,38 @@ public static class FallbackFlavor
 {
     private static readonly string[] CombatScenarios =
     [
-        "The corridor opens into a low, vaulted guardroom that smells of rust and old **smoke**. Three **goblins** crouch behind an overturned cart with crude spears levelled, while a scarred chieftain hammers a dented shield from a raised ledge at the back. A single iron **sconce** gutters overhead and leaves both flanks in deep shadow. A rotten **rope** bridge sags over a pit to the left, and stacked barrels line the right wall. The goblins have seen you, they are not retreating, and every heartbeat of hesitation lets them spread out. Your companions are tense and the doorway behind you is narrow. What do you do?",
-        "A cracked flagstone hall stretches ahead, lined with toppled **statues** and pillars wrapped in dead ivy. Skeletal guards in rusted mail rise one by one from the **dust**, their jaws clicking in unison as a pale green light seeps from the empty eye sockets. At the far end a taller **wight** leans on a notched greatsword and waits for you to step into the open. The pillars offer cover but the floor between them is slick with something dark. Behind you the only retreat is a stairwell that groans under old weight. The dead are patient, and you are not. What do you do?",
+        "Three **goblins** crouch behind an overturned cart, spears levelled, while a **chieftain** drums a dented shield. What do you do?",
+        "Skeletal guards claw out of the **dust**, jaws clicking in unison, and a **wight** waits past the toppled **statues**. What do you do?",
+        "Something wet drags itself across the ceiling above a rope **bridge**, and the **chains** below begin to ring. What do you do?",
+        "A swarm of **rats** parts around a single armoured **hound** that has clearly been waiting for you. What do you do?",
+        "The **mist** thickens, and shapes with too many elbows step out of it, humming a lullaby. What do you do?",
     ];
 
     private static readonly string[] ChestScenarios =
     [
-        "Beyond a collapsed archway lies a small, circular vault where **water** drips steadily from the ceiling into a black pool. On a stone plinth in the middle sits an iron-banded **chest**, its lid furred with green corrosion and its heavy lock gleaming oddly clean. Scratch marks ring the plinth, and a few brittle **bones** lie scattered nearby, one hand still clutching a bent lockpick. The pool laps close enough to soak anyone who reaches the chest, and something small ripples just beneath the surface. Whatever waits inside is worth the risk to someone, but the vault itself feels like a warning. What do you do?",
-        "A narrow alcove behind a false wall hides a gilded **coffer** resting on a bed of rotting velvet. Thin **wires** run from its hinges into tiny holes in the walls, and the air carries a faint, sweet chemical scent. Two stone **gargoyles** flank the alcove, their mouths open as if ready to speak, and the floor in front of the coffer is made of slightly mismatched tiles. Faint scratching comes from somewhere above the ceiling. The treasure is within easy reach, which is exactly what makes your stomach tighten. Time and patience are both running down. What do you do?",
+        "An iron-banded **chest** sits on a plinth above a black pool, its lock suspiciously clean. What do you do?",
+        "A gilded **coffer** rests on rotting velvet, thin **wires** running from its hinges into the walls. What do you do?",
+        "The **chest** is open, empty, and still warm, and a trail of wet footprints leads away from it. What do you do?",
+        "A grinning **statue** holds a **key** in one hand and a lit **candle** in the other, and the chest below them hums. What do you do?",
+        "The treasure is stacked in plain sight beside a sleeping **skeleton** whose hand grips a **lever**. What do you do?",
     ];
 
     private static readonly string[] PuzzleScenarios =
     [
-        "A round chamber of black stone surrounds a sealed **door** carved with a ring of glowing **runes**. Each rune is set in its own movable tile, and the tiles hum faintly when touched. Above the door a mural shows a sun, a serpent, a crown, and a closed eye, arranged in a circle that does not quite match the runes below. Cracks in the ceiling release a slow trickle of **sand**, and the pile growing near the far wall suggests the room is filling. A worn inscription at the base warns that haste has buried many before you. The answer is here somewhere, if you can read it together. What do you do?",
-        "You step into a gallery where a stone **statue** of a robed sage sits on a throne, one hand outstretched with a silver bowl. Four pedestals surround it, each holding a different object: a cracked mirror, a rusted **key**, a **candle** that burns without heat, and a bowl of dark water. Words are etched around the throne in an old tongue, and the floor tiles shift softly under your boots. The gate behind the statue is locked, and the bowl seems to be waiting for an offering. A low rumbling rolls through the walls whenever someone moves too quickly. The room rewards patience and punishes guesses. What do you do?",
+        "A sealed **door** is ringed with glowing **runes**, and **sand** is already trickling from the ceiling. What do you do?",
+        "A stone **sage** offers a silver bowl, and four pedestals around it each hold the wrong kind of object. What do you do?",
+        "Three **levers** jut from the wall under a mural that someone has scratched out, badly. What do you do?",
+        "A floor of mismatched **tiles** spells half a sentence, and the **mirror** at the end finishes it differently. What do you do?",
+        "Water rises through a drain as a **dial** ticks toward a symbol none of you recognise. What do you do?",
     ];
 
     private static readonly string[] BossScenarios =
     [
-        "The passage ends at a vast **cavern** ringed with cracked **pillars**, and at its heart a hulking **ogre** in scorched plate rises from a throne of stacked bones. Its tower-sized **hammer** drags a groove through the floor as it walks, and a wheezing **furnace** glows beneath its breastplate where the armor has split. Furnace light flickers across a floor strewn with the broken shields of earlier challengers. The guardian knows you are here, it is in no hurry, and the glowing seam in its chest looks like the only thing it fears. Your companions spread out between the pillars. What do you do?",
-        "A circular arena opens beneath a shattered dome, and a **dragon** of black scale uncoils from a hoard of melted **coins**, smoke curling from its jaws. Chains snap from its wings as it rises, and an old **ballista** on the far ledge still points at the wound it left in the beast's flank. The floor heats under your boots and the air tastes of ash. The creature is wounded, furious and cornered, which makes it worse. Cover is scarce and the exit is behind you. What do you do?",
+        "A hulking **ogre** in scorched plate drags its **hammer** across the floor, a glowing seam splitting its chest. What do you do?",
+        "A black **dragon** uncoils from a heap of melted **coins**, an old **ballista** still aimed at its wound. What do you do?",
+        "The floor guardian is a **bell** the size of a house, and something inside it is ringing back. What do you do?",
+        "A robed **warden** with a lantern for a head blocks the stair, and his shadow moves a second late. What do you do?",
+        "Chains hold a monstrous **jailer** to the wall, but they are all in the process of coming loose. What do you do?",
     ];
 
     private static readonly string[] BossSuccess =

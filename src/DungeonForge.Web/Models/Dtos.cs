@@ -100,6 +100,10 @@ public sealed record PartyStateDto(
 
 public sealed record LockStatusDto(string Name, bool LockedIn);
 
+// Chaos mode: PrivateMessage goes to this player only (whispers, secrets, traitor briefing); ChaosEvent is party-wide.
+public sealed record PrivateMessageDto(string Kind, string Text);
+public sealed record ChaosEventDto(string Kind, string Text);
+
 public sealed record JoinPartyRequest(string Name, CharacterClass Class);
 
 public sealed record JoinPartyResponse(string MemberName, PartyStateDto State);

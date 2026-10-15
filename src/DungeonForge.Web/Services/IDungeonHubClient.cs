@@ -9,6 +9,9 @@ public interface IDungeonHubClient : IAsyncDisposable
     event Action<NarrationReady>? NarrationReady;
     event Action<Guid, IReadOnlyList<PlayerAction>>? DiscussionUpdated;
     event Action<Guid, IReadOnlyList<LockStatusDto>>? TurnLockUpdated;
+    event Action<PrivateMessageDto>? PrivateMessageReceived;
+    event Action<ChaosEventDto>? ChaosEventReceived;
 
-    Task ConnectAsync(Guid partyId, CancellationToken ct = default);
+    // playerName binds this connection to a hero so private messages (whispers, secrets) reach this browser only.
+    Task ConnectAsync(Guid partyId, string? playerName = null, CancellationToken ct = default);
 }

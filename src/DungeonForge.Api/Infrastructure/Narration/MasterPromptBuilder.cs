@@ -25,7 +25,7 @@ public static class MasterPromptBuilder
 
     // First-turn scenario request.
     public static string BuildScenario(NarrationContext ctx) =>
-        Header(ctx, "Scene", ctx.Room) + Motifs(ctx);
+        Header(ctx, "Scene", ctx.Room) + Motifs(ctx) + RunFlavor.Describe(ctx.PartyName, ctx.Turn);
 
     // Resolve-turn request: result of the party's combined plan, the room it was for, and the room that follows.
     public static string Build(bool success, NarrationContext ctx)
@@ -45,6 +45,11 @@ public static class MasterPromptBuilder
         }
 
         sb.Append(Motifs(ctx));
+        if (ctx.NextRoom is not null)
+        {
+            sb.Append(RunFlavor.Describe(ctx.PartyName, ctx.Turn));
+        }
+
         AppendRoster(sb, ctx.Roster);
         AppendTreachery(sb, ctx.Treachery);
 

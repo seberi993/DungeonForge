@@ -91,7 +91,7 @@ public class MasterPromptBuilderTests
         var prompt = NarrationPrompts.Scenario(room);
 
         prompt.Should().Contain("What do you do?");
-        prompt.ToLowerInvariant().Should().Contain(keyword).And.Contain("2 to 3 sentences").And.Contain("number");
+        prompt.ToLowerInvariant().Should().Contain(keyword).And.Contain("1 to 2 short sentences").And.Contain("number");
         prompt.ToLowerInvariant().Should().NotContain("options").And.NotContain("3 choices");
     }
 

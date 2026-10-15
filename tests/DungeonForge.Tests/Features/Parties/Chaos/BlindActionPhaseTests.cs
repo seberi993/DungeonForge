@@ -65,7 +65,7 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
     }
 
     [Fact]
-    public async Task NonChaosParty_KeepsTheOpenDiscussion()
+    public async Task NonChaosParty_AlsoKeepsLockedAnswersPrivate()
     {
         var (f, notifier, _) = Build();
         using var _ = f;
@@ -75,7 +75,7 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
 
         (await ExploreTestSupport.SubmitAsync(client, id, Act("Conan", ExploreTestSupport.ConanId, Secret))).EnsureSuccessStatusCode();
 
-        notifier.DiscussionBroadcasts.Should().Be(1);
+        notifier.DiscussionBroadcasts.Should().Be(0);
         notifier.Events.Should().BeEmpty();
     }
 

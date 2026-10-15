@@ -15,8 +15,8 @@ public sealed class GeminiNarratorService(
     TimeProvider? clock = null) : IDungeonNarrator
 {
     // Output budgets: a scenario is ~180 words; a turn call returns an outcome plus a scenario as JSON.
-    private const int ScenarioMaxTokens = 700;
-    private const int TurnMaxTokens = 1400;
+    private const int ScenarioMaxTokens = 160;
+    private const int TurnMaxTokens = 400;
 
     private readonly NarrationOptions _options = options.Value;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -37,7 +37,7 @@ public sealed class GeminiNarratorService(
     public async Task<GeminiResult<string>> TryGenerateScenarioAsync(NarrationContext ctx, string? apiKey, CancellationToken ct)
     {
         var send = await SendAsync(NarrationPrompts.Scenario(ctx.Room), MasterPromptBuilder.BuildScenario(ctx), ScenarioMaxTokens, apiKey, ct);
-        var cleaned = NarrationText.Clean(send.Text, TurnNarrationParser.MaxScenarioLength);
+        var cleaned = NarrationText.CleanSentences(send.Text, TurnNarrationParser.MaxScenarioLength);
         return cleaned.Length == 0
             ? new(null, send.RateLimited, send.RetryAfter)
             : new(cleaned, false, null);
@@ -78,7 +78,7 @@ public sealed class GeminiNarratorService(
             var body = new GenerateRequest(
                 new Content(null, [new Part(system)]),
                 [new Content("user", [new Part(userPrompt)])],
-                new GenerationConfig(_options.Temperature, maxTokens, new ThinkingConfig("minimal")));
+                new GenerationConfig(_options.Temperature, 0.95, maxTokens, new ThinkingConfig("minimal")));
             using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1beta/models/{_options.Model}:generateContent")
             {
                 Content = JsonContent.Create(body),
@@ -155,6 +155,7 @@ public sealed class GeminiNarratorService(
     // thinkingLevel minimal stops the model from spending the small output budget on hidden reasoning.
     private sealed record GenerationConfig(
         [property: JsonPropertyName("temperature")] double Temperature,
+        [property: JsonPropertyName("topP")] double TopP,
         [property: JsonPropertyName("maxOutputTokens")] int MaxOutputTokens,
         [property: JsonPropertyName("thinkingConfig")] ThinkingConfig ThinkingConfig);
 

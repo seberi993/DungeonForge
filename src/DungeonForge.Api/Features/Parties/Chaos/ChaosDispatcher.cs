@@ -29,6 +29,20 @@ public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILo
         }
     }
 
+    // Chaos mode only: a private, mostly false claim about another member for every living player, every turn.
+    public async Task DispatchGaslightingAsync(Party party)
+    {
+        if (!party.Modifiers.Chaos)
+        {
+            return;
+        }
+
+        foreach (var lie in Gaslighting.Generate(party, roller))
+        {
+            await SendAsync(party.Id, lie.Target, new PrivateMessage(PrivateKinds.Whisper, lie.Text));
+        }
+    }
+
     // Whisper targets are a member name or a class name; unknown targets are dropped.
     public async Task DispatchWhispersAsync(Party party, IReadOnlyList<Whisper> whispers)
     {

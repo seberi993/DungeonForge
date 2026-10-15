@@ -102,6 +102,18 @@
         }
     }
 
+    @if (Session.PrivateMessages.Count > 0)
+    {
+        <ul id="whispers" class="whispers" aria-label="Private whispers">
+            @foreach (var message in Session.PrivateMessages)
+            {
+                <li class="whisper whisper-@message.Kind">
+                    <span class="whisper-tag">@WhisperLabel(message.Kind)</span> @message.Text
+                </li>
+            }
+        </ul>
+    }
+
     @if (Session.IsDefeated)
     {
         <button id="explore" class="btn btn-primary btn-big" disabled>Explore Room</button>
@@ -126,15 +138,6 @@
                 </div>
             </div>
             <PartyLockStatus Status="Session.LockStatus" />
-            @if (Session.Discussion.Count > 0)
-            {
-                <ul id="discussion" class="discussion">
-                    @foreach (var action in Session.Discussion)
-                    {
-                        <li><strong>@action.Name</strong>: @action.Text</li>
-                    }
-                </ul>
-            }
         </div>
     }
     else if (Session.ScenarioPending)
@@ -313,9 +316,12 @@
         Hub.NarrationReady += OnNarrationReady;
         Hub.DiscussionUpdated += OnDiscussionUpdated;
         Hub.TurnLockUpdated += OnTurnLockUpdated;
+        Hub.PrivateMessageReceived += OnPrivateMessage;
+        Hub.ChaosEventReceived += OnChaosEvent;
         try
         {
-            await Hub.ConnectAsync(Session.PartyId);
+            _actionTurn = Session.Turn;
+            await Hub.ConnectAsync(Session.PartyId, Session.PlayerName);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -331,6 +337,7 @@
             _ = InvokeAsync(() =>
             {
                 if (_disposed || !Session.ApplyRemote(result)) return;
+                ResetActionForNewTurn();
                 _scroll = true;
                 WatchNarration();
                 StateHasChanged();
@@ -356,6 +363,7 @@
             _ = InvokeAsync(() =>
             {
                 if (_disposed || !apply()) return;
+                ResetActionForNewTurn();
                 StateHasChanged();
             });
         }
@@ -400,6 +408,7 @@
             _ = InvokeAsync(() =>
             {
                 if (_disposed || !Session.ApplyPartyState(state)) return;
+                ResetActionForNewTurn();
                 StateHasChanged();
             });
         }
@@ -418,6 +427,8 @@
         Hub.NarrationReady -= OnNarrationReady;
         Hub.DiscussionUpdated -= OnDiscussionUpdated;
         Hub.TurnLockUpdated -= OnTurnLockUpdated;
+        Hub.PrivateMessageReceived -= OnPrivateMessage;
+        Hub.ChaosEventReceived -= OnChaosEvent;
         _narrationCts?.Cancel();
         _narrationCts?.Dispose();
         await Hub.DisposeAsync();
@@ -463,7 +474,40 @@
     private bool _spellbookOpen;
     private int? _lockedTurn;
 
-    private bool IsLocked => _lockedTurn == Session.Turn;
+    // The server's lock status is the source of truth, so a reload or reconnect still shows this player as locked.
+    private bool IsLocked => _lockedTurn == Session.Turn
+        || Session.LockStatus.Any(s => s.LockedIn && s.Name == Session.PlayerName);
+
+    // A new turn means a new scenario: drop the old answer and lock so the box is ready without any manual clearing.
+    private int _actionTurn;
+
+    private void ResetActionForNewTurn()
+    {
+        if (Session.Turn == _actionTurn) return;
+        _actionTurn = Session.Turn;
+        _actionText = "";
+        _lockedTurn = null;
+        Reroll();
+    }
+
+    private void OnPrivateMessage(PrivateMessageDto message) =>
+        Dispatch(() => { Session.AddPrivateMessage(message); return true; });
+
+    // Ready markers are redundant with the lock count; vault and reveal announcements are worth showing.
+    private void OnChaosEvent(ChaosEventDto chaosEvent)
+    {
+        if (chaosEvent.Kind == "playerReady") return;
+        Dispatch(() => { Session.AddPrivateMessage(new PrivateMessageDto("public", chaosEvent.Text)); return true; });
+    }
+
+    private static string WhisperLabel(string kind) => kind switch
+    {
+        "whisper" => "Whisper",
+        "secret" => "Secret",
+        "traitor" => "Traitor",
+        "vault" => "Vault",
+        _ => "Dungeon",
+    };
 
     private void OnTurnLockUpdated(Guid partyId, IReadOnlyList<LockStatusDto> status) =>
         Dispatch(() => Session.ApplyLockStatus(partyId, status));
@@ -526,9 +570,7 @@
                     if (Session.Apply(response))
                     {
                         _scroll = true;
-                        _actionText = "";
-                        Reroll();
-                        _lockedTurn = null;
+                        ResetActionForNewTurn();
                         WatchNarration();
                     }
                     else

@@ -77,8 +77,8 @@ public sealed class GeminiNarratorServiceTests
     // ---- Options ----
 
     [Fact]
-    public void NarrationOptions_DefaultTemperature_Is085() =>
-        new NarrationOptions().Temperature.Should().Be(0.85);
+    public void NarrationOptions_DefaultTemperature_Is1() =>
+        new NarrationOptions().Temperature.Should().Be(1.0);
 
     [Fact]
     public void NarrationOptions_Defaults_UseFlashLiteModelAndEightSecondTimeout()
@@ -125,8 +125,8 @@ public sealed class GeminiNarratorServiceTests
         handler.Request.Headers.GetValues("x-goog-api-key").Should().ContainSingle().Which.Should().Be("test-key");
         SystemPrompt(handler.Body).Should().Be(NarrationPrompts.Scenario(RoomType.Combat));
         using var doc = JsonDocument.Parse(handler.Body!);
-        GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(0.85);
-        GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeGreaterThanOrEqualTo(600);
+        GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(1.0);
+        GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeInRange(100, 300);
         GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString().Should().Be("minimal");
     }
 
@@ -298,8 +298,8 @@ public sealed class GeminiNarratorServiceTests
         SystemPrompt(handler.Body).Should().Be(NarrationPrompts.Turn(RoomType.Puzzle));
         UserPrompt(handler.Body).Should().Be(MasterPromptBuilder.Build(false, Ctx));
         using var doc = JsonDocument.Parse(handler.Body!);
-        GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(0.85);
-        GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeGreaterThanOrEqualTo(1200);
+        GenerationConfig(doc).GetProperty("temperature").GetDouble().Should().Be(1.0);
+        GenerationConfig(doc).GetProperty("maxOutputTokens").GetInt32().Should().BeInRange(300, 600);
         GenerationConfig(doc).GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString().Should().Be("minimal");
     }
 

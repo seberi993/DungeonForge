@@ -275,7 +275,13 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            return _locks.RemoveAll(a => a.MemberId == memberId) > 0;
+            var removed = _locks.RemoveAll(a => a.MemberId == memberId) > 0;
+            if (removed && _pending?.Discussion is { } discussion)
+            {
+                _pending = _pending with { Discussion = discussion.Where(a => a.MemberId != memberId).ToList() };
+            }
+
+            return removed;
         }
     }
 
