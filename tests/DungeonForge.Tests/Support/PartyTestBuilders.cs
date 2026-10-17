@@ -1,33 +1,27 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties;
+using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Tests.Features.Parties;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace DungeonForge.Tests.Features.Parties;
+namespace DungeonForge.Tests.Support;
 
-/// <summary>Deterministic roller: Next(3) is the room roll (0 = combat, 1 = chest, 2 = puzzle); any other max is the success roll.</summary>
-internal sealed class FixedRoller(int room, int success = ExploreTestSupport.Succeed) : IRoller
-{
-    public int Next(int max) => max == 3 ? room : success;
-}
-
-/// <summary>Room rolls come from a queue (last value repeats); any other max is the success roll.</summary>
-internal sealed class SequenceRoller(int success, params int[] rooms) : IRoller
-{
-    private int _i;
-
-    public int Next(int max) => max == 3 ? rooms[Math.Min(Interlocked.Increment(ref _i) - 1, rooms.Length - 1)] : success;
-}
-
-internal static class ExploreTestSupport
+/// <summary>Shared builders for the explore and chaos tests: handler wiring, parties, HTTP calls, hub connections.</summary>
+internal static class PartyTestBuilders
 {
     /// <summary>An explore handler wired the way DI wires it, from the pieces a test wants to control.</summary>
     public static ExploreDungeonHandler NewHandler(
@@ -116,48 +110,58 @@ internal static class ExploreTestSupport
         resolved.EnsureSuccessStatusCode();
         return await ReadAsync(resolved);
     }
-}
 
-/// <summary>Notifier that records everything and lets tests await the asynchronous narration phase.</summary>
-internal sealed class CapturingNotifier : IPartyNotifier
-{
-    private readonly TaskCompletionSource<NarrationReady> _narration = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public static readonly PartyModifiers ChaosOn = new(Chaos: true);
 
-    public List<ExploreResponse> Turns { get; } = [];
-    public List<IReadOnlyList<PlayerAction>> Discussions { get; } = [];
-    public List<(Guid PartyId, IReadOnlyList<LockStatusDto> Status)> LockUpdates { get; } = [];
+    public static PartyMember[] Roster() =>
+    [
+        new("Conan", CharacterClass.Warrior),
+        new("Merlin", CharacterClass.Mage),
+        new("Lyra", CharacterClass.Bard),
+        new("Dru", CharacterClass.Druid),
+    ];
 
-    private readonly TaskCompletionSource<NarrationReady> _firstScenario = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public static Party NewParty(PartyModifiers? modifiers = null, params PartyMember[] members) =>
+        Party.Create(Guid.NewGuid(), "Heroes", members.Length == 0 ? Roster() : members, DateTimeOffset.UtcNow, "", modifiers);
 
-    /// <summary>First turn-resolution narration (non-empty outcome).</summary>
-    public Task<NarrationReady> NarrationAsync => _narration.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-    /// <summary>First-turn scenario broadcast (empty outcome).</summary>
-    public Task<NarrationReady> FirstScenarioAsync => _firstScenario.Task.WaitAsync(TimeSpan.FromSeconds(10));
-
-    public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) => Task.CompletedTask;
-
-    public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default)
+    public static async Task<Guid> CreateAsync(HttpClient client, PartyModifiers modifiers, params object[] members)
     {
-        lock (Turns) { Turns.Add(turn); }
-        return Task.CompletedTask;
+        var body = new
+        {
+            name = "Heroes",
+            members = members.Length == 0 ? PartyTestData.DefaultMembers : members,
+            modifiers,
+        };
+        var response = await client.PostAsJsonAsync("/api/parties", body);
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("partyId").GetGuid();
     }
 
-    public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default)
-    {
-        (narration.Outcome.Length == 0 ? _firstScenario : _narration).TrySetResult(narration);
-        return Task.CompletedTask;
-    }
+    public static object[] FourMembers =>
+    [
+        new { name = "Conan", @class = "warrior" },
+        new { name = "Merlin", @class = "mage" },
+        new { name = "Lyra", @class = "bard" },
+        new { name = "Dru", @class = "druid" },
+    ];
 
-    public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default)
-    {
-        lock (Discussions) { Discussions.Add(actions); }
-        return Task.CompletedTask;
-    }
+    public static Party CachedParty(WebApplicationFactory<Program> f, Guid id) =>
+        f.Services.GetRequiredService<IPartyStore>().TryGet(id, out var party)
+            ? party
+            : throw new InvalidOperationException($"Party {id} is not stored.");
 
-    public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default)
-    {
-        lock (LockUpdates) { LockUpdates.Add((partyId, status)); }
-        return Task.CompletedTask;
-    }
+    public static HubConnection Connect(WebApplicationFactory<Program> f) =>
+        new HubConnectionBuilder()
+            .WithUrl(new Uri(f.Server.BaseAddress, "/hubs/dungeon"), o =>
+            {
+                o.Transports = HttpTransportType.LongPolling;
+                o.HttpMessageHandlerFactory = _ => f.Server.CreateHandler();
+            })
+            .AddJsonProtocol(o =>
+            {
+                o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+            })
+            .Build();
 }

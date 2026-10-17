@@ -5,6 +5,7 @@ using DungeonForge.Api.Features.Social.Supervision;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Social;
 
@@ -19,7 +20,7 @@ public class SupervisionTests
     // A chaos party in which Dru has pocketed the vault gold (the dungeon knows; nobody has proven it).
     private static Party PartyWhereDruStole()
     {
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
         party.DropVault(20, null);
         party.ClaimVault("Dru", VaultChoice.Pocket, new ScriptedRoller(99));
         party.PocketedGold("Dru").Should().BePositive();
@@ -78,7 +79,7 @@ public class SupervisionTests
     [Fact]
     public void InnocentAndHonest_PunishesTheFalseAccuser()
     {
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
 
         var d = Accuse(party, Pipeline(), "Dru", AskChoice.Honest);
 
@@ -92,7 +93,7 @@ public class SupervisionTests
     [Fact]
     public void AmbiguousEvidence_StaysUnresolved_WithOnlyAHint()
     {
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
 
         var d = Accuse(party, Pipeline(), "Dru", AskChoice.Dodge);
 
@@ -145,7 +146,7 @@ public class SupervisionTests
     [Fact]
     public void Rules_AreTriedInOrder_FirstClaimWins()
     {
-        var party = ChaosTestSupport.NewParty();
+        var party = PartyTestBuilders.NewParty();
         var first = new StubRule("A", 1, Verdict.Punish);
         var second = new StubRule("B", 2, Verdict.Celebrate);
 

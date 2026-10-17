@@ -1,12 +1,13 @@
 using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using FluentAssertions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
 public class PartyVaultTests
 {
-    private static Party Chaos() => ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+    private static Party Chaos() => PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
 
     [Fact]
     public void DropVault_CreatesAnUnclaimedVault_AndMergesLaterDrops()
@@ -98,7 +99,7 @@ public class PartyVaultTests
     [Fact]
     public void ClaimVault_AloneWithNoOneToWatch_CannotBeCaught()
     {
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn, new PartyMember("Solo", CharacterClass.Bard));
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn, new PartyMember("Solo", CharacterClass.Bard));
         party.DropVault(5, null);
 
         party.ClaimVault("Solo", VaultChoice.Pocket, new ScriptedRoller(0)).Status.Should().Be(VaultClaimStatus.PocketedHidden);

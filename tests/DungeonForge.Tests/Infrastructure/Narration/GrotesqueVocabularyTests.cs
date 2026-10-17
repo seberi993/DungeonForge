@@ -3,6 +3,7 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Infrastructure.Narration;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Infrastructure.Narration;
 

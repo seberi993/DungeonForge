@@ -9,6 +9,7 @@ using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -35,7 +36,7 @@ public class CastConfrontationVoteErrorTests(WebApplicationFactory<Program> fact
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         using var problem = await ProblemBody.ReadAsync(await VoteAsync(client, id, "Merlin"), HttpStatusCode.Conflict);
 
@@ -50,8 +51,8 @@ public class CastConfrontationVoteErrorTests(WebApplicationFactory<Program> fact
     {
         var (f, client) = Build(30);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(f, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(f, id).DropVault(20, null);
         (await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "pocket" }))
             .EnsureSuccessStatusCode();
 

@@ -3,7 +3,7 @@ using DungeonForge.Web.Services;
 
 namespace DungeonForge.Web.Tests;
 
-internal sealed class FakeDungeonHubClient : IDungeonHubClient
+public sealed class FakeDungeonHubClient : IDungeonHubClient
 {
     public bool FailConnect { get; init; }
     public Guid? ConnectedParty { get; private set; }

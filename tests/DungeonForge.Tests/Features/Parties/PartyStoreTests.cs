@@ -3,6 +3,7 @@ using DungeonForge.Api.Features.Parties;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -16,7 +17,7 @@ public class PartyStoreTests
     }
 
     private static Party NewParty(string inviteCode = "") =>
-        Party.Create(Guid.NewGuid(), "Heroes", ChaosTestSupport.Roster(), DateTimeOffset.UtcNow, inviteCode);
+        Party.Create(Guid.NewGuid(), "Heroes", PartyTestBuilders.Roster(), DateTimeOffset.UtcNow, inviteCode);
 
     [Fact]
     public void Save_ThenTryGet_ReturnsTheSameInstance()

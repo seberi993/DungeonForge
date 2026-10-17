@@ -9,6 +9,7 @@ using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -36,7 +37,7 @@ public class ClaimVaultErrorTests(WebApplicationFactory<Program> factory) : ICla
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         using var problem = await ProblemBody.ReadAsync(await ClaimAsync(client, id, "Conan"), HttpStatusCode.Conflict);
 
@@ -51,8 +52,8 @@ public class ClaimVaultErrorTests(WebApplicationFactory<Program> factory) : ICla
     {
         var (f, client) = Build(30);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(f, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(f, id).DropVault(20, null);
         (await ClaimAsync(client, id, "Conan", "pocket")).EnsureSuccessStatusCode();
 
         using var problem = await ProblemBody.ReadAsync(await ClaimAsync(client, id, "Merlin"), HttpStatusCode.Conflict);
@@ -66,8 +67,8 @@ public class ClaimVaultErrorTests(WebApplicationFactory<Program> factory) : ICla
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(f, id).DropVault(5, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(f, id).DropVault(5, null);
 
         using var problem = await ProblemBody.ReadAsync(await ClaimAsync(client, id, "Ghost"), HttpStatusCode.BadRequest);
 

@@ -13,6 +13,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -66,11 +67,11 @@ public class BroadcastFailureLoggingTests(WebApplicationFactory<Program> factory
         var (scope, client, logs) = Host(new FailingNotifier(), new FixedRoller(0));
         using var _ = scope;
         var id = await PartyTestData.CreatePartyAsync(client);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
-        (await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.WholeParty()[0])).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, PartyTestBuilders.WholeParty()[0])).EnsureSuccessStatusCode();
         logs.Entries.Clear();
 
-        var response = await client.PostAsJsonAsync($"/api/parties/{id}/unlock", new { memberId = ExploreTestSupport.ConanId });
+        var response = await client.PostAsJsonAsync($"/api/parties/{id}/unlock", new { memberId = PartyTestBuilders.ConanId });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         AssertOneBroadcastFailure(logs, "Command:UnlockTurn", id);
@@ -81,8 +82,8 @@ public class BroadcastFailureLoggingTests(WebApplicationFactory<Program> factory
     {
         var (scope, client, logs) = Host(new FailingNotifier(failChaos: true), new ScriptedRoller(0));
         using var _ = scope;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(scope, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(scope, id).DropVault(20, null);
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "share" });
 
@@ -98,8 +99,8 @@ public class BroadcastFailureLoggingTests(WebApplicationFactory<Program> factory
     {
         var (scope, client, logs) = Host(new FailingNotifier(), new ScriptedRoller(30));
         using var _ = scope;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(scope, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(scope, id).DropVault(20, null);
         (await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "pocket" }))
             .EnsureSuccessStatusCode();
         await client.PostAsJsonAsync($"/api/parties/{id}/confrontation/votes", new { playerName = "Merlin", vote = "demandCut" });

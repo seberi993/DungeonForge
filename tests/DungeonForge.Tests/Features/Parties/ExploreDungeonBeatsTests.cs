@@ -4,7 +4,8 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using static DungeonForge.Tests.Features.Parties.ExploreTestSupport;
+using static DungeonForge.Tests.Support.PartyTestBuilders;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 

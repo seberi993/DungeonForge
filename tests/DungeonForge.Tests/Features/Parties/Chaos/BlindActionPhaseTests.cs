@@ -9,6 +9,7 @@ using DungeonForge.Api.Infrastructure.Narration;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
@@ -16,7 +17,7 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
 {
     private const string Secret = "ZZZ-private-plan";
 
-    private (WebApplicationFactory<Program> F, ChaosRecordingNotifier Notifier, CapturingNarrator Narrator) Build(int success = ExploreTestSupport.Succeed)
+    private (WebApplicationFactory<Program> F, ChaosRecordingNotifier Notifier, CapturingNarrator Narrator) Build(int success = PartyTestBuilders.Succeed)
     {
         var notifier = new ChaosRecordingNotifier();
         var narrator = new CapturingNarrator();
@@ -37,11 +38,11 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         var (f, notifier, _) = Build();
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        var response = await ExploreTestSupport.SubmitAsync(client, id,
-            Act("Conan", ExploreTestSupport.ConanId, Secret, new CovertIntent(CovertKind.Backstab, "Merlin")));
+        var response = await PartyTestBuilders.SubmitAsync(client, id,
+            Act("Conan", PartyTestBuilders.ConanId, Secret, new CovertIntent(CovertKind.Backstab, "Merlin")));
         response.EnsureSuccessStatusCode();
 
         notifier.DiscussionBroadcasts.Should().Be(0);
@@ -56,11 +57,11 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         var (f, _, _) = Build();
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
-        (await ExploreTestSupport.SubmitAsync(client, id, Act("Conan", ExploreTestSupport.ConanId, Secret))).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, Act("Conan", PartyTestBuilders.ConanId, Secret))).EnsureSuccessStatusCode();
 
-        var again = await ExploreTestSupport.PromptAsync(client, id);
+        var again = await PartyTestBuilders.PromptAsync(client, id);
 
         (await again.Content.ReadAsStringAsync()).Should().NotContain(Secret);
     }
@@ -72,9 +73,9 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         using var _ = f;
         var client = f.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        (await ExploreTestSupport.SubmitAsync(client, id, Act("Conan", ExploreTestSupport.ConanId, Secret))).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, Act("Conan", PartyTestBuilders.ConanId, Secret))).EnsureSuccessStatusCode();
 
         notifier.DiscussionBroadcasts.Should().Be(0);
         notifier.Events.Should().BeEmpty();
@@ -86,17 +87,17 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         var (f, notifier, narrator) = Build();
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        (await ExploreTestSupport.SubmitAsync(client, id,
-            Act("Mercy", ExploreTestSupport.MercyId, "I steady the line", new CovertIntent(CovertKind.Backstab, "Conan")))).EnsureSuccessStatusCode();
-        (await ExploreTestSupport.SubmitAsync(client, id, Act("Merlin", ExploreTestSupport.MerlinId, "I weave a ward"))).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id,
+            Act("Mercy", PartyTestBuilders.MercyId, "I steady the line", new CovertIntent(CovertKind.Backstab, "Conan")))).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, Act("Merlin", PartyTestBuilders.MerlinId, "I weave a ward"))).EnsureSuccessStatusCode();
         notifier.Turns.Should().BeEmpty();
         notifier.PublicTraffic.Should().NotContainEquivalentOf("backstab");
 
-        var resolved = await ExploreTestSupport.ResolveAsync(client, id,
-            Act("Conan", ExploreTestSupport.ConanId, "We press forward carefully"));
+        var resolved = await PartyTestBuilders.ResolveAsync(client, id,
+            Act("Conan", PartyTestBuilders.ConanId, "We press forward carefully"));
         resolved.EnsureSuccessStatusCode();
 
         var turn = notifier.Turns.Should().ContainSingle().Subject;
@@ -115,13 +116,13 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         var (f, notifier, _) = Build();
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        var response = await ExploreTestSupport.ResolveAsync(client, id,
-            Act("Conan", ExploreTestSupport.ConanId, "We press forward carefully"),
-            Act("Merlin", ExploreTestSupport.MerlinId, "I weave a ward", new CovertIntent(CovertKind.Sabotage, "Conan")),
-            Act("Mercy", ExploreTestSupport.MercyId, "I steady the line"));
+        var response = await PartyTestBuilders.ResolveAsync(client, id,
+            Act("Conan", PartyTestBuilders.ConanId, "We press forward carefully"),
+            Act("Merlin", PartyTestBuilders.MerlinId, "I weave a ward", new CovertIntent(CovertKind.Sabotage, "Conan")),
+            Act("Mercy", PartyTestBuilders.MercyId, "I steady the line"));
         response.EnsureSuccessStatusCode();
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -136,11 +137,11 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
         var (f, _, _) = Build();
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        var response = await ExploreTestSupport.SubmitAsync(client, id,
-            Act("Conan", ExploreTestSupport.ConanId, "go", new CovertIntent(CovertKind.Backstab, new string('x', 200))));
+        var response = await PartyTestBuilders.SubmitAsync(client, id,
+            Act("Conan", PartyTestBuilders.ConanId, "go", new CovertIntent(CovertKind.Backstab, new string('x', 200))));
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
     }
@@ -155,12 +156,12 @@ public class BlindActionPhaseTests(WebApplicationFactory<Program> factory) : ICl
             s.AddSingleton<IPartyNotifier>(notifier);
         }));
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
-        (await ExploreTestSupport.ResolveAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.ResolveAsync(client, id)).EnsureSuccessStatusCode();
 
-        var party = ChaosTestSupport.CachedParty(f, id);
+        var party = PartyTestBuilders.CachedParty(f, id);
         party.Gold.Should().Be(0);
         party.Vault.Should().NotBeNull();
         party.Vault!.Gold.Should().BeGreaterThan(0);

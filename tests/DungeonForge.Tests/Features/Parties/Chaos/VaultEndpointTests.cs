@@ -8,6 +8,7 @@ using DungeonForge.Api.Features.Parties.Realtime;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
@@ -26,8 +27,8 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
 
     private static async Task<Guid> ChaosPartyWithVaultAsync(WebApplicationFactory<Program> f, int gold = 20)
     {
-        var id = await ChaosTestSupport.CreateAsync(f.CreateClient(), ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(f, id).DropVault(gold, null);
+        var id = await PartyTestBuilders.CreateAsync(f.CreateClient(), PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(f, id).DropVault(gold, null);
         return id;
     }
 
@@ -44,7 +45,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         doc.RootElement.GetProperty("outcome").GetString().Should().Be("shared");
-        ChaosTestSupport.CachedParty(f, id).Gold.Should().Be(20);
+        PartyTestBuilders.CachedParty(f, id).Gold.Should().Be(20);
         n.Events.Should().Contain(e => e.Kind == ChaosEvent.VaultClaimed && e.Text.Contains("Conan"));
     }
 
@@ -63,7 +64,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         n.PublicTraffic.Should().NotContain("Conan");
         n.Events.Should().ContainSingle(e => e.Kind == ChaosEvent.VaultClaimed).Which.Text.Should().NotContain("Conan");
         n.Privates.Should().ContainSingle(p => p.Player == "Conan");
-        ChaosTestSupport.CachedParty(f, id).PocketedGold("Conan").Should().Be(20);
+        PartyTestBuilders.CachedParty(f, id).PocketedGold("Conan").Should().Be(20);
     }
 
     [Fact]
@@ -89,7 +90,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         using var lastDoc = JsonDocument.Parse(await last.Content.ReadAsStringAsync());
         lastDoc.RootElement.GetProperty("resolved").GetBoolean().Should().BeTrue();
         lastDoc.RootElement.GetProperty("outcome").GetString().Should().Be("demandCut");
-        ChaosTestSupport.CachedParty(f, id).Gold.Should().Be(10);
+        PartyTestBuilders.CachedParty(f, id).Gold.Should().Be(10);
         n.Events.Should().Contain(e => e.Kind == ChaosEvent.ConfrontationResolved);
     }
 
@@ -99,7 +100,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         var (f, _) = Build(0);
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         (await client.PostAsJsonAsync($"/api/parties/{Guid.NewGuid()}/vault/claim", new { playerName = "Conan", choice = "share" }))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -109,7 +110,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "share" }))
             .StatusCode.Should().Be(HttpStatusCode.Conflict);
-        ChaosTestSupport.CachedParty(f, id).DropVault(5, null);
+        PartyTestBuilders.CachedParty(f, id).DropVault(5, null);
         (await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Ghost", choice = "share" }))
             .StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -120,7 +121,7 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         var (f, _) = Build(0);
         using var _ = f;
         var client = f.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         (await client.PostAsJsonAsync($"/api/parties/{Guid.NewGuid()}/confrontation/votes", new { playerName = "Merlin", vote = "forgive" }))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -137,12 +138,12 @@ public class VaultEndpointTests(WebApplicationFactory<Program> factory) : IClass
         using var _ = f;
         var client = f.CreateClient();
         var id = await ChaosPartyWithVaultAsync(f);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
         await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "pocket" });
 
-        var response = await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.Act("go", "Conan", ExploreTestSupport.ConanId));
+        var response = await PartyTestBuilders.SubmitAsync(client, id, PartyTestBuilders.Act("go", "Conan", PartyTestBuilders.ConanId));
 
-        ChaosTestSupport.CachedParty(f, id).Confrontation.Should().NotBeNull();
+        PartyTestBuilders.CachedParty(f, id).Confrontation.Should().NotBeNull();
         ((int)response.StatusCode).Should().BeGreaterThanOrEqualTo(400);
     }
 }

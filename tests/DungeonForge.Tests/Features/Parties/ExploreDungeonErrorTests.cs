@@ -10,7 +10,8 @@ using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using static DungeonForge.Tests.Features.Parties.ExploreTestSupport;
+using static DungeonForge.Tests.Support.PartyTestBuilders;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -88,8 +89,8 @@ public sealed class ExploreDungeonErrorTests(WebApplicationFactory<Program> fact
     public async Task WhileAConfrontationIsOpen_Returns400Problem_WithTheMessageUnderActions()
     {
         var (scope, client) = Host(new ScriptedRoller(30));
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(scope, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(scope, id).DropVault(20, null);
         (await PromptAsync(client, id)).EnsureSuccessStatusCode();
         (await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "pocket" }))
             .EnsureSuccessStatusCode();

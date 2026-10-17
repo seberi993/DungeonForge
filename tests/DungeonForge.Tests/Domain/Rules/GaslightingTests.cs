@@ -2,6 +2,7 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Domain.Rules;
 
@@ -14,7 +15,7 @@ public class GaslightingTests
     [Fact]
     public void EveryLivingMember_GetsOneClaim_AboutSomeoneElse()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(Chaos: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(Chaos: true));
 
         var lies = Gaslighting.Generate(party, new ScriptedRoller(0, 1, 2, 3));
 
@@ -29,7 +30,7 @@ public class GaslightingTests
     [Fact]
     public void ALoneSurvivor_HasNobodyToGaslight_AndGetsNothing()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(Chaos: true), new PartyMember("Conan", CharacterClass.Warrior));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(Chaos: true), new PartyMember("Conan", CharacterClass.Warrior));
 
         Gaslighting.Generate(party, new ScriptedRoller(0)).Should().BeEmpty();
     }
@@ -37,7 +38,7 @@ public class GaslightingTests
     [Fact]
     public void ARealTheft_IsToldTruthfully_WhenTheRollSkipsTheLie()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(Chaos: true), Pair);
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(Chaos: true), Pair);
         party.DropVault(20, null);
         party.ClaimVault("Conan", VaultChoice.Pocket, new ScriptedRoller(99)); // unseen: Conan now holds 20 gold
         party.PocketedGold("Conan").Should().Be(20);
@@ -53,7 +54,7 @@ public class GaslightingTests
     [Fact]
     public void WithNoRealTheft_AHighRollStillFallsBackToAnInventedClaim()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(Chaos: true), Pair);
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(Chaos: true), Pair);
 
         var lies = Gaslighting.Generate(party, new ScriptedRoller(0, 99, 1, 0, 0, 99, 1, 0));
 
@@ -63,7 +64,7 @@ public class GaslightingTests
     [Fact]
     public void TheTraitorIsNeverTheOneFramed_WhenTheyAreTheSubject()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true), Pair);
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true), Pair);
         party.TryAssignTraitor(new ScriptedRoller(1)).Should().BeTrue();
         party.TraitorName.Should().Be("Merlin");
 
@@ -79,7 +80,7 @@ public class GaslightingTests
     [Fact]
     public void AFramedInnocent_IsNamedAsTheyAre()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true), Pair);
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true), Pair);
         party.TryAssignTraitor(new ScriptedRoller(0)).Should().BeTrue();
         party.TraitorName.Should().Be("Conan");
 

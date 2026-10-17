@@ -13,7 +13,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using static DungeonForge.Tests.Features.Parties.ExploreDungeonNarrationTests;
-using static DungeonForge.Tests.Features.Parties.ExploreTestSupport;
+using static DungeonForge.Tests.Support.PartyTestBuilders;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 

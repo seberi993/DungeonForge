@@ -6,6 +6,7 @@ using DungeonForge.Tests.Errors;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -33,7 +34,7 @@ public class ExtractRunErrorTests(WebApplicationFactory<Program> factory) : ICla
     public async Task UnknownPlayer_Returns400Problem_WithTheMessageUnderPlayerName()
     {
         var client = factory.CreateClient();
-        var id = await ChaosTestSupport.CreateAsync(client, new PartyModifiers(TraitorPact: true));
+        var id = await PartyTestBuilders.CreateAsync(client, new PartyModifiers(TraitorPact: true));
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/extract", new { playerName = "Ghost" });
 

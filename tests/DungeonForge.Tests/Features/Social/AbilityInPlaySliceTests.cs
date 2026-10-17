@@ -7,7 +7,8 @@ using DungeonForge.Api.Features.Social.Core;
 using DungeonForge.Tests.Features.Parties;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
-using static DungeonForge.Tests.Features.Parties.ExploreTestSupport;
+using static DungeonForge.Tests.Support.PartyTestBuilders;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Social;
 

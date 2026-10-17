@@ -1,6 +1,7 @@
 using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using FluentAssertions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
@@ -19,7 +20,7 @@ public class ConfrontationTimeoutTests
     {
         var clock = new ManualTime(DateTimeOffset.UtcNow);
         var party = Party.Create(
-            Guid.NewGuid(), "Heroes", ChaosTestSupport.Roster(), clock.GetUtcNow(), "", ChaosTestSupport.ChaosOn, clock);
+            Guid.NewGuid(), "Heroes", PartyTestBuilders.Roster(), clock.GetUtcNow(), "", PartyTestBuilders.ChaosOn, clock);
         party.DropVault(20, null);
         party.ClaimVault("Conan", VaultChoice.Pocket, new ScriptedRoller(30)); // Lyra and Dru spot; voters Merlin, Lyra, Dru
         return (party, clock);
@@ -100,7 +101,7 @@ public class ExtractionHardeningTests
 {
     private static Party Pact()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
         party.TryAssignTraitor(new ScriptedRoller(0)); // Conan
         return party;
     }
@@ -159,7 +160,7 @@ public class ExtractionHardeningTests
 
 public class VaultHardeningTests
 {
-    private static Party Chaos() => ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+    private static Party Chaos() => PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
 
     [Fact]
     public void DropVault_KeepsEveryArtifact_AndAccumulatesGold()
@@ -221,7 +222,7 @@ public class TraitorWinRuleTests
     [Fact]
     public void WipeOfEveryoneButTheTraitor_IsATraitorWin()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
         party.TryAssignTraitor(new ScriptedRoller(0)); // Conan
         party.ApplyMemberOutcomes([new("Merlin", 999), new("Lyra", 999), new("Dru", 999)], 0);
 
@@ -231,7 +232,7 @@ public class TraitorWinRuleTests
     [Fact]
     public void FullWipeIncludingTheTraitor_IsNotATraitorWin()
     {
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
         party.TryAssignTraitor(new ScriptedRoller(0));
         party.ApplyMemberOutcomes([.. party.Members.Select(m => new DamageResult(m.Name, 999))], 0);
 

@@ -2,6 +2,7 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
@@ -13,7 +14,7 @@ public class GaslightingDispatcherTests
         var notifier = new ChaosRecordingNotifier();
         var dispatcher = new ChaosDispatcher(notifier, new ScriptedRoller(0), NullLogger<ChaosDispatcher>.Instance);
 
-        await dispatcher.DispatchGaslightingAsync(ChaosTestSupport.NewParty(new PartyModifiers()));
+        await dispatcher.DispatchGaslightingAsync(PartyTestBuilders.NewParty(new PartyModifiers()));
 
         notifier.Privates.Should().BeEmpty();
     }
@@ -23,7 +24,7 @@ public class GaslightingDispatcherTests
     {
         var notifier = new ChaosRecordingNotifier();
         var dispatcher = new ChaosDispatcher(notifier, new ScriptedRoller(0), NullLogger<ChaosDispatcher>.Instance);
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(Chaos: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(Chaos: true));
 
         await dispatcher.DispatchGaslightingAsync(party);
 

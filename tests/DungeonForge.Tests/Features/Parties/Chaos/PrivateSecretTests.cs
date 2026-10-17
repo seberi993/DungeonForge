@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
@@ -22,7 +23,7 @@ public class ChaosDispatcherSecretTests
     public async Task DispatchRoomSecrets_SendsOnlyPrivateMessagesToTheIntendedPlayers_NeverPublic()
     {
         var notifier = new ChaosRecordingNotifier();
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
 
         await Dispatcher(notifier).DispatchRoomSecretsAsync(party, RoomType.Chest, 1);
 
@@ -37,7 +38,7 @@ public class ChaosDispatcherSecretTests
     {
         var notifier = new ChaosRecordingNotifier();
 
-        await Dispatcher(notifier).DispatchRoomSecretsAsync(ChaosTestSupport.NewParty(), RoomType.Chest, 1);
+        await Dispatcher(notifier).DispatchRoomSecretsAsync(PartyTestBuilders.NewParty(), RoomType.Chest, 1);
 
         notifier.Privates.Should().BeEmpty();
     }
@@ -46,7 +47,7 @@ public class ChaosDispatcherSecretTests
     public async Task DispatchWhispers_RoutesByNameOrClass_AndDropsUnknownTargets()
     {
         var notifier = new ChaosRecordingNotifier();
-        var party = ChaosTestSupport.NewParty();
+        var party = PartyTestBuilders.NewParty();
 
         await Dispatcher(notifier).DispatchWhispersAsync(party,
             [new("Mage", "by class"), new("lyra", "by name"), new("Nobody", "lost")]);
@@ -59,7 +60,7 @@ public class ChaosDispatcherSecretTests
     [Fact]
     public async Task Dispatch_SwallowsNotifierFailures()
     {
-        var party = ChaosTestSupport.NewParty(ChaosTestSupport.ChaosOn);
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
         var d = new ChaosDispatcher(new ThrowingPrivateNotifier(), new ScriptedRoller(0), NullLogger<ChaosDispatcher>.Instance);
 
         var act = () => d.DispatchRoomSecretsAsync(party, RoomType.Chest, 1);
@@ -84,10 +85,10 @@ public class PrivateDeliveryHubTests(WebApplicationFactory<Program> factory) : I
     private static async Task<(Guid Id, Microsoft.AspNetCore.SignalR.Client.HubConnection Merlin, Microsoft.AspNetCore.SignalR.Client.HubConnection Lyra, List<PrivateMessage> MerlinGot, List<PrivateMessage> LyraGot, List<PrivateMessage> BystanderGot, Microsoft.AspNetCore.SignalR.Client.HubConnection Bystander)>
         SetUpAsync(WebApplicationFactory<Program> f)
     {
-        var id = await ChaosTestSupport.CreateAsync(f.CreateClient(), ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        var merlin = ChaosTestSupport.Connect(f);
-        var lyra = ChaosTestSupport.Connect(f);
-        var bystander = ChaosTestSupport.Connect(f);
+        var id = await PartyTestBuilders.CreateAsync(f.CreateClient(), PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        var merlin = PartyTestBuilders.Connect(f);
+        var lyra = PartyTestBuilders.Connect(f);
+        var bystander = PartyTestBuilders.Connect(f);
         List<PrivateMessage> m = [], l = [], b = [];
         merlin.On<PrivateMessage>("PrivateMessage", x => { lock (m) m.Add(x); });
         lyra.On<PrivateMessage>("PrivateMessage", x => { lock (l) l.Add(x); });
@@ -108,7 +109,7 @@ public class PrivateDeliveryHubTests(WebApplicationFactory<Program> factory) : I
         await using var _1 = merlin;
         await using var _2 = lyra;
         await using var _3 = bystander;
-        var party = ChaosTestSupport.CachedParty(factory, id);
+        var party = PartyTestBuilders.CachedParty(factory, id);
 
         await factory.Services.GetRequiredService<ChaosDispatcher>().DispatchRoomSecretsAsync(party, RoomType.Chest, 1);
         await Task.Delay(500);
@@ -126,7 +127,7 @@ public class PrivateDeliveryHubTests(WebApplicationFactory<Program> factory) : I
         await using var _1 = merlin;
         await using var _2 = lyra;
         await using var _3 = bystander;
-        var party = ChaosTestSupport.CachedParty(factory, id);
+        var party = PartyTestBuilders.CachedParty(factory, id);
 
         await factory.Services.GetRequiredService<ChaosDispatcher>()
             .DispatchWhispersAsync(party, [new Whisper("Mage", "The Bard took 10 extra gold while you were looking away")]);
@@ -140,9 +141,9 @@ public class PrivateDeliveryHubTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task RegisterPlayer_RejectsUnknownPartyOrPlayer()
     {
-        await using var conn = ChaosTestSupport.Connect(factory);
+        await using var conn = PartyTestBuilders.Connect(factory);
         await conn.StartAsync();
-        var id = await ChaosTestSupport.CreateAsync(factory.CreateClient(), ChaosTestSupport.ChaosOn);
+        var id = await PartyTestBuilders.CreateAsync(factory.CreateClient(), PartyTestBuilders.ChaosOn);
 
         var noParty = () => conn.InvokeAsync("RegisterPlayer", Guid.NewGuid(), "Conan");
         var noPlayer = () => conn.InvokeAsync("RegisterPlayer", id, "Ghost");
@@ -159,7 +160,7 @@ public class PrivateDeliveryHubTests(WebApplicationFactory<Program> factory) : I
         await using var _3 = bystander;
         await merlin.StopAsync();
         await merlin.DisposeAsync();
-        var party = ChaosTestSupport.CachedParty(factory, id);
+        var party = PartyTestBuilders.CachedParty(factory, id);
 
         var act = () => factory.Services.GetRequiredService<ChaosDispatcher>().DispatchRoomSecretsAsync(party, RoomType.Chest, 1);
 

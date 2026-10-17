@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DungeonForge.Web.Tests;
 
-internal sealed class FakeHandler(HttpStatusCode status, string body = "", Func<string>? bodyFactory = null) : HttpMessageHandler
+public sealed class FakeHandler(HttpStatusCode status, string body = "", Func<string>? bodyFactory = null) : HttpMessageHandler
 {
     public HttpRequestMessage? LastRequest { get; private set; }
     public string? LastRequestBody { get; private set; }

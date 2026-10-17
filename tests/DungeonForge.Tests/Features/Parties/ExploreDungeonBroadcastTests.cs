@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -59,7 +60,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         var derived = factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0))));
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
-        var handler = ExploreTestSupport.NewHandler(
+        var handler = PartyTestBuilders.NewHandler(
             derived.Services.GetRequiredService<IPartyStore>(), new FixedRoller(0), new FixedNarrator(), notifier);
         return (handler, id, derived);
     }
@@ -86,7 +87,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var _ = scope;
         await handler.HandleAsync(id, null);
 
-        var result = await handler.HandleAsync(id, new ExploreRequest(ExploreTestSupport.WholeParty()));
+        var result = await handler.HandleAsync(id, new ExploreRequest(PartyTestBuilders.WholeParty()));
 
         result.IsSuccess.Should().BeTrue();
         notifier.TurnResolvedCalls.Should().Be(1);
@@ -103,7 +104,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        await handler.HandleAsync(id, new ExploreRequest(ExploreTestSupport.WholeParty()), cts.Token);
+        await handler.HandleAsync(id, new ExploreRequest(PartyTestBuilders.WholeParty()), cts.Token);
 
         notifier.TurnResolvedCalls.Should().Be(1);
         notifier.PartyUpdatedCalls.Should().Be(1);
@@ -119,7 +120,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         using var _ = scope;
         await handler.HandleAsync(id, null);
 
-        var result = await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act("\u0007")]));
+        var result = await handler.HandleAsync(id, new ExploreRequest([PartyTestBuilders.Act("\u0007")]));
 
         result.Error!.Code.Should().Be(ErrorCodes.Turn.NoActions);
         result.Error.Operation.Should().Be(ExploreOperations.ResolveTurn);

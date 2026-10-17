@@ -9,6 +9,7 @@ using DungeonForge.Tests.Features.Parties.Chaos;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Social;
 
@@ -57,11 +58,11 @@ internal sealed class SocialHarness : IDisposable
     }
 
     public Task<Guid> PartyAsync(object[]? members = null) =>
-        PartyTestData.CreatePartyAsync(Client, "Heroes", members ?? ChaosTestSupport.FourMembers);
+        PartyTestData.CreatePartyAsync(Client, "Heroes", members ?? PartyTestBuilders.FourMembers);
 
     public T Get<T>() where T : notnull => _factory.Services.GetRequiredService<T>();
 
-    public Party Party(Guid id) => ChaosTestSupport.CachedParty(_factory, id);
+    public Party Party(Guid id) => PartyTestBuilders.CachedParty(_factory, id);
 
     public PlayerProfile Profile(Guid id, string name) => Party(id).Social().Profile(name);
 

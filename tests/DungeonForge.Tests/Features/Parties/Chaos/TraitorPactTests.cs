@@ -8,13 +8,14 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;
 
 public class PartyTraitorTests
 {
     private static Party Pact(params PartyMember[] members) =>
-        ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true), members);
+        PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true), members);
 
     [Fact]
     public void Assignment_PicksOneMemberViaTheRoller_Once()
@@ -30,7 +31,7 @@ public class PartyTraitorTests
     [Fact]
     public void Assignment_NeedsThePactAndAtLeastTwoMembers()
     {
-        ChaosTestSupport.NewParty().TryAssignTraitor(new ScriptedRoller(0)).Should().BeFalse();
+        PartyTestBuilders.NewParty().TryAssignTraitor(new ScriptedRoller(0)).Should().BeFalse();
         Pact(new PartyMember("Solo", CharacterClass.Bard)).TryAssignTraitor(new ScriptedRoller(0)).Should().BeFalse();
     }
 
@@ -58,7 +59,7 @@ public class PartyTraitorTests
     [Fact]
     public void WipeIsIgnoredWithoutAPact()
     {
-        var party = ChaosTestSupport.NewParty();
+        var party = PartyTestBuilders.NewParty();
         party.ApplyMemberOutcomes([.. party.Members.Select(m => new DamageResult(m.Name, 999))], 0);
 
         party.EvaluateTraitor().Should().Be(TraitorOutcome.None);
@@ -97,7 +98,7 @@ public class ChaosDispatcherTraitorTests
     {
         var notifier = new ChaosRecordingNotifier();
         var d = new ChaosDispatcher(notifier, new ScriptedRoller(1), NullLogger<ChaosDispatcher>.Instance);
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
 
         await d.EnsureTraitorAsync(party, "Conan");
 
@@ -112,7 +113,7 @@ public class ChaosDispatcherTraitorTests
     {
         var notifier = new ChaosRecordingNotifier();
         var d = new ChaosDispatcher(notifier, new ScriptedRoller(1), NullLogger<ChaosDispatcher>.Instance);
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
         await d.EnsureTraitorAsync(party, "Conan");
         notifier.Privates.Clear();
 
@@ -128,7 +129,7 @@ public class ChaosDispatcherTraitorTests
     {
         var notifier = new ChaosRecordingNotifier();
         var d = new ChaosDispatcher(notifier, new ScriptedRoller(1), NullLogger<ChaosDispatcher>.Instance);
-        var party = ChaosTestSupport.NewParty(new PartyModifiers(TraitorPact: true));
+        var party = PartyTestBuilders.NewParty(new PartyModifiers(TraitorPact: true));
         party.TryAssignTraitor(new ScriptedRoller(1));
 
         await d.AnnounceTraitorOutcomeAsync(party, TraitorOutcome.TraitorWinsWipe);
@@ -145,9 +146,9 @@ public class TraitorPactHubTests(WebApplicationFactory<Program> factory) : IClas
         using var f = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
             s.AddSingleton(sp => new ChaosDispatcher(
                 sp.GetRequiredService<IPartyNotifier>(), new ScriptedRoller(1), NullLogger<ChaosDispatcher>.Instance))));
-        var id = await ChaosTestSupport.CreateAsync(f.CreateClient(), new PartyModifiers(TraitorPact: true), ChaosTestSupport.FourMembers);
-        await using var conan = ChaosTestSupport.Connect(f);
-        await using var merlin = ChaosTestSupport.Connect(f);
+        var id = await PartyTestBuilders.CreateAsync(f.CreateClient(), new PartyModifiers(TraitorPact: true), PartyTestBuilders.FourMembers);
+        await using var conan = PartyTestBuilders.Connect(f);
+        await using var merlin = PartyTestBuilders.Connect(f);
         List<PrivateMessage> conanGot = [], merlinGot = [];
         conan.On<PrivateMessage>("PrivateMessage", m => { lock (conanGot) conanGot.Add(m); });
         merlin.On<PrivateMessage>("PrivateMessage", m => { lock (merlinGot) merlinGot.Add(m); });
@@ -167,7 +168,7 @@ public class TraitorPactHubTests(WebApplicationFactory<Program> factory) : IClas
     {
         var client = factory.CreateClient();
         var plain = await PartyTestData.CreatePartyAsync(client);
-        var pact = await ChaosTestSupport.CreateAsync(client, new PartyModifiers(TraitorPact: true));
+        var pact = await PartyTestBuilders.CreateAsync(client, new PartyModifiers(TraitorPact: true));
 
         (await client.PostAsJsonAsync($"/api/parties/{plain}/extract", new { playerName = "Conan" }))
             .StatusCode.Should().Be(System.Net.HttpStatusCode.Conflict);

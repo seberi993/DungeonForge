@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -36,12 +37,12 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     }
 
     private WebApplicationFactory<Program> WithFixedRoller() =>
-        factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0, ExploreTestSupport.Fail))));
+        factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0, PartyTestBuilders.Fail))));
 
     private static async Task<HttpResponseMessage> ExploreTurnAsync(HttpClient client, Guid id)
     {
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
-        return await ExploreTestSupport.ResolveAsync(client, id);
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        return await PartyTestBuilders.ResolveAsync(client, id);
     }
 
     private static HubConnection Connect(WebApplicationFactory<Program> f) =>
@@ -167,7 +168,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
     {
         using var f = factory.WithWebHostBuilder(b => b.ConfigureServices(s =>
         {
-            s.AddSingleton<IRoller>(new FixedRoller(0, ExploreTestSupport.Fail));
+            s.AddSingleton<IRoller>(new FixedRoller(0, PartyTestBuilders.Fail));
             s.AddSingleton<IPartyNotifier>(new ThrowingNotifier());
         }));
         var client = f.CreateClient();
@@ -186,7 +187,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         using var f = WithFixedRoller();
         var client = f.CreateClient();
         var id = await CreatePartyAsync(client);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
 
         await using var a = Connect(f);
         await using var b = Connect(f);
@@ -197,7 +198,7 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         await a.InvokeAsync("JoinParty", id);
         await b.InvokeAsync("JoinParty", id);
 
-        (await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.WholeParty()[0])).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, PartyTestBuilders.WholeParty()[0])).EnsureSuccessStatusCode();
 
         var (partyId, status) = await got.Task.WaitAsync(TimeSpan.FromSeconds(10));
         partyId.Should().Be(id);
@@ -211,14 +212,14 @@ public sealed class DungeonHubTests(WebApplicationFactory<Program> factory)
         var client = f.CreateClient();
         var id = await CreatePartyAsync(client);
         var otherId = await CreatePartyAsync(client);
-        (await ExploreTestSupport.PromptAsync(client, id)).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.PromptAsync(client, id)).EnsureSuccessStatusCode();
         await using var other = Connect(f);
         var count = 0;
         other.On<Guid, List<LockStatusDto>>("TurnLockUpdated", (_, _) => Interlocked.Increment(ref count));
         await other.StartAsync();
         await other.InvokeAsync("JoinParty", otherId);
 
-        (await ExploreTestSupport.SubmitAsync(client, id, ExploreTestSupport.WholeParty()[0])).EnsureSuccessStatusCode();
+        (await PartyTestBuilders.SubmitAsync(client, id, PartyTestBuilders.WholeParty()[0])).EnsureSuccessStatusCode();
 
         await Task.Delay(300);
         count.Should().Be(0);

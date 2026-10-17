@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Domain;
@@ -7,20 +6,51 @@ using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
-using Microsoft.AspNetCore.Http.Connections;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
 
-namespace DungeonForge.Tests.Features.Parties.Chaos;
+namespace DungeonForge.Tests.Support;
 
-/// <summary>Replays scripted values (modulo max); the last value repeats once the script is exhausted.</summary>
-internal sealed class ScriptedRoller(params int[] values) : IRoller
+/// <summary>Notifier that records everything and lets tests await the asynchronous narration phase.</summary>
+internal sealed class CapturingNotifier : IPartyNotifier
 {
-    private int _i;
+    private readonly TaskCompletionSource<NarrationReady> _narration = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    public int Next(int max) => values[Math.Min(_i++, values.Length - 1)] % max;
+    public List<ExploreResponse> Turns { get; } = [];
+    public List<IReadOnlyList<PlayerAction>> Discussions { get; } = [];
+    public List<(Guid PartyId, IReadOnlyList<LockStatusDto> Status)> LockUpdates { get; } = [];
+
+    private readonly TaskCompletionSource<NarrationReady> _firstScenario = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>First turn-resolution narration (non-empty outcome).</summary>
+    public Task<NarrationReady> NarrationAsync => _narration.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+    /// <summary>First-turn scenario broadcast (empty outcome).</summary>
+    public Task<NarrationReady> FirstScenarioAsync => _firstScenario.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+    public Task PartyUpdatedAsync(GetPartyStateResponse state, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task TurnResolvedAsync(ExploreResponse turn, CancellationToken ct = default)
+    {
+        lock (Turns) { Turns.Add(turn); }
+        return Task.CompletedTask;
+    }
+
+    public Task NarrationReadyAsync(NarrationReady narration, CancellationToken ct = default)
+    {
+        (narration.Outcome.Length == 0 ? _firstScenario : _narration).TrySetResult(narration);
+        return Task.CompletedTask;
+    }
+
+    public Task DiscussionUpdatedAsync(Guid partyId, IReadOnlyList<PlayerAction> actions, CancellationToken ct = default)
+    {
+        lock (Discussions) { Discussions.Add(actions); }
+        return Task.CompletedTask;
+    }
+
+    public Task TurnLockUpdatedAsync(Guid partyId, IReadOnlyList<LockStatusDto> status, CancellationToken ct = default)
+    {
+        lock (LockUpdates) { LockUpdates.Add((partyId, status)); }
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>Records every public and private message so tests can inspect exactly what leaked where.</summary>
@@ -86,61 +116,4 @@ internal sealed class CapturingNarrator : IDungeonNarrator
         lock (Turns) { Turns.Add(ctx); }
         return Task.FromResult(FallbackFlavor.Complete(null, success, ctx));
     }
-}
-
-internal static class ChaosTestSupport
-{
-    public static readonly PartyModifiers ChaosOn = new(Chaos: true);
-
-    public static PartyMember[] Roster() =>
-    [
-        new("Conan", CharacterClass.Warrior),
-        new("Merlin", CharacterClass.Mage),
-        new("Lyra", CharacterClass.Bard),
-        new("Dru", CharacterClass.Druid),
-    ];
-
-    public static Party NewParty(PartyModifiers? modifiers = null, params PartyMember[] members) =>
-        Party.Create(Guid.NewGuid(), "Heroes", members.Length == 0 ? Roster() : members, DateTimeOffset.UtcNow, "", modifiers);
-
-    public static async Task<Guid> CreateAsync(HttpClient client, PartyModifiers modifiers, params object[] members)
-    {
-        var body = new
-        {
-            name = "Heroes",
-            members = members.Length == 0 ? PartyTestData.DefaultMembers : members,
-            modifiers,
-        };
-        var response = await client.PostAsJsonAsync("/api/parties", body);
-        response.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return doc.RootElement.GetProperty("partyId").GetGuid();
-    }
-
-    public static object[] FourMembers =>
-    [
-        new { name = "Conan", @class = "warrior" },
-        new { name = "Merlin", @class = "mage" },
-        new { name = "Lyra", @class = "bard" },
-        new { name = "Dru", @class = "druid" },
-    ];
-
-    public static Party CachedParty(WebApplicationFactory<Program> f, Guid id) =>
-        f.Services.GetRequiredService<IPartyStore>().TryGet(id, out var party)
-            ? party
-            : throw new InvalidOperationException($"Party {id} is not stored.");
-
-    public static HubConnection Connect(WebApplicationFactory<Program> f) =>
-        new HubConnectionBuilder()
-            .WithUrl(new Uri(f.Server.BaseAddress, "/hubs/dungeon"), o =>
-            {
-                o.Transports = HttpTransportType.LongPolling;
-                o.HttpMessageHandlerFactory = _ => f.Server.CreateHandler();
-            })
-            .AddJsonProtocol(o =>
-            {
-                o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-                o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-            })
-            .Build();
 }

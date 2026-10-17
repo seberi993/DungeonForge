@@ -2,13 +2,14 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
 // The three shapes an explore answer takes, built by name so a new field cannot silently shift the others.
 public class ExploreResponsesTests
 {
-    private static Party NewParty() => ChaosTestSupport.NewParty();
+    private static Party NewParty() => PartyTestBuilders.NewParty();
 
     [Fact]
     public void Prompt_CarriesTheStoredScenarioAndLockStatus_AndNoDeltas()

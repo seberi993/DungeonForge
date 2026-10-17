@@ -2,6 +2,7 @@ using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using FluentAssertions;
 using DungeonForge.Tests.Features.Parties.Chaos;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Domain.Rules;
 
@@ -10,7 +11,7 @@ public class CovertResolverTests
     private static PlayerAction Act(string name, CovertKind? kind = null, string target = "") =>
         new(Guid.NewGuid(), name, "press on", kind is { } k ? new CovertIntent(k, target) : null);
 
-    private static IReadOnlyList<PartyMember> Members => ChaosTestSupport.Roster();
+    private static IReadOnlyList<PartyMember> Members => PartyTestBuilders.Roster();
 
     [Fact]
     public void NoCovertIntents_ConsumesNoRollsAndResolvesNothing()
@@ -91,7 +92,7 @@ public class CovertResolverTests
     [Fact]
     public void DefeatedActorsOrTargets_AreIgnored()
     {
-        var party = ChaosTestSupport.NewParty();
+        var party = PartyTestBuilders.NewParty();
         party.ApplyMemberOutcomes([new DamageResult("Merlin", 99)], 0);
 
         var deadTarget = CovertResolver.Resolve([Act("Conan", CovertKind.Backstab, "Merlin")], party.Members, new ScriptedRoller(1));

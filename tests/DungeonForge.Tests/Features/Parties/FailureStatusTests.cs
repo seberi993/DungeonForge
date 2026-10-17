@@ -9,6 +9,7 @@ using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -29,11 +30,11 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     // Roll 30 makes the pocket claim "caught", which opens a confrontation against Conan.
     private static async Task<Guid> PartyWithOpenConfrontationAsync(WebApplicationFactory<Program> f, HttpClient client)
     {
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
-        ChaosTestSupport.CachedParty(f, id).DropVault(20, null);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
+        PartyTestBuilders.CachedParty(f, id).DropVault(20, null);
         var claim = await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan", choice = "pocket" });
         claim.StatusCode.Should().Be(HttpStatusCode.OK);
-        ChaosTestSupport.CachedParty(f, id).Confrontation.Should().NotBeNull();
+        PartyTestBuilders.CachedParty(f, id).Confrontation.Should().NotBeNull();
         return id;
     }
 
@@ -54,7 +55,7 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/vault/claim", new { playerName = "Conan" });
 
@@ -82,7 +83,7 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/confrontation/votes", new { playerName, vote = "forgive" });
 
@@ -95,7 +96,7 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/confrontation/votes", new { playerName = "Merlin" });
 
@@ -107,7 +108,7 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     public async Task Extract_UnknownPlayer_Returns400()
     {
         var client = factory.CreateClient();
-        var pact = await ChaosTestSupport.CreateAsync(client, new PartyModifiers(TraitorPact: true));
+        var pact = await PartyTestBuilders.CreateAsync(client, new PartyModifiers(TraitorPact: true));
 
         var response = await client.PostAsJsonAsync($"/api/parties/{pact}/extract", new { playerName = "Ghost" });
 
@@ -138,7 +139,7 @@ public class FailureStatusTests(WebApplicationFactory<Program> factory) : IClass
     {
         var (f, client) = Build(0);
         using var _ = f;
-        var id = await ChaosTestSupport.CreateAsync(client, ChaosTestSupport.ChaosOn, ChaosTestSupport.FourMembers);
+        var id = await PartyTestBuilders.CreateAsync(client, PartyTestBuilders.ChaosOn, PartyTestBuilders.FourMembers);
         var body = new Dictionary<string, string> { ["playerName"] = "Conan", [field] = "bogus" };
 
         var response = await client.PostAsJsonAsync($"/api/parties/{id}/{route}", body);

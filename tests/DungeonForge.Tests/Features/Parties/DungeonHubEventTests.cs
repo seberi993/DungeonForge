@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using DungeonForge.Tests.Support;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -24,7 +25,7 @@ public sealed class DungeonHubEventTests(WebApplicationFactory<Program> factory)
     {
         var (scope, logs) = Host();
         using var _ = scope;
-        await using var connection = ChaosTestSupport.Connect(scope);
+        await using var connection = PartyTestBuilders.Connect(scope);
         await connection.StartAsync();
         var id = Guid.NewGuid();
 
@@ -41,7 +42,7 @@ public sealed class DungeonHubEventTests(WebApplicationFactory<Program> factory)
         var (scope, logs) = Host();
         using var _ = scope;
         var id = await PartyTestData.CreatePartyAsync(scope.CreateClient());
-        await using var connection = ChaosTestSupport.Connect(scope);
+        await using var connection = PartyTestBuilders.Connect(scope);
         await connection.StartAsync();
 
         var act = () => connection.InvokeAsync("RegisterPlayer", id, "Ghost");
@@ -57,7 +58,7 @@ public sealed class DungeonHubEventTests(WebApplicationFactory<Program> factory)
     {
         var (scope, logs) = Host();
         using var _ = scope;
-        await using var connection = ChaosTestSupport.Connect(scope);
+        await using var connection = PartyTestBuilders.Connect(scope);
         await connection.StartAsync();
 
         var act = () => connection.InvokeAsync("RegisterPlayer", Guid.NewGuid(), "Conan");
