@@ -111,14 +111,14 @@ public sealed class TurnResolver(
         var isBoss = pending.Room == RoomType.Boss;
         var bossFalls = isBoss && party.BossHp - bossDamage <= 0;
         success |= bossFalls;
-        var paid = isBoss ? bossFalls : success;
-        var gold = paid ? RoomRules.Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold + (plan?.GoldBonus ?? 0) : 0;
+        var roomPays = isBoss ? bossFalls : success;
+        var gold = roomPays ? RoomRules.Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold + (plan?.GoldBonus ?? 0) : 0;
 
         // Chaos parties do not bank drops: gold and the boss's Cursed Idol wait in the Unclaimed Vault.
-        var contested = party.Modifiers.Chaos;
-        var hits = party.ApplyMemberOutcomes([.. failed, .. covert.Hits], contested ? 0 : gold);
+        var dropsWaitInVault = party.Modifiers.Chaos;
+        var hits = party.ApplyMemberOutcomes([.. failed, .. covert.Hits], dropsWaitInVault ? 0 : gold);
         foreach (var (thief, amount) in covert.Heals) party.Heal(thief, amount);
-        if (contested && (gold > 0 || bossFalls)) party.DropVault(gold, bossFalls ? TraitorPact.CursedIdol : null);
+        if (dropsWaitInVault && (gold > 0 || bossFalls)) party.DropVault(gold, bossFalls ? TraitorPact.CursedIdol : null);
 
         // The next room is rolled in C# before any narrator call; nothing follows a defeated party. A boss
         // that is awake (or just woken by the floor's last room) is always the next room.

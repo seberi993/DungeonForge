@@ -112,12 +112,12 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            if (_chaos.Confrontation is not { } c)
+            if (_chaos.Confrontation is not { } confrontation)
             {
                 return new VoteResult(VoteStatus.NoConfrontation);
             }
 
-            var eligible = c.Voters.FirstOrDefault(v => string.Equals(v, voter, StringComparison.OrdinalIgnoreCase));
+            var eligible = confrontation.Voters.FirstOrDefault(v => string.Equals(v, voter, StringComparison.OrdinalIgnoreCase));
             if (eligible is null || Active(eligible) is null)
             {
                 return new VoteResult(VoteStatus.NotEligible);
@@ -126,12 +126,12 @@ public sealed partial class Party
             // Too late: the deadline passed, so the vote is not counted and the confrontation closes on the ballots already cast.
             if (TryResolveConfrontation(roller) is { } expired)
             {
-                return new VoteResult(VoteStatus.Resolved, expired, expired.Tally.Values.Sum(), c.Voters.Count(v => Active(v) is not null));
+                return new VoteResult(VoteStatus.Resolved, expired, expired.Tally.Values.Sum(), confrontation.Voters.Count(v => Active(v) is not null));
             }
 
-            var votes = new Dictionary<string, ConfrontationVote>(c.Votes, StringComparer.OrdinalIgnoreCase) { [eligible] = vote };
-            _chaos.Confrontation = c = c with { Votes = votes };
-            var required = RequiredVoters(c);
+            var votes = new Dictionary<string, ConfrontationVote>(confrontation.Votes, StringComparer.OrdinalIgnoreCase) { [eligible] = vote };
+            _chaos.Confrontation = confrontation = confrontation with { Votes = votes };
+            var required = RequiredVoters(confrontation);
             if (TryResolveConfrontation(roller) is { } resolution)
             {
                 return new VoteResult(VoteStatus.Resolved, resolution, resolution.Tally.Values.Sum(), required.Length);
@@ -142,7 +142,7 @@ public sealed partial class Party
     }
 
     // Voters who can still be asked: alive, not banished and not extracted (defeated voters never hold the vote up).
-    private string[] RequiredVoters(Confrontation c) => [.. c.Voters.Where(v => Active(v) is not null)];
+    private string[] RequiredVoters(Confrontation confrontation) => [.. confrontation.Voters.Where(v => Active(v) is not null)];
 
     // Closes the confrontation when every remaining eligible voter has voted, nobody is left to ask, or the deadline passed.
     // Missing ballots abstain; no ballots at all is a Forgive no-op. Null while the vote is still open (or absent).
@@ -150,24 +150,24 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            if (_chaos.Confrontation is not { } c)
+            if (_chaos.Confrontation is not { } confrontation)
             {
                 return null;
             }
 
-            var required = RequiredVoters(c);
-            var ballots = required.Where(c.Votes.ContainsKey).Select(v => c.Votes[v]).ToArray();
+            var required = RequiredVoters(confrontation);
+            var ballots = required.Where(confrontation.Votes.ContainsKey).Select(v => confrontation.Votes[v]).ToArray();
             var complete = ballots.Length == required.Length;
-            return complete || _time.GetUtcNow() >= c.Deadline ? Resolve(c, ballots, roller) : null;
+            return complete || _time.GetUtcNow() >= confrontation.Deadline ? Resolve(confrontation, ballots, roller) : null;
         }
     }
 
-    private ConfrontationResolution Resolve(Confrontation c, ConfrontationVote[] ballots, IRoller roller)
+    private ConfrontationResolution Resolve(Confrontation confrontation, ConfrontationVote[] ballots, IRoller roller)
     {
         var outcome = ballots.Length == 0 ? ConfrontationVote.Forgive : ConfrontationRules.Decide(ballots, roller);
-        var effect = ConfrontationRules.Outcome(outcome, c.Gold);
-        var accused = Members.First(m => m.Name == c.Accused);
-        var pocket = PocketedGold(c.Accused);
+        var effect = ConfrontationRules.Outcome(outcome, confrontation.Gold);
+        var accused = Members.First(m => m.Name == confrontation.Accused);
+        var pocket = PocketedGold(confrontation.Accused);
 
         var toParty = Math.Min(effect.GoldToParty, pocket);
         if (effect.Banish)
@@ -177,7 +177,7 @@ public sealed partial class Party
         }
 
         _gold += toParty;
-        _chaos.Pockets[c.Accused] = new PocketedLoot(pocket - toParty, null);
+        _chaos.Pockets[confrontation.Accused] = new PocketedLoot(pocket - toParty, null);
         if (effect.Damage > 0 && !accused.IsDefeated)
         {
             accused.TakeDamage(effect.Damage);
@@ -185,7 +185,7 @@ public sealed partial class Party
 
         if (!effect.KeepsArtifact)
         {
-            foreach (var artifact in c.Artifacts)
+            foreach (var artifact in confrontation.Artifacts)
             {
                 _chaos.ArtifactHolders.Remove(artifact);
             }
@@ -193,7 +193,7 @@ public sealed partial class Party
 
         _chaos.Confrontation = null;
         return new ConfrontationResolution(
-            c.Accused, outcome, ConfrontationRules.Tally(ballots), toParty, pocket - toParty, effect.Banish, effect.Damage);
+            confrontation.Accused, outcome, ConfrontationRules.Tally(ballots), toParty, pocket - toParty, effect.Banish, effect.Damage);
     }
 
 }
