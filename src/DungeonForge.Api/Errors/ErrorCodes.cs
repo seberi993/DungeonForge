@@ -17,5 +17,6 @@ public static class ErrorCodes
     public static class Party
     {
         public const string NotFound = "party.not_found";
+        public const string InviteNotFound = "party.invite_not_found";
     }
 }

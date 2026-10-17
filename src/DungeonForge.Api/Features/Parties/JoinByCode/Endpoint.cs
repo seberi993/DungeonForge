@@ -1,14 +1,12 @@
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 
 namespace DungeonForge.Api.Features.Parties.JoinByCode;
 
 public sealed class JoinByCodeEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapGet("/parties/by-code/{code}", Results<Ok<GetPartyStateResponse>, NotFound> (string code, JoinByCodeHandler handler) =>
-                handler.Handle(code) is { } response
-                    ? TypedResults.Ok(response)
-                    : TypedResults.NotFound())
+        app.MapGet("/parties/by-code/{code}", IResult (string code, JoinByCodeHandler handler, HttpContext http) =>
+                handler.Handle(code).ToHttp(http))
            .WithName("JoinPartyByCode");
 }
