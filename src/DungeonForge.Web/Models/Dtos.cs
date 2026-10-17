@@ -79,7 +79,7 @@ public sealed record PlayerAction(Guid MemberId, string Name, string Text);
 
 public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null, string? NextScene = null, string? Source = null);
 
-public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null);
+public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null, IReadOnlyList<AbilityIntent>? Abilities = null);
 
 public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null, string? Scenario = null);
 

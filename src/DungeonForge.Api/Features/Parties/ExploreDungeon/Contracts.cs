@@ -60,7 +60,11 @@ public static class ExploreRequestLimits
 // Optional body. No actions (or an empty body) = ask for the pending scenario;
 // actions = lock those members in and answer 409 "waiting" until every member is locked (then the turn resolves);
 // actions + SubmitOnly = lock in without the 409: answers the prompt with lock status, or the resolved turn on the last lock.
-public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool SubmitOnly = false);
+// Abilities: optional gift each member wants to use this turn (hidden state, kept apart from the public actions).
+public sealed record ExploreRequest(
+    IReadOnlyList<PlayerAction>? Actions = null,
+    bool SubmitOnly = false,
+    IReadOnlyList<DungeonForge.Api.Features.Social.Abilities.AbilityIntent>? Abilities = null);
 
 // Prompt step: Scenario set, Turn unchanged, no deltas. When the next scenario is still being narrated, Scenario is
 // null and ScenarioPending is true (no extra LLM call is made; NarrationReady delivers the text). Resolve step: deltas

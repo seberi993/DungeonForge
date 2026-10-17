@@ -285,3 +285,19 @@ details.audit > summary:hover { color: var(--gold-bright); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation-duration: 0s !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }
+
+/* ---- Social panel: the door's question, teammate prompts, gifts and whispers ---- */
+.social-panel { display: flex; flex-direction: column; gap: .6rem; }
+.social-card { border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .7rem; display: flex; flex-direction: column; gap: .45rem; }
+.social-prompt { margin: 0; font-style: italic; }
+.social-hint, .social-tags { margin: 0; font-size: .85rem; color: var(--parchment-dim); }
+.social-choices { display: flex; gap: .4rem; flex-wrap: wrap; }
+.abilities { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.ability-pick { width: 100%; text-align: left; display: flex; flex-direction: column; gap: .15rem; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: .5rem; background: transparent; color: inherit; cursor: pointer; }
+.ability.chosen .ability-pick { border-color: var(--gold, #d4a017); box-shadow: 0 0 .5rem rgba(212, 160, 23, .35); }
+.ability.recovering .ability-pick { opacity: .55; cursor: not-allowed; }
+.ability-flavor { font-size: .8rem; color: var(--parchment-dim); }
+.ability-hint { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }
+.inbox, .sent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; font-size: .85rem; }
+.sent-reply { margin-left: .75rem; color: var(--parchment-dim); }
+.ask-targets { display: flex; flex-wrap: wrap; gap: .5rem; margin: .4rem 0; }

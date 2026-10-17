@@ -5,6 +5,7 @@ using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Features.Parties.SubmitNarration;
 using DungeonForge.Api.Features.Scores;
+using DungeonForge.Api.Features.Social.Abilities;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -27,7 +28,8 @@ public sealed class ExploreDungeonHandler(
     IOptions<NarrationOptions>? options = null,
     IScoreBoard? scores = null,
     ChaosDispatcher? chaos = null,
-    VocabularySelector? vocabulary = null)
+    VocabularySelector? vocabulary = null,
+    SocialTurnPipeline? social = null)
 {
     public const string SubmitNarrationOperation = "Command:SubmitNarration";
 
@@ -41,12 +43,15 @@ public sealed class ExploreDungeonHandler(
 
     private bool ClientNarrationOn => options?.Value.ClientNarration == true;
 
-    public Task<Result<ExploreOutcome>> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
-        request?.Actions is not { Count: > 0 } actions
+    public Task<Result<ExploreOutcome>> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default)
+    {
+        social?.RecordIntents(id, request?.Actions, request?.Abilities);
+        return request?.Actions is not { Count: > 0 } actions
             ? PromptCoreAsync(id, ExploreOperations.GetScenario, ct)
             : request.SubmitOnly
                 ? LockInAsync(id, actions, ct)
                 : ResolveAsync(id, actions, waitingIsConflict: true, ExploreOperations.ResolveTurn);
+    }
 
     // ---- Step 1: present (or re-present) the scenario. Never advances the turn. ----
 
@@ -188,6 +193,7 @@ public sealed class ExploreDungeonHandler(
         var response = result.Value.Response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
         await AnnounceChaosAftermathAsync(response.PartyId);
+        if (social is not null) await social.DeliverAsync(response.PartyId);
         if (snapshot.IsPartyDefeated) await RecordScoreAsync(snapshot);
 
         // The browser of whoever resolved the turn writes the narration; a defeat has no next scenario to wait on,
@@ -574,6 +580,13 @@ public sealed class ExploreDungeonHandler(
             // Every locked-in action rolls on its own, with odds shifted by what the rest of the party locked in.
             var chances = ActionOdds.For(discussion);
 
+            // Hidden gifts nudge the same numbers (chance, failure damage, gold); they never replace the rolls.
+            var plan = social?.Plan(party, discussion, chances, turnBefore);
+            if (plan is not null)
+            {
+                chances = [.. Enumerable.Range(0, chances.Count).Select(plan.Chance)];
+            }
+
             // Secret plans resolve first, in C#; a sabotaged spell fails no matter how well the roll goes.
             var covert = discussion.Any(a => a.Covert is not null)
                 ? CovertResolver.Resolve(discussion, party.Members.Where(m => !party.IsBanished(m.Name)), roller)
@@ -598,6 +611,7 @@ public sealed class ExploreDungeonHandler(
                 }
 
                 var damage = FailDamage(pending.Room, turnBefore, floorBefore);
+                if (plan is not null) damage = plan.Reduce(i, damage);
                 failed.Add(new DamageResult(discussion[i].Name, fumble ? ActionOdds.FumbleDamage(damage) : damage));
             }
 
@@ -607,7 +621,7 @@ public sealed class ExploreDungeonHandler(
             var bossFalls = isBoss && party.BossHp - bossDamage <= 0;
             success |= bossFalls;
             var paid = isBoss ? bossFalls : success;
-            var gold = paid ? Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold : 0;
+            var gold = paid ? Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold + (plan?.GoldBonus ?? 0) : 0;
 
             // Chaos parties do not bank drops: gold and the boss's Cursed Idol wait in the Unclaimed Vault.
             var contested = party.Modifiers.Chaos;

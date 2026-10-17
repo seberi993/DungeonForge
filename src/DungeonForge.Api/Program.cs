@@ -13,6 +13,7 @@ using DungeonForge.Api.Features.Parties.GetPartyState;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Features.Scores.GetHighScores;
+using DungeonForge.Api.Features.Social;
 using DungeonForge.Api.Infrastructure.Narration;
 using DungeonForge.Api.Infrastructure.Scores;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -53,6 +54,7 @@ builder.Services.TryAddSingleton<IRoller, RandomRoller>();
 builder.Services.TryAddSingleton(sp => new ChaosDispatcher(
     sp.GetRequiredService<IPartyNotifier>(), new RandomRoller(), sp.GetRequiredService<ILogger<ChaosDispatcher>>()));
 builder.Services.TryAddSingleton(new VocabularySelector(new RandomRoller()));
+builder.Services.AddSocial(builder.Configuration);
 builder.Services.AddSingleton<ExploreDungeonHandler>();
 builder.Services.AddSingleton<ClaimVaultHandler>();
 builder.Services.AddSingleton<CastConfrontationVoteHandler>();

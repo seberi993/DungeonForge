@@ -281,6 +281,9 @@ public sealed class GameSession
         return true;
     }
 
+    // The ability the local player plans to use on the turn they lock in (null = none). Cleared when the turn moves on.
+    public string? SelectedAbilityId { get; set; }
+
     public event Action? Changed;
 
     public void Join(PartyStateDto party, string? myName = null)

@@ -28,10 +28,35 @@ public sealed class DungeonApiClient(HttpClient http)
 
     // No actions = request (or re-read) the pending scenario, sent without a body.
     // Actions + submitOnly = share input with the party; actions alone = resolve the turn.
-    public Task<ApiResult<ExploreResponse>> ExploreAsync(Guid partyId, IReadOnlyList<PlayerAction>? actions = null, bool submitOnly = false, CancellationToken ct = default) =>
+    public Task<ApiResult<ExploreResponse>> ExploreAsync(
+        Guid partyId, IReadOnlyList<PlayerAction>? actions = null, bool submitOnly = false, CancellationToken ct = default,
+        IReadOnlyList<AbilityIntent>? abilities = null) =>
         SendAsync<ExploreResponse>(() => actions is not { Count: > 0 }
             ? http.PostAsync($"/api/parties/{partyId}/explore", null, ct)
-            : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(actions, submitOnly ? true : null), Json, ct), ct);
+            : http.PostAsJsonAsync($"/api/parties/{partyId}/explore", new ExploreRequest(actions, submitOnly ? true : null, abilities), Json, ct), ct);
+
+    // ---- Social game: seed question, peer prompts, private whispers. Every call answers 404 when the server has it off. ----
+
+    public Task<ApiResult<MySocialDto>> GetMySocialAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
+        SendAsync<MySocialDto>(() => http.GetAsync($"/api/parties/{partyId}/social/me?playerName={Uri.EscapeDataString(playerName)}", ct), ct);
+
+    public Task<ApiResult<SeedResultDto>> SubmitSeedAsync(Guid partyId, string playerName, string answer, CancellationToken ct = default) =>
+        SendAsync<SeedResultDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/seed", new SubmitSeedRequest(playerName, answer), Json, ct), ct);
+
+    public Task<ApiResult<AcceptedDto>> FinalizeSocialAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/finalize", new FinalizeRequest(playerName), Json, ct), ct);
+
+    public Task<ApiResult<PeerPromptDto>> GetPeerPromptAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
+        SendAsync<PeerPromptDto>(() => http.GetAsync($"/api/parties/{partyId}/social/peer-prompt?playerName={Uri.EscapeDataString(playerName)}", ct), ct);
+
+    public Task<ApiResult<AcceptedDto>> SubmitPeerAnswerAsync(Guid partyId, string playerName, string promptId, string choice, CancellationToken ct = default) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/peer-answer", new PeerAnswerRequest(playerName, promptId, choice), Json, ct), ct);
+
+    public Task<ApiResult<AcceptedDto>> SendAskAsync(Guid partyId, string from, IReadOnlyList<string> to, string text, string kind, CancellationToken ct = default) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks", new SendAskRequest(from, to, text, kind), Json, ct), ct);
+
+    public Task<ApiResult<AcceptedDto>> ReplyAskAsync(Guid partyId, string askId, string from, string choice, string? text, CancellationToken ct = default) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks/{Uri.EscapeDataString(askId)}/reply", new ReplyAskRequest(from, choice, text), Json, ct), ct);
 
     public Task<ApiResult<IReadOnlyList<SpellDto>>> GetSpellsAsync(CharacterClass characterClass, CancellationToken ct = default) =>
         SendAsync<IReadOnlyList<SpellDto>>(() => http.GetAsync($"/api/classes/{characterClass.ToString().ToLowerInvariant()}/spells", ct), ct);

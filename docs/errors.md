@@ -23,6 +23,19 @@ the covering test. Search the code string to land on all of them.
 | `party.not_found` | NotFound | 404 | No party with that id exists, or it has expired. | `src/DungeonForge.Api/Errors/PartyErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/GetPartyStateErrorTests.cs#UnknownParty_Returns404Problem`, `tests/DungeonForge.Tests/Features/Parties/UnlockTurnErrorTests.cs#UnknownParty_Returns404Problem_NamingThePartyAndTheOperation` |
 | `party.player_unknown` | Validation | 400 | No active player with that name. | `src/DungeonForge.Api/Errors/PartyErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/ExtractRunErrorTests.cs#UnknownPlayer_Returns400Problem_WithTheMessageUnderPlayerName` |
 | `request.malformed` | Validation | 400 | The request body is missing or is not valid JSON for this endpoint. | `src/DungeonForge.Api/Errors/PipelineErrors.cs` | `tests/DungeonForge.Tests/Infrastructure/UnexpectedErrorTests.cs#MalformedBody_Returns400Problem_WithTheMessageUnderErrorsBody` |
+| `social.already_replied` | Conflict | 409 | You already answered that whisper. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
+| `social.ask_cooldown` | Conflict | 429 | Too soon; let the last whisper settle. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#AskingAgainTooSoon_IsRateLimited_UntilTheCooldownPasses` |
+| `social.ask_not_found` | NotFound | 404 | That whisper has faded or never existed. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
+| `social.asks_unavailable` | Conflict | 409 | Whispers need a party of more than three. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ThreePlayersCannotWhisper_FourCan` |
+| `social.invalid_recipients` | Validation | 400 | Whisper to one to three other living members who are listening. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#Whispering_ToYourselfOrAStranger_IsRejected` |
+| `social.module_disabled` | NotFound | 404 | This part of the game is switched off. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#ADisabledModule_AnswersNotFound_AndTheRestOfTheGameStillWorks` |
+| `social.no_peer_prompt` | Conflict | 409 | There is nothing to ask you about right now. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/PeerSliceTests.cs#Prompt_WithNoOneElseToRate_IsAConflict` |
+| `social.not_enough_tokens` | Conflict | 409 | You are out of whisper-shards. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#WithoutShards_AWhisperIsRefused` |
+| `social.not_recipient` | Validation | 403 | That whisper was not meant for you. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
+| `social.peer_prompt_unknown` | NotFound | 404 | That question is not waiting for your answer. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/PeerSliceTests.cs#Answer_ForAPromptThatIsNotYours_IsNotFound_AndAnAnswerCannotBeRepeated` |
+| `social.seed_already_submitted` | Conflict | 409 | You already answered the door's question. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#Seed_Twice_IsAConflict` |
+| `social.seed_low_effort` | Validation | 400 | Say a little more; the door wants a real answer. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#Seed_LowEffort_AsksForMore_AndDoesNotSpendTheOneAnswer` |
+| `social.too_many_open_asks` | Conflict | 409 | You already have two whispers waiting for answers. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ThirdOpenWhisper_IsRefused` |
 | `turn.confrontation_in_progress` | Conflict | 400 | A confrontation is in progress; settle the vote before the party moves on. | `src/DungeonForge.Api/Features/Parties/ExploreDungeon/Errors.cs` | `tests/DungeonForge.Tests/Features/Parties/ExploreDungeonErrorTests.cs#WhileAConfrontationIsOpen_Returns400Problem_WithTheMessageUnderActions` |
 | `turn.no_actions` | Validation | 400 | At least one non-empty action is required. | `src/DungeonForge.Api/Features/Parties/ExploreDungeon/Errors.cs` | `tests/DungeonForge.Tests/Features/Parties/ExploreDungeonBroadcastTests.cs#Resolve_OnlyControlCharacterAction_BroadcastsNothing` |
 | `turn.no_active_encounter` | Conflict | 400 | There is no active encounter to resolve. | `src/DungeonForge.Api/Features/Parties/ExploreDungeon/Errors.cs` | `tests/DungeonForge.Tests/Features/Parties/ExploreDungeonErrorTests.cs#ResolvingBeforeAnyScenario_Returns400Problem` |
@@ -47,15 +60,22 @@ The `operation` of an error or coded log event, and the folder of the slice that
 | `Command:CastConfrontationVote` | `Features/Parties/CastConfrontationVote` |
 | `Command:ClaimVault` | `Features/Parties/ClaimVault` |
 | `Command:ExtractRun` | `Features/Parties/ExtractRun` |
+| `Command:FinalizeProfiles` | `Features/Social/Seed/FinalizeProfiles` |
 | `Command:JoinParty` | `Features/Parties/JoinParty` |
 | `Command:LockIn` | `Features/Parties/ExploreDungeon` |
+| `Command:ReplyAsk` | `Features/Social/Asks/ReplyAsk` |
 | `Command:ResolveTurn` | `Features/Parties/ExploreDungeon` |
+| `Command:SendAsk` | `Features/Social/Asks/SendAsk` |
 | `Command:SubmitNarration` | `Features/Parties/ExploreDungeon` |
+| `Command:SubmitPeerAnswer` | `Features/Social/Peers/SubmitPeerAnswer` |
+| `Command:SubmitSeed` | `Features/Social/Seed/SubmitSeed` |
 | `Command:UnlockTurn` | `Features/Parties/UnlockTurn` |
 | `Hub:JoinParty` | `Features/Parties/Realtime` |
 | `Hub:RegisterPlayer` | `Features/Parties/Realtime` |
 | `Query:GetHighScores` | `Features/Scores/GetHighScores` |
+| `Query:GetMySocial` | `Features/Social/Core/GetMySocial` |
 | `Query:GetPartyState` | `Features/Parties/GetPartyState` |
+| `Query:GetPeerPrompt` | `Features/Social/Peers/GetPeerPrompt` |
 | `Query:GetScenario` | `Features/Parties/ExploreDungeon` |
 | `Query:JoinByCode` | `Features/Parties/JoinByCode` |
 

@@ -70,6 +70,7 @@
     <div class="room-grid">
     <aside class="room-side">
         <PartyPanel Members="Session.Members" MyName="@Session.PlayerName" Mana="Session.Mana" MaxMana="Session.MaxMana" />
+        <SocialPanel />
         @if (Session.BossMaxHp > 0)
         {
             <div id="stat-boss" class="boss-panel"><StatBar Kind="boss" Label="BOSS" Value="Session.BossHp" Max="Session.BossMaxHp" /></div>
@@ -487,6 +488,7 @@
         _actionTurn = Session.Turn;
         _actionText = "";
         _lockedTurn = null;
+        Session.SelectedAbilityId = null;
         Reroll();
     }
 
@@ -502,7 +504,8 @@
 
     private static string WhisperLabel(string kind) => kind switch
     {
-        "whisper" => "Whisper",
+        "whisper" or "ask" => "Whisper",
+        "narrator" => "Narrator",
         "secret" => "Secret",
         "traitor" => "Traitor",
         "vault" => "Vault",
@@ -558,7 +561,11 @@
         var locking = actions is { Count: > 0 } && submitOnly;
         try
         {
-            var result = await Api.ExploreAsync(Session.PartyId, actions, submitOnly);
+            // The chosen gift travels beside the lock-in, never inside the public action.
+            IReadOnlyList<AbilityIntent>? abilities = locking && Session.SelectedAbilityId is { } gift
+                ? [new AbilityIntent(Session.PlayerId, gift)]
+                : null;
+            var result = await Api.ExploreAsync(Session.PartyId, actions, submitOnly, abilities: abilities);
             switch (result.Status)
             {
                 case ApiStatus.Success:
