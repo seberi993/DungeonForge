@@ -413,7 +413,7 @@ Items 1-7 are Phase 1. Item 8 is Phase 2 step 2.8 (decision 4, accepted).
 4. **Unhandled exceptions** return a JSON ProblemDetails 500 with no stack trace, from `UseExceptionHandler`.
 5. **Log lines** change text and gain an `EventId` and scope.
 6. **Web:** the client decides waiting vs defeated from the code when present, with the same result.
-7. **Possibly:** the malformed-JSON 400 body, once 1.3 settles whether it is touched.
+7. **Settled in step 1.3:** a missing or malformed JSON body (and an enum value the binder rejects) now returns a `request.malformed` problem+json 400 with `errors.body`, instead of a text/plain exception message in Development and an empty body elsewhere. `RouteHandlerOptions.ThrowOnBadRequest` is on in every environment so the two agree.
 8. **Lobby input limits** (Phase 2, step 2.8): party-name `maxlength` 50 → 40 and member-name 30 → 32, to match the server (`CreateParty/Endpoint.cs:7-8`). Limits come from one linked source file.
 
 **Unchanged:** game math, RNG call order, SignalR message shapes (including the `HubException` text), the waiting 409 body, and one narrator call per turn.

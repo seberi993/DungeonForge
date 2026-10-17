@@ -36,7 +36,7 @@ Status only. Bodies change in Phase 1, see `docs/plans/refactor.md`. "VP" is `Va
 | | no pact | 409 | same |
 | | blank name | 400 VP | same |
 | | unknown player | 400 VP | `FailureStatusTests.Extract_UnknownPlayer_Returns400` |
-| claim / vote, unknown enum value | binder rejects it before the filter | 400 (framework body, not VP) | `FailureStatusTests.UnknownEnumValue_Returns400` |
+| claim / vote, unknown enum value | binder rejects it before the filter | 400 (text/plain before step 1.3, `request.malformed` problem+json after) | `FailureStatusTests.UnknownEnumValue_Returns400` |
 
 ## Known gaps
 

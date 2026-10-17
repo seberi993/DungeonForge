@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Endpoints;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.CastConfrontationVote;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ClaimVault;
@@ -100,9 +101,16 @@ builder.Services.AddCors(o => o.AddPolicy(CorsPolicy, p =>
 
 builder.Services.AddEndpoints(typeof(Program).Assembly);
 
+// Unhandled and unbindable-request failures become ProblemDetails. Throwing on a bad request in every environment (not
+// only Development) is what routes it to the handler instead of a bare 400.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<PipelineExceptionHandler>();
+builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
+
 var app = builder.Build();
 
 app.UseCors(CorsPolicy);
+app.UseExceptionHandler();
 
 app.MapEndpoints();
 app.MapHub<DungeonHub>("/hubs/dungeon").RequireCors(CorsPolicy);
