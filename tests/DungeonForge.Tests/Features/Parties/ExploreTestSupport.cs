@@ -35,7 +35,10 @@ internal static class ExploreTestSupport
         var turns = new TurnNarrator(parties, narrator, notifier, loggers.CreateLogger<TurnNarrator>());
         var clientNarration = new ClientNarrationCoordinator(
             parties, turns, Options.Create(new NarrationOptions()), loggers.CreateLogger<ClientNarrationCoordinator>());
-        return new ExploreDungeonHandler(parties, roller, turns, clientNarration, notifier, loggers.CreateLogger<ExploreDungeonHandler>());
+        var getScenario = new GetScenarioHandler(parties, roller, turns, clientNarration);
+        var resolveTurn = new ResolveTurnHandler(
+            parties, new TurnResolver(parties, roller), turns, clientNarration, notifier, loggers.CreateLogger<ResolveTurnHandler>());
+        return new ExploreDungeonHandler(getScenario, new LockInHandler(getScenario, resolveTurn), resolveTurn);
     }
 
     /// <summary>Success roll value that always fails without fumbling (above the 85% cap, below the fumble line).</summary>
