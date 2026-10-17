@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Api.Features.Parties.SubmitNarration;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Caching.Memory;
@@ -27,6 +29,8 @@ public sealed class ExploreDungeonHandler(
     ChaosDispatcher? chaos = null,
     VocabularySelector? vocabulary = null)
 {
+    public const string SubmitNarrationOperation = "Command:SubmitNarration";
+
     private const double WoundedRatio = 0.5;
     private const int RoomKinds = 3;
 
@@ -460,17 +464,17 @@ public sealed class ExploreDungeonHandler(
 
     // Accepts the browser's model output for the claimed turn. Blank text or a declined flag hands over to the server
     // narrator at once; unparseable turn JSON does the same instead of canning the whole turn.
-    public async Task<ClientNarrationStatus> SubmitClientNarrationAsync(Guid partyId, int turn, string? text, bool declined)
+    public async Task<Result> SubmitClientNarrationAsync(Guid partyId, int turn, string? text, bool declined)
     {
         if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
         {
-            return ClientNarrationStatus.NotFound;
+            return PartyErrors.NotFound(SubmitNarrationOperation, partyId);
         }
 
         // Atomic claim: the deadline task and this call race on the same entry, only one can take it.
         if (!_jobs.TryRemove((partyId, turn), out var job))
         {
-            return ClientNarrationStatus.Conflict;
+            return NarrationErrors.NotAwaited(SubmitNarrationOperation, partyId, turn);
         }
 
         var cleaned = declined ? string.Empty : text?.Trim() ?? string.Empty;
@@ -479,20 +483,20 @@ public sealed class ExploreDungeonHandler(
         if (job.IsScenario ? scenario.Length == 0 : partial is null)
         {
             _ = Task.Run(() => RunServerNarrationAsync(partyId, turn, job));
-            return ClientNarrationStatus.Accepted;
+            return Result.Success;
         }
 
         if (job.IsScenario)
         {
             return await CompleteClientScenarioAsync(partyId, turn, job.Context.Room, scenario)
-                ? ClientNarrationStatus.Accepted
-                : ClientNarrationStatus.Conflict;
+                ? Result.Success
+                : NarrationErrors.NotAwaited(SubmitNarrationOperation, partyId, turn);
         }
 
         var narration = FallbackFlavor.Complete(partial, job.Success, job.Context);
         return await FinishTurnAsync(partyId, turn, job.Success, job.Context, narration, narration.FromFallback ? "fallback" : "model")
-            ? ClientNarrationStatus.Accepted
-            : ClientNarrationStatus.Conflict;
+            ? Result.Success
+            : NarrationErrors.NotAwaited(SubmitNarrationOperation, partyId, turn);
     }
 
     // Outside the lock; failures are logged, never thrown.

@@ -132,12 +132,6 @@ public sealed record NarrationReady(
     string? NextScene = null,
     string? Source = null);
 
-public enum ClientNarrationStatus
-{
-    Accepted,
-    NotFound,
-    Conflict,
-}
 
 public enum ExploreStatus
 {

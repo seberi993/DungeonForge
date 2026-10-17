@@ -35,6 +35,12 @@ public static class ErrorCodes
         public const string NotEligible = "vote.not_eligible";
     }
 
+    public static class Narration
+    {
+        public const string NotAwaited = "narration.not_awaited";
+        public const string TextTooLong = "narration.text_too_long";
+    }
+
     public static class Extract
     {
         public const string NoPact = "extract.no_pact";
