@@ -186,7 +186,7 @@ public class TurnPlanTests
         plan.Chances[1] -= 200;
 
         plan.Chance(0).Should().Be(TurnPlan.MaxChance);
-        plan.Chance(1).Should().Be(DungeonForge.Api.Features.Parties.ExploreDungeon.ActionOdds.MinPercent);
+        plan.Chance(1).Should().Be(DungeonForge.Api.Domain.Rules.ActionOdds.MinPercent);
     }
 
     [Theory]

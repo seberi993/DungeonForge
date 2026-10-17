@@ -1,8 +1,8 @@
 using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Api.Domain.Rules;
 using FluentAssertions;
 
-namespace DungeonForge.Tests.Features.Parties;
+namespace DungeonForge.Tests.Domain.Rules;
 
 public class ActionOddsTests
 {

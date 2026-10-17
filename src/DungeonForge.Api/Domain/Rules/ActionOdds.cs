@@ -1,15 +1,6 @@
 using System.Text.RegularExpressions;
-using DungeonForge.Api.Domain;
 
-namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
-
-public enum ActionKind
-{
-    Other,
-    Attack,
-    Evade,
-    Loot,
-}
+namespace DungeonForge.Api.Domain.Rules;
 
 // Game math for the per-player roll lives here, never in the narrator.
 public static partial class ActionOdds
