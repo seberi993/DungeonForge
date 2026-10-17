@@ -1,3 +1,4 @@
+using DungeonForge.Shared;
 using DungeonForge.Web.Models;
 
 namespace DungeonForge.Web.Components.Stage;
@@ -14,6 +15,14 @@ public sealed class StageDirector
     public const double PropDelayMs = 900;
     public const double PropStaggerMs = 600;
     private const int FeetY = 16;
+    // A whole show lasts about this long however many beats it has; each beat gets an equal share within the clamp.
+    private const double ShowBudgetMs = 13000;
+    private const double MinBeatMs = 1500;
+    private const double MaxBeatMs = 2400;
+    // Past this many heroes the stage switches to its narrow sprites and short name plates.
+    private const int CrowdedPartySize = 4;
+    private const int PlateNameMax = 10, PlateNameMaxCrowded = 7;
+    private const int HpBarWidth = 8, HpBarWidthCrowded = 6;
     private const int TargetX = Corridor.VanishX;
 
     private List<MemberDto> _heroes = [];
@@ -38,11 +47,11 @@ public sealed class StageDirector
     public event Action<int>? ShowFinished;
     public event Action<string>? Cue;
 
-    public static double BeatMs(int beats) => Math.Clamp(13000.0 / Math.Max(1, beats), 1500, 2400);
+    public static double BeatMs(int beats) => Math.Clamp(ShowBudgetMs / Math.Max(1, beats), MinBeatMs, MaxBeatMs);
 
     public static double ShowMs(StageShow show) => show.Beats.Count * BeatMs(show.Beats.Count) + ResultMs;
 
-    public void SetHeroes(IEnumerable<MemberDto> members) => _heroes = [.. members.Take(8)];
+    public void SetHeroes(IEnumerable<MemberDto> members) => _heroes = [.. members.Take(Limits.MaxMembers)];
 
     // The room the party is in (key = the turn it belongs to). A new key plays the camera push-in, unless a show is
     // still running: then it waits, so the room never changes under the actors.
@@ -142,7 +151,7 @@ public sealed class StageDirector
 
     private int HeroIndex(string name) => _heroes.FindIndex(h => h.Name == name);
 
-    private bool Small => _heroes.Count > 4;
+    private bool Small => _heroes.Count > CrowdedPartySize;
 
     private (int X, int Y, int PlateX, int PlateY) Home(int i)
     {
@@ -603,8 +612,8 @@ public sealed class StageDirector
     private void DrawPlates(CharGrid g, StageShow? show, Phase phase, int beat, double p)
     {
         var small = Small;
-        var nameMax = small ? 7 : 10;
-        var barWidth = small ? 6 : 8;
+        var nameMax = small ? PlateNameMaxCrowded : PlateNameMax;
+        var barWidth = small ? HpBarWidthCrowded : HpBarWidth;
         for (var i = 0; i < _heroes.Count; i++)
         {
             var hero = _heroes[i];
