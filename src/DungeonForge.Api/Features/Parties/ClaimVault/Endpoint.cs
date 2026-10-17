@@ -1,5 +1,5 @@
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 
 namespace DungeonForge.Api.Features.Parties.ClaimVault;
 
@@ -8,16 +8,9 @@ public sealed class ClaimVaultEndpoint : IEndpoint
     private const int MaxNameLength = 40;
 
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapPost("/parties/{id:guid}/vault/claim", async Task<Results<Ok<ClaimVaultResponse>, NotFound, Conflict, ValidationProblem>> (
-                Guid id, ClaimVaultRequest request, ClaimVaultHandler handler) =>
-                await handler.HandleAsync(id, request.PlayerName!, request.Choice!.Value) switch
-                {
-                    { Status: ClaimVaultStatus.Claimed, Response: { } response } => TypedResults.Ok(response),
-                    { Status: ClaimVaultStatus.NoVault or ClaimVaultStatus.ConfrontationActive } => TypedResults.Conflict(),
-                    { Status: ClaimVaultStatus.UnknownPlayer } => TypedResults.ValidationProblem(
-                        new Dictionary<string, string[]> { ["playerName"] = ["No active player with that name."] }),
-                    _ => TypedResults.NotFound(),
-                })
+        app.MapPost("/parties/{id:guid}/vault/claim", async Task<IResult> (
+                Guid id, ClaimVaultRequest request, ClaimVaultHandler handler, HttpContext http) =>
+                (await handler.HandleAsync(id, request.PlayerName!, request.Choice!.Value)).ToHttp(http))
            .AddEndpointFilter(async (ctx, next) =>
            {
                var request = ctx.GetArgument<ClaimVaultRequest>(1);
@@ -32,7 +25,9 @@ public sealed class ClaimVaultEndpoint : IEndpoint
                    errors["choice"] = ["Choice must be share or pocket."];
                }
 
-               return errors.Count > 0 ? TypedResults.ValidationProblem(errors) : await next(ctx);
+               return errors.Count > 0
+                   ? ValidationErrors.ToProblem(ClaimVaultHandler.Operation, errors, ctx.HttpContext)
+                   : await next(ctx);
            })
            .WithName("ClaimVault");
 }

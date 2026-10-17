@@ -7,14 +7,3 @@ public sealed record ClaimVaultRequest(string? PlayerName, VaultChoice? Choice);
 
 // Outcome: "shared", "pocketed" (unseen) or "caught" (a public confrontation vote has started). Only the claimant sees this.
 public sealed record ClaimVaultResponse(Guid PartyId, string Outcome, int Gold, string? Artifact, IReadOnlyList<string>? Spotters = null);
-
-public enum ClaimVaultStatus
-{
-    Claimed,
-    NotFound,
-    NoVault,
-    ConfrontationActive,
-    UnknownPlayer,
-}
-
-public readonly record struct ClaimVaultResult(ClaimVaultStatus Status, ClaimVaultResponse? Response = null);

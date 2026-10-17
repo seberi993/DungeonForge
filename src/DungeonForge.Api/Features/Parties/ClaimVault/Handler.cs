@@ -1,4 +1,5 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -11,11 +12,13 @@ namespace DungeonForge.Api.Features.Parties.ClaimVault;
 public sealed class ClaimVaultHandler(
     IMemoryCache cache, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<ClaimVaultHandler> logger)
 {
-    public async Task<ClaimVaultResult> HandleAsync(Guid id, string playerName, VaultChoice choice)
+    public const string Operation = "Command:ClaimVault";
+
+    public async Task<Result<ClaimVaultResponse>> HandleAsync(Guid id, string playerName, VaultChoice choice)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return new ClaimVaultResult(ClaimVaultStatus.NotFound);
+            return PartyErrors.NotFound(Operation, id);
         }
 
         var name = playerName.Trim();
@@ -23,11 +26,11 @@ public sealed class ClaimVaultHandler(
         switch (claim.Status)
         {
             case VaultClaimStatus.NoVault:
-                return new ClaimVaultResult(ClaimVaultStatus.NoVault);
+                return ClaimVaultErrors.NoVault(Operation, id);
             case VaultClaimStatus.ConfrontationActive:
-                return new ClaimVaultResult(ClaimVaultStatus.ConfrontationActive);
+                return ClaimVaultErrors.ConfrontationActive(Operation, id);
             case VaultClaimStatus.UnknownPlayer:
-                return new ClaimVaultResult(ClaimVaultStatus.UnknownPlayer);
+                return PartyErrors.PlayerUnknown(Operation, id, name);
         }
 
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
@@ -56,9 +59,7 @@ public sealed class ClaimVaultHandler(
                 break;
         }
 
-        return new ClaimVaultResult(
-            ClaimVaultStatus.Claimed,
-            new ClaimVaultResponse(id, outcome, claim.Gold, claim.Artifact, claim.Status == VaultClaimStatus.PocketedCaught ? claim.Spotters : null));
+        return new ClaimVaultResponse(id, outcome, claim.Gold, claim.Artifact, claim.Status == VaultClaimStatus.PocketedCaught ? claim.Spotters : null);
     }
 
     private async Task BroadcastStateAsync(Party party)

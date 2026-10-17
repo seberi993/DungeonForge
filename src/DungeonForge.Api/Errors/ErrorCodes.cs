@@ -23,6 +23,12 @@ public static class ErrorCodes
         public const string PlayerUnknown = "party.player_unknown";
     }
 
+    public static class Vault
+    {
+        public const string NoVault = "vault.no_vault";
+        public const string ConfrontationActive = "vault.confrontation_active";
+    }
+
     public static class Extract
     {
         public const string NoPact = "extract.no_pact";
