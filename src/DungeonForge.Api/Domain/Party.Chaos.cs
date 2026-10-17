@@ -25,6 +25,9 @@ public sealed partial class Party
     private bool IsOut(string name) =>
         _banished.Contains(name) || string.Equals(_extractedBy, name, StringComparison.OrdinalIgnoreCase);
 
+    // A member still in play: standing, and neither banished nor extracted. This is who can act, vote, be watched and hold the party up.
+    private bool IsInPlay(PartyMember member) => !member.IsDefeated && !IsOut(member.Name);
+
     public UnclaimedVault? Vault { get { lock (SyncRoot) { return _vault; } } }
 
     public Confrontation? Confrontation { get { lock (SyncRoot) { return _confrontation; } } }
@@ -38,7 +41,7 @@ public sealed partial class Party
     public string? ArtifactHolder(string artifact) { lock (SyncRoot) { return _artifactHolders.GetValueOrDefault(artifact); } }
 
     private PartyMember? Active(string name) =>
-        Members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && !m.IsDefeated && !IsOut(m.Name));
+        Members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && IsInPlay(m));
 
     // ---- Unclaimed Vault ----
 
@@ -101,7 +104,7 @@ public sealed partial class Party
             }
 
             _pockets[member.Name] = new PocketedLoot(PocketedGold(member.Name) + vault.Gold, vault.Artifact);
-            var observers = Members.Where(m => !m.IsDefeated && !IsOut(m.Name) && m != member).ToArray();
+            var observers = Members.Where(m => IsInPlay(m) && m != member).ToArray();
             var spotters = Perception.Spotters(observers, roller);
             if (spotters.Count == 0)
             {
@@ -218,7 +221,7 @@ public sealed partial class Party
                 return false;
             }
 
-            var pool = Members.Where(m => !m.IsDefeated && !IsOut(m.Name)).ToArray();
+            var pool = Members.Where(IsInPlay).ToArray();
             if (pool.Length == 0)
             {
                 return false;
@@ -233,7 +236,7 @@ public sealed partial class Party
     {
         lock (SyncRoot)
         {
-            // One-shot, and only for someone still in play; the extractor leaves the dungeon (see IsOut).
+            // One-shot, and only for someone still in play; the extractor leaves the dungeon (see IsInPlay).
             if (_extractedBy is not null || Active(name) is not { } member)
             {
                 return false;
@@ -257,7 +260,7 @@ public sealed partial class Party
 
             var traitorStanding = Members.Any(m => string.Equals(m.Name, traitor, StringComparison.OrdinalIgnoreCase)
                 && !m.IsDefeated && !_banished.Contains(m.Name));
-            var othersAlive = Members.Count(m => m.Name != traitor && !m.IsDefeated && !IsOut(m.Name));
+            var othersAlive = Members.Count(m => m.Name != traitor && IsInPlay(m));
             return _traitorOutcome = TraitorPact.Evaluate(new TraitorState(
                 _floor,
                 othersAlive == 0,

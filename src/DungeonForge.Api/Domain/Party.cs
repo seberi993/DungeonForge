@@ -76,7 +76,7 @@ public sealed partial class Party
         }
     }
 
-    public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => m.IsDefeated || IsOut(m.Name)); } } }
+    public bool IsPartyDefeated { get { lock (SyncRoot) { return Members.All(m => !IsInPlay(m)); } } }
 
     public static Party Create(
         Guid id, string name, IReadOnlyList<PartyMember> members, DateTimeOffset createdAt, string inviteCode = "", PartyModifiers? modifiers = null,
@@ -248,7 +248,7 @@ public sealed partial class Party
     public int LockedCount { get { lock (SyncRoot) { return _locks.Count; } } }
 
     // Defeated members cannot act, so they never hold the party up.
-    public int RequiredLocks { get { lock (SyncRoot) { return Math.Max(1, Members.Count(m => !m.IsDefeated && !IsOut(m.Name))); } } }
+    public int RequiredLocks { get { lock (SyncRoot) { return Math.Max(1, Members.Count(IsInPlay)); } } }
 
     public bool AllLockedIn { get { lock (SyncRoot) { return _pending is not null && _locks.Count >= RequiredLocks; } } }
 
@@ -355,7 +355,7 @@ public sealed partial class Party
         {
             return new PartySnapshot(
                 Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
-                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, m.IsDefeated || IsOut(m.Name))).ToArray(),
+                Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, !IsInPlay(m))).ToArray(),
                 LockStatus, _floor, _roomsCleared, _bossHp, _bossMaxHp);
         }
     }
