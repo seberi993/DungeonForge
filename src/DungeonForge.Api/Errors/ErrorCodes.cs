@@ -13,4 +13,9 @@ public static class ErrorCodes
     {
         public const string Malformed = "request.malformed";
     }
+
+    public static class Party
+    {
+        public const string NotFound = "party.not_found";
+    }
 }

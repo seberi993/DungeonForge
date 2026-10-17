@@ -1,17 +1,20 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Realtime;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.UnlockTurn;
 
-// Releases one member's lock before the turn resolves. Idempotent; null when the party does not exist.
+// Command: releases one member's lock before the turn resolves. Idempotent; fails only when the party does not exist.
 public sealed class UnlockTurnHandler(IMemoryCache cache, IPartyNotifier notifier, ILogger<UnlockTurnHandler> logger)
 {
-    public async Task<UnlockTurnResponse?> HandleAsync(Guid id, Guid memberId)
+    public const string Operation = "Command:UnlockTurn";
+
+    public async Task<Result<UnlockTurnResponse>> HandleAsync(Guid id, Guid memberId)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return null;
+            return PartyErrors.NotFound(Operation, id);
         }
 
         bool removed;

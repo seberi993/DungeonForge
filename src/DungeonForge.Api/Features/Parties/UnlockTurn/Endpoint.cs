@@ -1,15 +1,13 @@
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 
 namespace DungeonForge.Api.Features.Parties.UnlockTurn;
 
 public sealed class UnlockTurnEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapPost("/parties/{id:guid}/unlock", async Task<Results<Ok<UnlockTurnResponse>, NotFound>> (
-                Guid id, UnlockTurnRequest request, UnlockTurnHandler handler) =>
-                await handler.HandleAsync(id, request.MemberId) is { } response
-                    ? TypedResults.Ok(response)
-                    : TypedResults.NotFound())
+        app.MapPost("/parties/{id:guid}/unlock", async Task<IResult> (
+                Guid id, UnlockTurnRequest request, UnlockTurnHandler handler, HttpContext http) =>
+                (await handler.HandleAsync(id, request.MemberId)).ToHttp(http))
            .WithName("UnlockTurn");
 }
