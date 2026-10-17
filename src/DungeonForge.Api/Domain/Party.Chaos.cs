@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 
 namespace DungeonForge.Api.Domain;
 
@@ -14,9 +15,6 @@ public sealed partial class Party
     private string? _extractedBy;
     private TraitorOutcome _traitorOutcome;
     private readonly TimeProvider _time;
-
-    // A confrontation that has not heard from everyone by then resolves anyway; missing voters abstain.
-    public static readonly TimeSpan ConfrontationTimeout = TimeSpan.FromSeconds(60);
 
     public PartyModifiers Modifiers { get; }
 
@@ -113,7 +111,7 @@ public sealed partial class Party
             _confrontation = new Confrontation(
                 member.Name, vault.Gold, vault.Artifacts, spotters, [.. observers.Select(o => o.Name)],
                 new Dictionary<string, ConfrontationVote>(StringComparer.OrdinalIgnoreCase),
-                _time.GetUtcNow() + ConfrontationTimeout);
+                _time.GetUtcNow() + ConfrontationRules.Timeout);
             return new VaultClaim(VaultClaimStatus.PocketedCaught, vault.Gold, vault.Artifact, spotters);
         }
     }

@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using FluentAssertions;
 
@@ -28,7 +29,7 @@ public class ConfrontationTimeoutTests
     public void BeforeTheDeadline_NothingResolves()
     {
         var (party, clock) = Caught();
-        clock.Advance(Party.ConfrontationTimeout - TimeSpan.FromSeconds(1));
+        clock.Advance(ConfrontationRules.Timeout - TimeSpan.FromSeconds(1));
 
         party.TryResolveConfrontation(new ScriptedRoller(0)).Should().BeNull();
         party.Confrontation.Should().NotBeNull();
@@ -39,7 +40,7 @@ public class ConfrontationTimeoutTests
     {
         var (party, clock) = Caught();
         party.CastVote("Merlin", ConfrontationVote.Banish, new ScriptedRoller(0));
-        clock.Advance(Party.ConfrontationTimeout + TimeSpan.FromSeconds(1));
+        clock.Advance(ConfrontationRules.Timeout + TimeSpan.FromSeconds(1));
 
         var resolution = party.TryResolveConfrontation(new ScriptedRoller(0));
 
@@ -52,7 +53,7 @@ public class ConfrontationTimeoutTests
     public void AfterTheDeadline_WithNoBallots_ForgivesAndUnblocksTheVault()
     {
         var (party, clock) = Caught();
-        clock.Advance(Party.ConfrontationTimeout + TimeSpan.FromSeconds(1));
+        clock.Advance(ConfrontationRules.Timeout + TimeSpan.FromSeconds(1));
 
         party.ClaimVault("Merlin", VaultChoice.Share, new ScriptedRoller(0)).Status.Should().Be(VaultClaimStatus.NoVault);
         party.Confrontation.Should().BeNull();
@@ -64,7 +65,7 @@ public class ConfrontationTimeoutTests
     public void LateVote_ResolvesTheExpiredConfrontationInsteadOfHangingIt()
     {
         var (party, clock) = Caught();
-        clock.Advance(Party.ConfrontationTimeout + TimeSpan.FromSeconds(1));
+        clock.Advance(ConfrontationRules.Timeout + TimeSpan.FromSeconds(1));
 
         var result = party.CastVote("Merlin", ConfrontationVote.Attack, new ScriptedRoller(0));
 
