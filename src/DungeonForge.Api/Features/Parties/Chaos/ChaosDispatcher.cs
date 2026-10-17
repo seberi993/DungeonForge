@@ -17,10 +17,6 @@ public static class ChaosOperations
 
 public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILogger<ChaosDispatcher> logger)
 {
-    private const string TraitorBriefing =
-        "You are the Traitor. Win by seeing the party wiped before floor 5, or by extracting alone while carrying the Cursed Idol. " +
-        "Smile. Share. Betray at the right moment.";
-
     // ---- Information asymmetry ----
 
     public async Task DispatchRoomSecretsAsync(Party party, RoomType room, int turn)
@@ -106,7 +102,7 @@ public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILo
 
         if (assigned || string.Equals(traitor, registeringPlayer, StringComparison.OrdinalIgnoreCase))
         {
-            await SendAsync(party.Id, traitor, new PrivateMessage(PrivateKinds.Traitor, TraitorBriefing));
+            await SendAsync(party.Id, traitor, new PrivateMessage(PrivateKinds.Traitor, ChaosText.TraitorBriefing));
         }
     }
 
@@ -118,10 +114,7 @@ public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILo
             return Task.CompletedTask;
         }
 
-        var how = outcome == TraitorOutcome.TraitorWinsWipe
-            ? "the party fell before floor 5"
-            : "they extracted alone with the Cursed Idol";
-        return PublishAsync(party.Id, new ChaosEvent(ChaosEvent.TraitorOutcome, $"{traitor} was the Traitor, and wins: {how}."));
+        return PublishAsync(party.Id, new ChaosEvent(ChaosEvent.TraitorOutcome, ChaosText.TraitorReveal(traitor, outcome)));
     }
 
     private Task GuardAsync(Func<Task> send, string what, Guid partyId) =>

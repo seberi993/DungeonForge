@@ -34,27 +34,25 @@ public sealed class ClaimVaultHandler(
 
         parties.Save(party);
         var who = party.Members.First(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).Name;
-        var loot = claim.Artifact is null ? $"{claim.Gold} gold" : $"{claim.Gold} gold and a {claim.Artifact}";
+        var loot = ChaosText.Loot(claim.Gold, claim.Artifact);
 
         string outcome;
         switch (claim.Status)
         {
             case VaultClaimStatus.Shared:
                 outcome = "shared";
-                await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.VaultClaimed, $"{who} declared the vault and shared {loot} with the party."));
+                await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.VaultClaimed, ChaosText.VaultShared(who, loot)));
                 await BroadcastStateAsync(party);
                 break;
             case VaultClaimStatus.PocketedHidden:
                 outcome = "pocketed";
-                await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.VaultClaimed, "The vault has been emptied. Nobody says a word."));
-                await chaos.SendAsync(id, who, new PrivateMessage(PrivateKinds.Vault, $"You pocketed {loot} and nobody saw."));
+                await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.VaultClaimed, ChaosText.VaultEmptied));
+                await chaos.SendAsync(id, who, new PrivateMessage(PrivateKinds.Vault, ChaosText.PocketedUnseen(loot)));
                 break;
             default:
                 outcome = "caught";
                 await chaos.PublishAsync(id, new ChaosEvent(
-                    ChaosEvent.Confrontation,
-                    $"{who} was caught pocketing {loot}, spotted by {string.Join(", ", claim.Spotters ?? [])}. " +
-                    "Vote to forgive, demand a cut, banish or attack."));
+                    ChaosEvent.Confrontation, ChaosText.CaughtPocketing(who, loot, claim.Spotters ?? [])));
                 break;
         }
 

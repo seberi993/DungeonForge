@@ -33,27 +33,14 @@ public sealed class CastConfrontationVoteHandler(
         if (result.Resolution is not { } resolution)
         {
             await chaos.PublishAsync(id, new ChaosEvent(
-                ChaosEvent.Confrontation, $"A ballot was cast ({result.Cast} of {result.Required})."));
+                ChaosEvent.Confrontation, ChaosText.BallotCast(result.Cast, result.Required)));
             return new CastVoteResponse(id, false, result.Cast, result.Required);
         }
 
-        await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.ConfrontationResolved, Verdict(resolution)));
+        await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.ConfrontationResolved, ChaosText.Verdict(resolution)));
         await BroadcastStateAsync(party);
         await chaos.AnnounceTraitorOutcomeAsync(party, party.EvaluateTraitor());
         return new CastVoteResponse(id, true, result.Cast, result.Required, JsonNamingPolicy.CamelCase.ConvertName(resolution.Outcome.ToString()));
-    }
-
-    private static string Verdict(ConfrontationResolution r)
-    {
-        var tally = string.Join(", ", r.Tally.Where(t => t.Value > 0).Select(t => $"{t.Key} x{t.Value}"));
-        var effect = r.Outcome switch
-        {
-            ConfrontationVote.Forgive => "forgiven and keeps the loot",
-            ConfrontationVote.DemandCut => $"made to hand {r.GoldToParty} gold to the party",
-            ConfrontationVote.Banish => "banished, the loot forfeit",
-            _ => $"attacked for {r.Damage} damage, the loot forfeit",
-        };
-        return $"Verdict on {r.Accused}: {effect}. Ballots: {tally}.";
     }
 
     private Task BroadcastStateAsync(Party party) => BestEffort.RunAsync(
