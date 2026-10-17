@@ -1,14 +1,12 @@
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 
 namespace DungeonForge.Api.Features.Parties.GetPartyState;
 
 public sealed class GetPartyStateEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapGet("/parties/{id:guid}", Results<Ok<GetPartyStateResponse>, NotFound> (Guid id, GetPartyStateHandler handler) =>
-                handler.Handle(id) is { } response
-                    ? TypedResults.Ok(response)
-                    : TypedResults.NotFound())
+        app.MapGet("/parties/{id:guid}", IResult (Guid id, GetPartyStateHandler handler, HttpContext http) =>
+                handler.Handle(id).ToHttp(http))
            .WithName("GetPartyState");
 }
