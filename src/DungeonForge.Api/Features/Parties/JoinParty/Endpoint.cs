@@ -1,11 +1,12 @@
 using DungeonForge.Api.Endpoints;
 using DungeonForge.Api.Errors;
+using DungeonForge.Shared;
 
 namespace DungeonForge.Api.Features.Parties.JoinParty;
 
 public sealed class JoinPartyEndpoint : IEndpoint
 {
-    private const int MaxMemberNameLength = 32;
+    private const int MaxMemberNameLength = Limits.MaxMemberNameLength;
 
     public void MapEndpoint(IEndpointRouteBuilder app) =>
         app.MapPost("/parties/by-code/{code}/join", async Task<IResult> (

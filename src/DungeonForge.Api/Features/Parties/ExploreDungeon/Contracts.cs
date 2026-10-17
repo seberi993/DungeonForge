@@ -1,14 +1,15 @@
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Shared;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
 public static class ExploreRequestLimits
 {
-    public const int MaxActions = 8;
-    public const int MaxActionTextLength = 200;
-    public const int MaxActionNameLength = 40;
+    public const int MaxActions = Limits.MaxActions;
+    public const int MaxActionTextLength = Limits.MaxActionTextLength;
+    public const int MaxActionNameLength = Limits.MaxActionNameLength;
 
     // What an action is credited to when its name is blank once sanitized.
     public const string DefaultActionName = "Adventurer";

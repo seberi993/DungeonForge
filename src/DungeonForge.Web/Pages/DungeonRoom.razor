@@ -1,4 +1,5 @@
 @page "/dungeon"
+@using DungeonForge.Shared
 @using DungeonForge.Web.Models
 @using DungeonForge.Web.Services
 @using DungeonForge.Web.Components
@@ -128,7 +129,7 @@
             <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
-                <textarea id="action-text" maxlength="200" disabled="@IsLocked" placeholder="@_suggestion" @bind="_actionText" @bind:event="oninput"></textarea>
+                <textarea id="action-text" maxlength="@Limits.MaxActionTextLength" disabled="@IsLocked" placeholder="@_suggestion" @bind="_actionText" @bind:event="oninput"></textarea>
                 <div class="action-buttons">
                     <button id="lock-in" class="btn btn-go btn-big" disabled="@(_busy || IsLocked || string.IsNullOrWhiteSpace(_actionText))" @onclick="LockInAsync">@(IsLocked ? "Locked in" : "Lock in")</button>
                     @if (IsLocked)

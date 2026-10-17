@@ -1,11 +1,12 @@
 using DungeonForge.Api.Endpoints;
 using DungeonForge.Api.Errors;
+using DungeonForge.Shared;
 
 namespace DungeonForge.Api.Features.Parties.ExtractRun;
 
 public sealed class ExtractRunEndpoint : IEndpoint
 {
-    private const int MaxNameLength = 40;
+    private const int MaxNameLength = Limits.MaxPlayerNameLength;
 
     public void MapEndpoint(IEndpointRouteBuilder app) =>
         app.MapPost("/parties/{id:guid}/extract", async Task<IResult> (

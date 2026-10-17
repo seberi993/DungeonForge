@@ -1,9 +1,10 @@
+using DungeonForge.Shared;
 namespace DungeonForge.Api.Domain.Rules;
 
 // Party-level limits and floor progression.
 public static class PartyRules
 {
-    public const int MaxMembers = 8;
+    public const int MaxMembers = Limits.MaxMembers;
     public const int MaxDiscussionEntries = 8;
 
     // A floor is RoomsPerFloor ordinary rooms followed by a boss that takes several rounds to fell.

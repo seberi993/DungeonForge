@@ -1,4 +1,5 @@
 @page "/"
+@using DungeonForge.Shared
 @using DungeonForge.Web.Models
 @using DungeonForge.Web.Services
 @using DungeonForge.Web.Components
@@ -15,13 +16,13 @@
 <div class="card">
     <h2>New Party</h2>
     <label for="party-name">Party name</label>
-    <input id="party-name" @bind="_name" maxlength="50" disabled="@_busy" />
+    <input id="party-name" @bind="_name" maxlength="@Limits.MaxPartyNameLength" disabled="@_busy" />
     <div id="roster" class="roster">
         @for (var i = 0; i < _roster.Count; i++)
         {
             var row = _roster[i];
             <div class="roster-row">
-                <input id="member-name-@i" @bind="row.Name" maxlength="30" placeholder="Hero name" disabled="@_busy" />
+                <input id="member-name-@i" @bind="row.Name" maxlength="@Limits.MaxMemberNameLength" placeholder="Hero name" disabled="@_busy" />
                 <select id="member-class-@i" @bind="row.Class" disabled="@_busy">
                     @foreach (var c in Enum.GetValues<CharacterClass>())
                     {
@@ -58,7 +59,7 @@
                     <li>@m.Name &mdash; @m.Class</li>
                 }
             </ul>
-            <input id="join-name" @bind="_joinName" maxlength="30" placeholder="Your hero name" disabled="@_busy" />
+            <input id="join-name" @bind="_joinName" maxlength="@Limits.MaxMemberNameLength" placeholder="Your hero name" disabled="@_busy" />
             <select id="join-class" @bind="_joinClass" disabled="@_busy">
                 @foreach (var c in Enum.GetValues<CharacterClass>())
                 {

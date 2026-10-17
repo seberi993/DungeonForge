@@ -1,12 +1,13 @@
 using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Endpoints;
+using DungeonForge.Shared;
 
 namespace DungeonForge.Api.Features.Parties.CreateParty;
 
 public sealed class CreatePartyEndpoint : IEndpoint
 {
-    private const int MaxPartyNameLength = 40;
-    private const int MaxMemberNameLength = 32;
+    private const int MaxPartyNameLength = Limits.MaxPartyNameLength;
+    private const int MaxMemberNameLength = Limits.MaxMemberNameLength;
     private const int MaxMembers = PartyRules.MaxMembers;
 
     public void MapEndpoint(IEndpointRouteBuilder app) =>

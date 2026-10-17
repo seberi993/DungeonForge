@@ -1,5 +1,6 @@
 using System.Text;
 using DungeonForge.Api.Domain;
+using DungeonForge.Shared;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
 
@@ -7,7 +8,7 @@ namespace DungeonForge.Api.Infrastructure.Narration;
 public static class MasterPromptBuilder
 {
     public const int MaxLength = 2000;
-    public const int MaxActionTextLength = 200;
+    public const int MaxActionTextLength = Limits.MaxActionTextLength;
     public const int MaxNameLength = 40;
 
     private const string NeutralPartyName = "the party";
