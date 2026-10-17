@@ -119,7 +119,6 @@ public sealed class TurnResolver(
         var hits = party.ApplyMemberOutcomes([.. failed, .. covert.Hits], contested ? 0 : gold);
         foreach (var (thief, amount) in covert.Heals) party.Heal(thief, amount);
         if (contested && (gold > 0 || bossFalls)) party.DropVault(gold, bossFalls ? TraitorPact.CursedIdol : null);
-        var hit = hits.Count > 0 ? hits[0] : null;
 
         // The next room is rolled in C# before any narrator call; nothing follows a defeated party. A boss
         // that is awake (or just woken by the floor's last room) is always the next room.
@@ -139,13 +138,9 @@ public sealed class TurnResolver(
         // Keep the invite entry's sliding expiry in step with an active party.
         parties.Touch(party);
 
-        var response = new ExploreResponse(
-            party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,
-            pending.Scenario, party.Gold, party.IsPartyDefeated, Discussion: discussion,
-            Beats: ToBeats(party, discussion), Success: success,
-            Hits: [.. hits.Select(h => new HitDto(h.TargetName, h.Damage))], Rolls: rolls,
-            Floor: party.Floor, BossHp: party.BossHp, BossMaxHp: party.BossMaxHp, FloorCleared: floorCleared,
-            CombatLog: covert.Outcomes.Count > 0 ? covert.Log : null);
+        var response = ExploreResponses.Resolved(
+            party, pending, discussion, hits, rolls, ToBeats(party, discussion), gold, success, floorCleared,
+            combatLog: covert.Outcomes.Count > 0 ? covert.Log : null);
         var context = new NarrationContext(pending.Room, party.Name, turnBefore, ExploreResponses.IsWounded(party))
         {
             Floor = floorBefore,
