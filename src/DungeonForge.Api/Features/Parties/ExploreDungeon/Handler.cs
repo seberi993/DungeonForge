@@ -34,9 +34,6 @@ public sealed class ExploreDungeonHandler(
 {
     public const string SubmitNarrationOperation = "Command:SubmitNarration";
 
-    private const double WoundedRatio = 0.5;
-    private const int RoomKinds = 3;
-
     // Client narration: while a browser writes the text, the claim waits here until it submits, declines or the deadline hits.
     private sealed record NarrationJob(NarrationContext Context, bool Success, bool IsScenario);
 
@@ -134,7 +131,7 @@ public sealed class ExploreDungeonHandler(
                 return (new ExploreOutcome(AwaitingResponse(party, awaiting)), null);
             }
 
-            var room = (RoomType)roller.Next(RoomKinds);
+            var room = RoomRules.Roll(roller);
             party.TryBeginScenario(room);
             return (null, new NarrationContext(room, party.Name, party.Turn, IsWounded(party))
             {
@@ -611,7 +608,7 @@ public sealed class ExploreDungeonHandler(
                     continue;
                 }
 
-                var damage = FailDamage(pending.Room, turnBefore, floorBefore);
+                var damage = RoomRules.FailDamage(pending.Room, turnBefore, floorBefore);
                 if (plan is not null) damage = plan.Reduce(i, damage);
                 failed.Add(new DamageResult(discussion[i].Name, fumble ? ActionOdds.FumbleDamage(damage) : damage));
             }
@@ -622,7 +619,7 @@ public sealed class ExploreDungeonHandler(
             var bossFalls = isBoss && party.BossHp - bossDamage <= 0;
             success |= bossFalls;
             var paid = isBoss ? bossFalls : success;
-            var gold = paid ? Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold + (plan?.GoldBonus ?? 0) : 0;
+            var gold = paid ? RoomRules.Gold(pending.Room, turnBefore, floorBefore) + crits * ActionOdds.CritGold + (plan?.GoldBonus ?? 0) : 0;
 
             // Chaos parties do not bank drops: gold and the boss's Cursed Idol wait in the Unclaimed Vault.
             var contested = party.Modifiers.Chaos;
@@ -639,7 +636,7 @@ public sealed class ExploreDungeonHandler(
             {
                 var progress = party.AdvanceProgress(pending.Room, bossDamage);
                 floorCleared = progress.FloorCleared;
-                nextRoom = progress.BossNext ? RoomType.Boss : (RoomType)roller.Next(RoomKinds);
+                nextRoom = progress.BossNext ? RoomType.Boss : RoomRules.Roll(roller);
                 party.TryBeginScenario(nextRoom.Value);
             }
 
@@ -680,28 +677,8 @@ public sealed class ExploreDungeonHandler(
             return new ActionBeat(action.Name, characterClass, ActionVerbs.Pick(characterClass, action.Text), action.Text);
         })];
 
-    // Game math lives here, never in the narrator.
-    // Each member whose own action failed takes this hit; it grows as the dungeon deepens.
-    // The boss hits harder per floor and does not scale with the turn count, so a long floor stays fair.
-    private static int FailDamage(RoomType room, int turn, int floor) => room switch
-    {
-        RoomType.Combat => 6 + turn % 3 + turn / 3,
-        RoomType.Puzzle => 7 + turn % 3 + turn / 3,
-        RoomType.Boss => 8 + 2 * (floor - 1) + turn % 3,
-        _ => 4 + turn / 3,
-    };
-
-    // Boss gold is only paid when the boss falls.
-    private static int Gold(RoomType room, int turn, int floor) => room switch
-    {
-        RoomType.Chest => 5 + turn,
-        RoomType.Puzzle => 10 + 2 * turn,
-        RoomType.Boss => 25 * floor,
-        _ => 0,
-    };
-
     private static bool IsWounded(Party party) =>
-        party.Members.Sum(m => m.Hp) <= party.Members.Sum(m => m.MaxHp) * WoundedRatio;
+        RoomRules.IsWounded(party.Members.Sum(m => m.Hp), party.Members.Sum(m => m.MaxHp));
 
     // ---- Narration with deterministic fallbacks: a misbehaving narrator never fails the request. ----
 
