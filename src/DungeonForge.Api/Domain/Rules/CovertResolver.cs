@@ -1,7 +1,5 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
-namespace DungeonForge.Api.Features.Parties.Chaos;
+namespace DungeonForge.Api.Domain.Rules;
 
 public sealed record CovertOutcome(string Actor, string Target, CovertKind Kind, bool Success, int Amount, string Log);
 

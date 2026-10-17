@@ -1,8 +1,9 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.Chaos;
 using FluentAssertions;
+using DungeonForge.Tests.Features.Parties.Chaos;
 
-namespace DungeonForge.Tests.Features.Parties.Chaos;
+namespace DungeonForge.Tests.Domain.Rules;
 
 public class CovertResolverTests
 {

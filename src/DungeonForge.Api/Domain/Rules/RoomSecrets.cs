@@ -1,8 +1,6 @@
 using System.Globalization;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
 
-namespace DungeonForge.Api.Features.Parties.Chaos;
+namespace DungeonForge.Api.Domain.Rules;
 
 public enum SecretKind
 {
