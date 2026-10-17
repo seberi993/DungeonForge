@@ -1,6 +1,8 @@
 namespace DungeonForge.Api.Errors;
 
-// The scope every coded event is logged inside: which operation, which party and, when known, which turn.
+// The scope every coded event is logged inside: which operation, which party and, when known, which turn. Turn is the
+// number the matching message or response carries (a resolve answers with the turn after it, so its events say 1 for the
+// first turn); narrator events carry the turn that was narrated.
 public static class LogScope
 {
     public static IDisposable? Begin(ILogger logger, string operation) =>

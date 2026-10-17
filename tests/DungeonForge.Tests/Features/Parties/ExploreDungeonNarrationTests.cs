@@ -17,7 +17,7 @@ namespace DungeonForge.Tests.Features.Parties;
 public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> factory)
     : IClassFixture<WebApplicationFactory<Program>>
 {
-    private sealed class FakeNarrator(
+    internal sealed class FakeNarrator(
         string scenario = "A door looms. What do you do?",
         TurnNarration? turn = null,
         bool throwOnScenario = false,
@@ -429,7 +429,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         (await PromptAsync(client, id)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    private sealed class FaultArmingNarrator(FaultableCache cache) : IDungeonNarrator
+    internal sealed class FaultArmingNarrator(FaultableCache cache) : IDungeonNarrator
     {
         public Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct) =>
             Task.FromResult("A door looms. What do you do?");
@@ -441,7 +441,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         }
     }
 
-    private sealed class FaultableCache(IMemoryCache inner) : IMemoryCache
+    internal sealed class FaultableCache(IMemoryCache inner) : IMemoryCache
     {
         public volatile bool FailSets;
 

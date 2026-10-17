@@ -76,7 +76,7 @@ public sealed class ExploreDungeonHandler(
         string scenario;
         try
         {
-            scenario = await GenerateScenarioSafeAsync(context!, ct);
+            scenario = await GenerateScenarioSafeAsync(id, context!, ct);
         }
         catch
         {
@@ -96,19 +96,13 @@ public sealed class ExploreDungeonHandler(
     }
 
     // Other clients that received scenarioPending learn the scenario via NarrationReady (empty outcome = scenario only).
-    private async Task BroadcastFirstScenarioAsync(Party party, PendingEncounter pending)
-    {
-        try
+    private Task BroadcastFirstScenarioAsync(Party party, PendingEncounter pending) =>
+        BestEffort.RunAsync(logger, ExploreOperations.GetScenario, party.Id, "FirstScenario", async () =>
         {
             var ready = new NarrationReady(party.Id, party.Turn, string.Empty, pending.Scenario, pending.Room);
             await notifier.NarrationReadyAsync(ready, CancellationToken.None);
             await DeliverPrivateAsync(party.Id, pending.Room, party.Turn, []);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast first scenario for party {PartyId}", party.Id);
-        }
-    }
+        }, party.Turn);
 
     private (Result<ExploreOutcome>? Early, NarrationContext? Context) BeginPrompt(Guid id, string operation)
     {
@@ -181,7 +175,7 @@ public sealed class ExploreDungeonHandler(
                 await BroadcastReadyAsync(id, actions);
             }
 
-            await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? []);
+            await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? [], operation, snapshot.Turn);
 
             return waitingIsConflict ? result : new ExploreOutcome(result.Value.Response);
         }
@@ -269,7 +263,8 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not record the score for party {PartyId}.", party.PartyId);
+            using var scope = LogScope.Begin(logger, ExploreOperations.ResolveTurn, party.PartyId, party.Turn);
+            logger.ScoreRecordFailed(ex);
         }
     }
 
@@ -280,12 +275,13 @@ public sealed class ExploreDungeonHandler(
         try
         {
             // The narrator has its own timeout and every failure falls back to deterministic flavor.
-            narration = await NarrateTurnSafeAsync(success, context);
+            narration = await NarrateTurnSafeAsync(partyId, success, context);
             if (narration.FromFallback) source = "fallback";
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Narration phase failed for turn {Turn} of party {PartyId}; completing with fallback.", turn, partyId);
+            using var scope = LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, turn);
+            logger.NarrationPhaseFailed(ex);
             narration = FallbackFlavor.Complete(null, success, context);
             source = "fallback";
         }
@@ -309,23 +305,22 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Narration phase failed for turn {Turn} of party {PartyId}; completing with fallback.", turn, partyId);
+            using (LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, turn))
+            {
+                logger.NarrationPhaseFailed(ex);
+            }
+
             narration = FallbackFlavor.Complete(null, success, context);
             source = "fallback";
             RecoverStuckScenario(partyId, turn, context.NextRoom, narration);
         }
 
-        try
-        {
-            var ready = new NarrationReady(
-                partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom,
-                narration.NextScene.Length == 0 ? null : narration.NextScene, source);
-            await notifier.NarrationReadyAsync(ready, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast NarrationReady for turn {Turn} of party {PartyId}", turn, partyId);
-        }
+        var ready = new NarrationReady(
+            partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom,
+            narration.NextScene.Length == 0 ? null : narration.NextScene, source);
+        await BestEffort.RunAsync(
+            logger, ExploreOperations.NarrateTurn, partyId, "NarrationReady",
+            () => notifier.NarrationReadyAsync(ready, CancellationToken.None), turn);
 
         await DeliverPrivateAsync(partyId, context.NextRoom, turn + 1, narration.Whispers);
         return true;
@@ -351,12 +346,16 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Fallback scenario failed for party {PartyId}; aborting scenario slot.", partyId);
-            ReleaseScenarioSlotSafe(partyId);
+            using (LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, turn))
+            {
+                logger.FallbackScenarioFailed(ex);
+            }
+
+            ReleaseScenarioSlotSafe(partyId, turn);
         }
     }
 
-    private void ReleaseScenarioSlotSafe(Guid partyId)
+    private void ReleaseScenarioSlotSafe(Guid partyId, int turn)
     {
         try
         {
@@ -364,7 +363,8 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not release scenario slot for party {PartyId}", partyId);
+            using var scope = LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, turn);
+            logger.ScenarioSlotReleaseFailed(ex);
         }
     }
 
@@ -428,7 +428,8 @@ public sealed class ExploreDungeonHandler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Deadline narration failed for turn {Turn} of party {PartyId}", turn, partyId);
+                using var scope = LogScope.Begin(logger, ExploreOperations.ClientNarrationDeadline, partyId, turn);
+                logger.DeadlineNarrationFailed(ex);
             }
         });
     }
@@ -441,7 +442,7 @@ public sealed class ExploreDungeonHandler(
             return;
         }
 
-        var scenario = await GenerateScenarioSafeAsync(job.Context, CancellationToken.None);
+        var scenario = await GenerateScenarioSafeAsync(partyId, job.Context, CancellationToken.None);
         await CompleteClientScenarioAsync(partyId, turn, job.Context.Room, scenario);
     }
 
@@ -501,17 +502,8 @@ public sealed class ExploreDungeonHandler(
     }
 
     // Outside the lock; failures are logged, never thrown.
-    private async Task BroadcastLockStatusAsync(Guid id, IReadOnlyList<LockStatusDto> status)
-    {
-        try
-        {
-            await notifier.TurnLockUpdatedAsync(id, status, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast TurnLockUpdated for party {PartyId}", id);
-        }
-    }
+    private Task BroadcastLockStatusAsync(Guid id, IReadOnlyList<LockStatusDto> status, string operation, int turn) =>
+        BestEffort.RunAsync(logger, operation, id, "TurnLockUpdated", () => notifier.TurnLockUpdatedAsync(id, status, CancellationToken.None), turn);
 
     private static CovertIntent? CleanCovert(CovertIntent? covert) =>
         covert is null ? null : covert with { Target = NarrationText.Clean(covert.Target, ExploreRequestLimits.MaxActionNameLength) };
@@ -698,7 +690,7 @@ public sealed class ExploreDungeonHandler(
 
     // ---- Narration with deterministic fallbacks: a misbehaving narrator never fails the request. ----
 
-    private async Task<string> GenerateScenarioSafeAsync(NarrationContext context, CancellationToken ct)
+    private async Task<string> GenerateScenarioSafeAsync(Guid partyId, NarrationContext context, CancellationToken ct)
     {
         try
         {
@@ -708,7 +700,8 @@ public sealed class ExploreDungeonHandler(
                 return text;
             }
 
-            logger.LogWarning("Narrator returned an empty scenario for turn {Turn}; using fallback.", context.Turn);
+            using var scope = LogScope.Begin(logger, ExploreOperations.GetScenario, partyId, context.Turn);
+            logger.NarratorEmptyScenario();
         }
         catch (OperationCanceledException)
         {
@@ -716,13 +709,14 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Narrator failed generating the scenario for turn {Turn}; using fallback.", context.Turn);
+            using var scope = LogScope.Begin(logger, ExploreOperations.GetScenario, partyId, context.Turn);
+            logger.NarratorScenarioFailed(ex);
         }
 
         return FallbackFlavor.Scenario(context.Room, context.Turn);
     }
 
-    private async Task<TurnNarration> NarrateTurnSafeAsync(bool success, NarrationContext context)
+    private async Task<TurnNarration> NarrateTurnSafeAsync(Guid partyId, bool success, NarrationContext context)
     {
         try
         {
@@ -731,7 +725,8 @@ public sealed class ExploreDungeonHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Narrator failed narrating turn {Turn}; using fallback.", context.Turn);
+            using var scope = LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, context.Turn);
+            logger.NarratorTurnFailed(ex);
             return FallbackFlavor.Complete(null, success, context);
         }
     }
@@ -741,25 +736,14 @@ public sealed class ExploreDungeonHandler(
     // Separate try/catch per message so one failure does not skip the other.
     private async Task BroadcastAsync(ExploreResponse response, GetPartyStateResponse snapshot)
     {
-        try
-        {
-            await notifier.TurnResolvedAsync(response, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast TurnResolved for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
-        }
-
-        try
-        {
-            await notifier.PartyUpdatedAsync(snapshot, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast PartyUpdated for turn {Turn} of party {PartyId}", response.Turn, response.PartyId);
-        }
+        await BestEffort.RunAsync(
+            logger, ExploreOperations.ResolveTurn, response.PartyId, "TurnResolved",
+            () => notifier.TurnResolvedAsync(response, CancellationToken.None), response.Turn);
+        await BestEffort.RunAsync(
+            logger, ExploreOperations.ResolveTurn, response.PartyId, "PartyUpdated",
+            () => notifier.PartyUpdatedAsync(snapshot, CancellationToken.None), response.Turn);
 
         // The resolve cleared every lock.
-        await BroadcastLockStatusAsync(response.PartyId, snapshot.LockStatus ?? []);
+        await BroadcastLockStatusAsync(response.PartyId, snapshot.LockStatus ?? [], ExploreOperations.ResolveTurn, response.Turn);
     }
 }

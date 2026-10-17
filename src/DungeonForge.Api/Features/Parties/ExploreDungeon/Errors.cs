@@ -9,6 +9,10 @@ public static class ExploreOperations
     public const string LockIn = "Command:LockIn";
     public const string ResolveTurn = "Command:ResolveTurn";
 
+    // Work that outlives the request: the narration phase of a resolved turn, and the client-narration deadline timer.
+    public const string NarrateTurn = "Background:NarrateTurn";
+    public const string ClientNarrationDeadline = "Background:ClientNarrationDeadline";
+
     // Same branching as ExploreDungeonHandler.HandleAsync, for the request filter that runs before it.
     public static string For(ExploreRequest? request) => request?.Actions is not { Count: > 0 }
         ? GetScenario
