@@ -363,12 +363,8 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         using var derived = With(new FakeNarrator());
         var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
         var cancelling = new CancellingNarrator();
-        var handler = new ExploreDungeonHandler(
-            derived.Services.GetRequiredService<IPartyStore>(),
-            new FixedRoller(0),
-            cancelling,
-            new NoopNotifier(),
-            NullLogger<ExploreDungeonHandler>.Instance);
+        var handler = NewHandler(
+            derived.Services.GetRequiredService<IPartyStore>(), new FixedRoller(0), cancelling, new NoopNotifier());
 
         var act = () => handler.HandleAsync(id, null);
         await act.Should().ThrowAsync<OperationCanceledException>();
@@ -386,8 +382,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
         var cache = new FaultableCache(derived.Services.GetRequiredService<IMemoryCache>());
         var notifier = new CapturingNotifier();
-        var handler = new ExploreDungeonHandler(new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier,
-            NullLogger<ExploreDungeonHandler>.Instance);
+        var handler = NewHandler(new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier);
 
         (await handler.HandleAsync(id, null)).IsSuccess.Should().BeTrue();
         var resolved = await handler.HandleAsync(id, new ExploreRequest(WholeParty()));

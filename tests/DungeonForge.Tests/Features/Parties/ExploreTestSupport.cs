@@ -4,6 +4,9 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Api.Infrastructure.Narration;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -23,6 +26,15 @@ internal sealed class SequenceRoller(int success, params int[] rooms) : IRoller
 
 internal static class ExploreTestSupport
 {
+    /// <summary>An explore handler wired the way DI wires it, from the pieces a test wants to control.</summary>
+    public static ExploreDungeonHandler NewHandler(
+        IPartyStore parties, IRoller roller, IDungeonNarrator narrator, IPartyNotifier notifier, ILoggerFactory? loggers = null)
+    {
+        loggers ??= NullLoggerFactory.Instance;
+        var turns = new TurnNarrator(parties, narrator, notifier, loggers.CreateLogger<TurnNarrator>());
+        return new ExploreDungeonHandler(parties, roller, turns, notifier, loggers.CreateLogger<ExploreDungeonHandler>());
+    }
+
     /// <summary>Success roll value that always fails without fumbling (above the 85% cap, below the fumble line).</summary>
     public const int Fail = 90;
 

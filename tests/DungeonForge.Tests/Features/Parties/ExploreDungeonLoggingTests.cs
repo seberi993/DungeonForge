@@ -170,8 +170,8 @@ public sealed class ExploreDungeonLoggingTests(WebApplicationFactory<Program> fa
         var cache = new FaultableCache(derived.Services.GetRequiredService<IMemoryCache>());
         var notifier = new CapturingNotifier();
         using var loggers = LoggerFactory.Create(b => b.AddProvider(logs));
-        var handler = new ExploreDungeonHandler(
-            new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier, loggers.CreateLogger<ExploreDungeonHandler>());
+        var handler = NewHandler(
+            new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier, loggers);
 
         (await handler.HandleAsync(id, null)).IsSuccess.Should().BeTrue();
         (await handler.HandleAsync(id, new ExploreRequest(WholeParty()))).IsSuccess.Should().BeTrue();

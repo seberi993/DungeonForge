@@ -57,6 +57,7 @@ builder.Services.TryAddSingleton(sp => new ChaosDispatcher(
     sp.GetRequiredService<IPartyNotifier>(), new RandomRoller(), sp.GetRequiredService<ILogger<ChaosDispatcher>>()));
 builder.Services.TryAddSingleton(new VocabularySelector(new RandomRoller()));
 builder.Services.AddSocial(builder.Configuration);
+builder.Services.AddSingleton<TurnNarrator>();
 builder.Services.AddSingleton<ExploreDungeonHandler>();
 builder.Services.AddSingleton<ClaimVaultHandler>();
 builder.Services.AddSingleton<CastConfrontationVoteHandler>();

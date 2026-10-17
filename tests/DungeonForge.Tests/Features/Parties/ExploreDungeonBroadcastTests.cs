@@ -59,12 +59,8 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         var derived = factory.WithWebHostBuilder(b => b.ConfigureServices(s => s.AddSingleton<IRoller>(new FixedRoller(0))));
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
-        var handler = new ExploreDungeonHandler(
-            derived.Services.GetRequiredService<IPartyStore>(),
-            new FixedRoller(0),
-            new FixedNarrator(),
-            notifier,
-            NullLogger<ExploreDungeonHandler>.Instance);
+        var handler = ExploreTestSupport.NewHandler(
+            derived.Services.GetRequiredService<IPartyStore>(), new FixedRoller(0), new FixedNarrator(), notifier);
         return (handler, id, derived);
     }
 
