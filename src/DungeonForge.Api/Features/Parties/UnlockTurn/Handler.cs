@@ -28,14 +28,8 @@ public sealed class UnlockTurnHandler(IMemoryCache cache, IPartyNotifier notifie
         if (removed)
         {
             cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
-            try
-            {
-                await notifier.TurnLockUpdatedAsync(id, status, CancellationToken.None);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Failed to broadcast TurnLockUpdated for party {PartyId}", id);
-            }
+            await BestEffort.RunAsync(
+                logger, Operation, id, "TurnLockUpdated", () => notifier.TurnLockUpdatedAsync(id, status, CancellationToken.None));
         }
 
         return new UnlockTurnResponse(id, status);

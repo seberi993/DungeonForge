@@ -1,4 +1,5 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
@@ -8,6 +9,11 @@ namespace DungeonForge.Api.Features.Parties.Chaos;
 // Single door for everything chaos mode pushes to clients. Private data goes through SendPrivateAsync only; the public side
 // carries nothing but ready markers, vault/confrontation status and post-resolution reveals. Delivery failures are logged,
 // never thrown: a flaky socket must not fail a game request.
+public static class ChaosOperations
+{
+    public const string Send = "Chaos:Send";
+}
+
 public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILogger<ChaosDispatcher> logger)
 {
     private const string TraitorBriefing =
@@ -117,15 +123,6 @@ public sealed class ChaosDispatcher(IPartyNotifier notifier, IRoller roller, ILo
         return PublishAsync(party.Id, new ChaosEvent(ChaosEvent.TraitorOutcome, $"{traitor} was the Traitor, and wins: {how}."));
     }
 
-    private async Task GuardAsync(Func<Task> send, string what, Guid partyId)
-    {
-        try
-        {
-            await send();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send {What} for party {PartyId}", what, partyId);
-        }
-    }
+    private Task GuardAsync(Func<Task> send, string what, Guid partyId) =>
+        BestEffort.RunAsync(logger, ChaosOperations.Send, partyId, what, send);
 }

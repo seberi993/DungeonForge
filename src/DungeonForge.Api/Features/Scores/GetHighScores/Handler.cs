@@ -1,7 +1,10 @@
+using DungeonForge.Api.Errors;
+
 namespace DungeonForge.Api.Features.Scores.GetHighScores;
 
 public sealed class GetHighScoresHandler(IScoreBoard board, ILogger<GetHighScoresHandler> logger)
 {
+    public const string Operation = "Query:GetHighScores";
     public const int DefaultLimit = 10;
     public const int MaxLimit = 50;
 
@@ -17,7 +20,8 @@ public sealed class GetHighScoresHandler(IScoreBoard board, ILogger<GetHighScore
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             // A dead leaderboard must not break the lobby; it just shows empty.
-            logger.LogWarning(ex, "High score read failed");
+            using var scope = LogScope.Begin(logger, Operation);
+            logger.ScoreBoardReadFailed(ex);
             return new HighScoresResponse([]);
         }
     }

@@ -62,15 +62,7 @@ public sealed class ClaimVaultHandler(
         return new ClaimVaultResponse(id, outcome, claim.Gold, claim.Artifact, claim.Status == VaultClaimStatus.PocketedCaught ? claim.Spotters : null);
     }
 
-    private async Task BroadcastStateAsync(Party party)
-    {
-        try
-        {
-            await notifier.PartyUpdatedAsync(PartyMapping.ToResponse(party.Snapshot()), CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast PartyUpdated for party {PartyId}", party.Id);
-        }
-    }
+    private Task BroadcastStateAsync(Party party) => BestEffort.RunAsync(
+        logger, Operation, party.Id, "PartyUpdated",
+        () => notifier.PartyUpdatedAsync(PartyMapping.ToResponse(party.Snapshot()), CancellationToken.None));
 }

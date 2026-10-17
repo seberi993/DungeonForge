@@ -37,14 +37,8 @@ public sealed class JoinPartyHandler(IMemoryCache cache, IPartyNotifier notifier
         }
 
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
-        try
-        {
-            await notifier.PartyUpdatedAsync(state, CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast PartyUpdated for party {PartyId}", id);
-        }
+        await BestEffort.RunAsync(
+            logger, Operation, id, "PartyUpdated", () => notifier.PartyUpdatedAsync(state, CancellationToken.None));
 
         return new JoinPartyResponse(name, state);
     }

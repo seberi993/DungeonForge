@@ -57,15 +57,7 @@ public sealed class CastConfrontationVoteHandler(
         return $"Verdict on {r.Accused}: {effect}. Ballots: {tally}.";
     }
 
-    private async Task BroadcastStateAsync(Party party)
-    {
-        try
-        {
-            await notifier.PartyUpdatedAsync(PartyMapping.ToResponse(party.Snapshot()), CancellationToken.None);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to broadcast PartyUpdated for party {PartyId}", party.Id);
-        }
-    }
+    private Task BroadcastStateAsync(Party party) => BestEffort.RunAsync(
+        logger, Operation, party.Id, "PartyUpdated",
+        () => notifier.PartyUpdatedAsync(PartyMapping.ToResponse(party.Snapshot()), CancellationToken.None));
 }
