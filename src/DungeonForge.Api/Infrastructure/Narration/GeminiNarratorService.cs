@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Api.Errors;
 using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
@@ -57,7 +58,7 @@ public sealed class GeminiNarratorService(
             return new(parsed, false, null);
         }
 
-        logger.LogWarning("Narration turn response was malformed; using fallback.");
+        logger.NarratorResponseMalformed();
         return new(null, false, null);
     }
 
@@ -89,7 +90,7 @@ public sealed class GeminiNarratorService(
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var quota = await RateLimitInfo.ReadAsync(response, timeout.Token);
-                logger.LogWarning("Narration API rate limited (429); quota {QuotaId}.", quota.QuotaId ?? "unknown");
+                logger.NarratorRateLimited(quota.QuotaId ?? "unknown");
                 var retry = response.Headers.RetryAfter;
                 TimeSpan? wait = retry?.Delta
                     ?? (retry?.Date is { } at ? at - _clock.GetUtcNow() : (TimeSpan?)null)
@@ -109,7 +110,7 @@ public sealed class GeminiNarratorService(
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Narration API returned {Status}.", (int)response.StatusCode);
+                logger.NarratorHttpFailed((int)response.StatusCode);
             }
 
             response.EnsureSuccessStatusCode();
@@ -121,7 +122,7 @@ public sealed class GeminiNarratorService(
                 return new SendResult(text, false, null);
             }
 
-            logger.LogWarning("Narration response contained no text; using fallback.");
+            logger.NarratorEmptyResponse();
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -129,7 +130,7 @@ public sealed class GeminiNarratorService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning("Narration call failed ({Reason}); using fallback.", ex.GetType().Name);
+            logger.NarratorCallFailed(ex.GetType().Name);
         }
 
         return SendResult.Failed;

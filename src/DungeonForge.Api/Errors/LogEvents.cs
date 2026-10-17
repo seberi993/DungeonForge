@@ -2,7 +2,7 @@ namespace DungeonForge.Api.Errors;
 
 // Coded log events for failures that happen outside a request's reply: a broadcast, a leaderboard call, a narrator call,
 // a timer. Each has a stable EventId and EventName so a log line can be traced to its method; the operation, party and
-// turn are in the scope (see LogScope). Ranges: 2000s best-effort sends, 2100s leaderboard, 2200s narration.
+// turn are in the scope (see LogScope). Ranges: 2000s best-effort sends, 2100s leaderboard, 2200s explore narration, 2300s narrator API and key pool, 2400s hub.
 // Grep the id or name to find the call site.
 public static partial class LogEvents
 {
@@ -16,6 +16,16 @@ public static partial class LogEvents
     public const int NarratorEmptyScenarioId = 2211;
     public const int NarratorScenarioFailedId = 2212;
     public const int NarratorTurnFailedId = 2213;
+    public const int NarratorResponseMalformedId = 2301;
+    public const int NarratorRateLimitedId = 2302;
+    public const int NarratorHttpFailedId = 2303;
+    public const int NarratorEmptyResponseId = 2304;
+    public const int NarratorCallFailedId = 2305;
+    public const int KeyRateLimitedId = 2311;
+    public const int AllKeysRateLimitedId = 2312;
+    public const int NoKeyAvailableId = 2313;
+    public const int HubPartyNotFoundId = 2401;
+    public const int HubPlayerNotFoundId = 2402;
 
     [LoggerMessage(
         EventId = BroadcastFailedId, EventName = "BroadcastFailed", Level = LogLevel.Warning,
@@ -66,4 +76,55 @@ public static partial class LogEvents
         EventId = NarratorTurnFailedId, EventName = "NarratorTurnFailed", Level = LogLevel.Warning,
         Message = "Narrator failed narrating the turn; using the fallback.")]
     public static partial void NarratorTurnFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = NarratorResponseMalformedId, EventName = "NarratorResponseMalformed", Level = LogLevel.Warning,
+        Message = "Narration turn response was malformed; using the fallback.")]
+    public static partial void NarratorResponseMalformed(this ILogger logger);
+
+    [LoggerMessage(
+        EventId = NarratorRateLimitedId, EventName = "NarratorRateLimited", Level = LogLevel.Warning,
+        Message = "Narration API rate limited (429); quota {QuotaId}.")]
+    public static partial void NarratorRateLimited(this ILogger logger, string quotaId);
+
+    [LoggerMessage(
+        EventId = NarratorHttpFailedId, EventName = "NarratorHttpFailed", Level = LogLevel.Warning,
+        Message = "Narration API returned {Status}.")]
+    public static partial void NarratorHttpFailed(this ILogger logger, int status);
+
+    [LoggerMessage(
+        EventId = NarratorEmptyResponseId, EventName = "NarratorEmptyResponse", Level = LogLevel.Warning,
+        Message = "Narration response contained no text; using the fallback.")]
+    public static partial void NarratorEmptyResponse(this ILogger logger);
+
+    // Exception type only, never the exception: its text can carry a URL or a key.
+    [LoggerMessage(
+        EventId = NarratorCallFailedId, EventName = "NarratorCallFailed", Level = LogLevel.Warning,
+        Message = "Narration call failed ({Reason}); using the fallback.")]
+    public static partial void NarratorCallFailed(this ILogger logger, string reason);
+
+    [LoggerMessage(
+        EventId = KeyRateLimitedId, EventName = "KeyRateLimited", Level = LogLevel.Warning,
+        Message = "Narration key #{KeyIndex} rate limited; cooling for {Seconds}s.")]
+    public static partial void KeyRateLimited(this ILogger logger, int keyIndex, int seconds);
+
+    [LoggerMessage(
+        EventId = AllKeysRateLimitedId, EventName = "AllKeysRateLimited", Level = LogLevel.Warning,
+        Message = "All narration keys are rate limited; using the fallback until one recovers.")]
+    public static partial void AllKeysRateLimited(this ILogger logger);
+
+    [LoggerMessage(
+        EventId = NoKeyAvailableId, EventName = "NoKeyAvailable", Level = LogLevel.Debug,
+        Message = "No narration key available; using the fallback.")]
+    public static partial void NoKeyAvailable(this ILogger logger);
+
+    [LoggerMessage(
+        EventId = HubPartyNotFoundId, EventName = "HubPartyNotFound", Level = LogLevel.Information,
+        Message = "A hub call named a party that does not exist.")]
+    public static partial void HubPartyNotFound(this ILogger logger);
+
+    [LoggerMessage(
+        EventId = HubPlayerNotFoundId, EventName = "HubPlayerNotFound", Level = LogLevel.Information,
+        Message = "A hub call named a player who is not in the party.")]
+    public static partial void HubPlayerNotFound(this ILogger logger);
 }

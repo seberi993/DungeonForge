@@ -1,3 +1,5 @@
+using DungeonForge.Api.Errors;
+
 
 namespace DungeonForge.Api.Infrastructure.Narration;
 
@@ -43,17 +45,17 @@ public sealed class KeyPoolGeminiNarrator(
 
             var cooldown = result.RetryAfter ?? DefaultCooldown;
             pool.Cooldown(lease.Index, cooldown);
-            logger.LogWarning("Narration key #{KeyIndex} rate limited; cooling for {Seconds}s.", lease.Index, (int)cooldown.TotalSeconds);
+            logger.KeyRateLimited(lease.Index, (int)cooldown.TotalSeconds);
         }
 
         // Warn once per exhaustion episode; repeats while keys keep cooling are debug noise.
         if (Interlocked.Exchange(ref _exhaustionLogged, 1) == 0)
         {
-            logger.LogWarning("All narration keys are rate limited; using fallback until one recovers.");
+            logger.AllKeysRateLimited();
         }
         else
         {
-            logger.LogDebug("No narration key available; using fallback.");
+            logger.NoKeyAvailable();
         }
 
         return null;

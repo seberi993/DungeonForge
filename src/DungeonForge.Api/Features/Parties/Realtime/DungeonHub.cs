@@ -1,18 +1,24 @@
+using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Memory;
-using DungeonForge.Api.Domain;
 
 namespace DungeonForge.Api.Features.Parties.Realtime;
 
 // TODO: Clerk JWT auth (and party membership checks on JoinParty) is a later slice.
-public sealed class DungeonHub(IMemoryCache cache, PlayerConnections connections, ChaosDispatcher chaos) : Hub
+// Refusals throw a HubException (its text is what the client sees, so it stays) and leave a coded event on the server.
+public sealed class DungeonHub(
+    IMemoryCache cache, PlayerConnections connections, ChaosDispatcher chaos, ILogger<DungeonHub> logger) : Hub
 {
+    private const string JoinPartyOperation = "Hub:JoinParty";
+    private const string RegisterPlayerOperation = "Hub:RegisterPlayer";
+
     public async Task JoinParty(Guid partyId)
     {
         if (!cache.TryGetValue(PartyCache.Key(partyId), out _))
         {
-            throw new HubException("Party not found.");
+            throw PartyNotFound(JoinPartyOperation, partyId);
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, partyId.ToString());
@@ -23,11 +29,17 @@ public sealed class DungeonHub(IMemoryCache cache, PlayerConnections connections
     {
         if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
         {
-            throw new HubException("Party not found.");
+            throw PartyNotFound(RegisterPlayerOperation, partyId);
         }
 
-        var member = party.Members.FirstOrDefault(m => string.Equals(m.Name, playerName?.Trim(), StringComparison.OrdinalIgnoreCase))
-            ?? throw new HubException("Player not found.");
+        var member = party.Members.FirstOrDefault(m => string.Equals(m.Name, playerName?.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (member is null)
+        {
+            // The typed name is not logged: it is free text from a client.
+            using var scope = LogScope.Begin(logger, RegisterPlayerOperation, partyId);
+            logger.HubPlayerNotFound();
+            throw new HubException("Player not found.");
+        }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, partyId.ToString());
         connections.Register(partyId, member.Name, Context.ConnectionId);
@@ -41,5 +53,12 @@ public sealed class DungeonHub(IMemoryCache cache, PlayerConnections connections
     {
         connections.Remove(Context.ConnectionId);
         return base.OnDisconnectedAsync(exception);
+    }
+
+    private HubException PartyNotFound(string operation, Guid partyId)
+    {
+        using var scope = LogScope.Begin(logger, operation, partyId);
+        logger.HubPartyNotFound();
+        return new HubException("Party not found.");
     }
 }
