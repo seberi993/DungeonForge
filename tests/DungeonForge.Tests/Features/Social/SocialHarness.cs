@@ -34,7 +34,7 @@ internal sealed class SocialHarness : IDisposable
     public HttpClient Client { get; }
 
     public static SocialHarness Create(
-        WebApplicationFactory<Program> factory, Dictionary<string, string?>? config = null, IRoller? roller = null)
+        WebApplicationFactory<Program> factory, Dictionary<string, string?>? config = null, IRoller? roller = null, Action<IServiceCollection>? services = null)
     {
         var notifier = new ChaosRecordingNotifier();
         var clock = new ManualTime(DateTimeOffset.UtcNow);
@@ -50,6 +50,7 @@ internal sealed class SocialHarness : IDisposable
                 s.AddSingleton<IPartyNotifier>(notifier);
                 s.AddSingleton<TimeProvider>(clock);
                 if (roller is not null) s.AddSingleton(roller);
+                services?.Invoke(s);
             });
         });
         return new SocialHarness(derived, notifier, clock);
@@ -57,6 +58,8 @@ internal sealed class SocialHarness : IDisposable
 
     public Task<Guid> PartyAsync(object[]? members = null) =>
         PartyTestData.CreatePartyAsync(Client, "Heroes", members ?? ChaosTestSupport.FourMembers);
+
+    public T Get<T>() where T : notnull => _factory.Services.GetRequiredService<T>();
 
     public Party Party(Guid id) => ChaosTestSupport.CachedParty(_factory, id);
 

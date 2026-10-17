@@ -90,7 +90,7 @@ public static class ConsequenceApplier
 // Records the event, asks the supervisor, applies the outcome and keeps the audit row. With the Supervision module off the
 // event is still journaled (Ignore) so debugging data survives, but nothing is judged or applied.
 public sealed class SocialPipeline(
-    ISocialSupervisor supervisor, SocialModules modules, TimeProvider time)
+    ISocialSupervisor supervisor, SocialModules modules, TimeProvider time, NarratorJudgeQueue? judgeQueue = null)
 {
     public Decision Process(Party party, SocialEvent socialEvent)
     {
@@ -110,6 +110,11 @@ public sealed class SocialPipeline(
                 : new Decision(socialEvent.Id, Verdict.Ignore, 0, [], "R-OFF", "Supervision module is off.");
             ConsequenceApplier.Apply(social, decision);
             social.Record(new AuditEntry(socialEvent, decision, SeededRng.Derive(social.RunSeed, "event:" + socialEvent.Id), now));
+            if (decision.Verdict == Verdict.Unresolved)
+            {
+                judgeQueue?.TryEnqueue(party, socialEvent);
+            }
+
             return decision;
         }
     }

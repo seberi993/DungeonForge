@@ -10,7 +10,9 @@ using DungeonForge.Api.Features.Social.Seed;
 using DungeonForge.Api.Features.Social.Seed.FinalizeProfiles;
 using DungeonForge.Api.Features.Social.Seed.SubmitSeed;
 using DungeonForge.Api.Features.Social.Supervision;
+using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Api.Features.Social;
 
@@ -29,7 +31,13 @@ public static class SocialRegistration
         services.TryAddSingleton<SocialLifecycle>();
 
         // Seed module
-        services.TryAddSingleton<IAxisParser, KeywordAxisParser>();
+        services.Configure<SocialModelOptions>(configuration.GetSection("Social:Model"));
+        services.TryAddSingleton<IKeyPool, KeyPool>();
+        services.AddHttpClient<GeminiJsonModel>((sp, http) =>
+            http.BaseAddress = new Uri(sp.GetRequiredService<IOptions<NarrationOptions>>().Value.BaseUrl));
+        services.TryAddSingleton<IJsonModel>(sp => sp.GetRequiredService<GeminiJsonModel>());
+        // Model-backed parser; it falls back to the keyword rules on any failure (and when no key is configured).
+        services.TryAddSingleton<IAxisParser, GeminiAxisParser>();
         services.AddSingleton<SubmitSeedHandler>();
         services.AddSingleton<FinalizeProfilesHandler>();
 
@@ -47,6 +55,9 @@ public static class SocialRegistration
         services.AddSingleton<ISocialRule, SubgroupConsensusRule>();
         services.TryAddSingleton<ISocialSupervisor, RuleSupervisor>();
         services.TryAddSingleton<SocialPipeline>();
+        services.TryAddSingleton<NarratorJudgeQueue>();
+        services.TryAddSingleton<NarratorJudge>();
+        services.AddHostedService<NarratorJudgeWorker>();
 
         // Abilities module
         services.TryAddSingleton<SocialTurnPipeline>();
