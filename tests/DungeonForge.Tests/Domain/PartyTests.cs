@@ -137,7 +137,7 @@ public class PartyTests
             new PartyMember("Merlin", CharacterClass.Mage),
             new PartyMember("Conan", CharacterClass.Warrior));
 
-        party.TakeDamage(30);
+        party.Defeat("Conan");
 
         party.IsPartyDefeated.Should().BeFalse();
     }
@@ -149,7 +149,7 @@ public class PartyTests
             new PartyMember("Merlin", CharacterClass.Mage),
             new PartyMember("Conan", CharacterClass.Warrior));
 
-        party.TakeDamage(30);
+        party.Defeat("Conan");
         party.TakeDamage(16);
 
         party.IsPartyDefeated.Should().BeTrue();
@@ -162,7 +162,7 @@ public class PartyTests
         var party = CreateParty(
             new PartyMember("Merlin", CharacterClass.Mage),
             new PartyMember("Conan", CharacterClass.Warrior));
-        party.TakeDamage(10);
+        party.Hurt("Conan", 10);
 
         var healed = party.Heal("Conan", 6);
 
@@ -219,11 +219,11 @@ public class PartyTests
     public void Snapshot_CapturesCurrentStateAsImmutableCopy()
     {
         var party = CreateParty(new PartyMember("Conan", CharacterClass.Warrior));
-        party.TakeDamage(4);
+        party.Hurt("Conan", 4);
         party.AdvanceTurn(9);
 
         var snap = party.Snapshot();
-        party.TakeDamage(5);
+        party.Hurt("Conan", 5);
         party.AdvanceTurn(1);
 
         snap.Id.Should().Be(party.Id);
@@ -246,7 +246,7 @@ public class PartyTests
             {
                 lock (party.SyncRoot)
                 {
-                    party.TakeDamage(1);
+                    party.Hurt("Conan", 1);
                     party.AdvanceTurn(1); // invariant while alive: hp + turn == 30
                 }
             }

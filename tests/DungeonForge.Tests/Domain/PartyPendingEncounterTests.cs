@@ -92,7 +92,7 @@ public class PartyScenarioLifecycleTests
         var awaiting = CreateParty();
         awaiting.TryBeginScenario(RoomType.Chest);
         var pending = CreateParty();
-        pending.TrySetPending(new PendingEncounter(RoomType.Combat, "p"));
+        pending.CompleteScenario(new PendingEncounter(RoomType.Combat, "p"));
 
         awaiting.TryBeginScenario(RoomType.Puzzle).Should().BeFalse();
         pending.TryBeginScenario(RoomType.Puzzle).Should().BeFalse();

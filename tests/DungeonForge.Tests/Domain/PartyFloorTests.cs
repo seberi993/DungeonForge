@@ -83,7 +83,7 @@ public class PartyFloorTests
     public void AdvanceProgress_FloorCleared_HealsAWoundedHero()
     {
         var party = CreateParty();
-        party.TakeDamage(20); // the Warrior draws the hit
+        party.Hurt("Conan", 20);
         var conan = party.Members[0];
         var before = conan.Hp;
         ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
@@ -97,7 +97,7 @@ public class PartyFloorTests
     public void AdvanceProgress_FloorCleared_DoesNotReviveAFallenHero()
     {
         var party = CreateParty();
-        party.TakeDamage(1000); // Conan falls
+        party.Defeat("Conan");
         var conan = party.Members[0];
         conan.IsDefeated.Should().BeTrue();
         ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);

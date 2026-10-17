@@ -15,7 +15,7 @@ public class PartyLockTests
             Guid.NewGuid(), "Heroes",
             Enumerable.Range(0, members).Select(i => new PartyMember($"M{i}", CharacterClass.Warrior)).ToList(),
             DateTimeOffset.UtcNow);
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
+        party.CompleteScenario(new PendingEncounter(RoomType.Puzzle, "p"));
         return party;
     }
 
