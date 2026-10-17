@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 
 namespace DungeonForge.Api.Domain;
 
@@ -18,15 +19,6 @@ public sealed partial class Party
         Modifiers = modifiers;
         _time = time;
     }
-
-    public const int MaxDiscussionEntries = 8;
-    public const int MaxMembers = 8;
-
-    // A floor is RoomsPerFloor ordinary rooms followed by a boss that takes several rounds to fell.
-    public const int RoomsPerFloor = 4;
-    public const int BossBaseHp = 30;
-    public const int BossHpPerFloor = 10;
-    public const double FloorHealRatio = 0.4;
 
     // Copy-on-write: a join swaps in a new array, so unlocked readers always enumerate a stable roster.
     private PartyMember[] _members;
@@ -64,8 +56,6 @@ public sealed partial class Party
 
     public int BossMaxHp { get { lock (SyncRoot) { return _bossMaxHp; } } }
 
-    public static int BossHpFor(int floor) => BossBaseHp + BossHpPerFloor * (floor - 1);
-
     public IReadOnlyList<PartyMember> Members => Array.AsReadOnly(Volatile.Read(ref _members));
 
     // Adds a hero after creation. False when the roster is full or the name is taken (case-insensitive).
@@ -75,7 +65,7 @@ public sealed partial class Party
 
         lock (SyncRoot)
         {
-            if (_members.Length >= MaxMembers
+            if (_members.Length >= PartyRules.MaxMembers
                 || _members.Any(m => string.Equals(m.Name, member.Name, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
@@ -227,7 +217,7 @@ public sealed partial class Party
             {
                 list[at] = action;
             }
-            else if (list.Count >= MaxDiscussionEntries)
+            else if (list.Count >= PartyRules.MaxDiscussionEntries)
             {
                 return false;
             }
@@ -392,10 +382,10 @@ public sealed partial class Party
             if (room != RoomType.Boss)
             {
                 _roomsCleared++;
-                var wakes = _roomsCleared >= RoomsPerFloor;
+                var wakes = _roomsCleared >= PartyRules.RoomsPerFloor;
                 if (wakes)
                 {
-                    _bossMaxHp = BossHpFor(_floor);
+                    _bossMaxHp = PartyRules.BossHpFor(_floor);
                     _bossHp = _bossMaxHp;
                 }
 
@@ -410,7 +400,7 @@ public sealed partial class Party
 
             foreach (var m in Members)
             {
-                m.Heal((int)Math.Ceiling(m.MaxHp * FloorHealRatio));
+                m.Heal(PartyRules.FloorHealFor(m.MaxHp));
             }
 
             _floor++;

@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -45,7 +46,7 @@ public sealed class ExploreDungeonFloorTests(WebApplicationFactory<Program> fact
 
     private static async Task ClearOrdinaryRoomsAsync(HttpClient client, Guid id)
     {
-        for (var i = 0; i < Party.RoomsPerFloor; i++)
+        for (var i = 0; i < PartyRules.RoomsPerFloor; i++)
         {
             using var turn = await TurnAsync(client, id);
             turn.RootElement.GetProperty("floorCleared").GetBoolean().Should().BeFalse();
@@ -71,12 +72,12 @@ public sealed class ExploreDungeonFloorTests(WebApplicationFactory<Program> fact
         var (client, _, scope) = Arrange();
         using var _s = scope;
         var id = await PartyTestData.CreatePartyAsync(client);
-        for (var i = 0; i < Party.RoomsPerFloor - 1; i++) (await TurnAsync(client, id)).Dispose();
+        for (var i = 0; i < PartyRules.RoomsPerFloor - 1; i++) (await TurnAsync(client, id)).Dispose();
 
         using var last = await TurnAsync(client, id);
 
-        last.RootElement.GetProperty("bossMaxHp").GetInt32().Should().Be(Party.BossHpFor(1));
-        last.RootElement.GetProperty("bossHp").GetInt32().Should().Be(Party.BossHpFor(1));
+        last.RootElement.GetProperty("bossMaxHp").GetInt32().Should().Be(PartyRules.BossHpFor(1));
+        last.RootElement.GetProperty("bossHp").GetInt32().Should().Be(PartyRules.BossHpFor(1));
     }
 
     [Fact]
@@ -92,7 +93,7 @@ public sealed class ExploreDungeonFloorTests(WebApplicationFactory<Program> fact
 
         round.RootElement.GetProperty("roomType").GetString().Should().Be("boss");
         round.RootElement.GetProperty("floorCleared").GetBoolean().Should().BeFalse();
-        round.RootElement.GetProperty("bossHp").GetInt32().Should().Be(Party.BossHpFor(1));
+        round.RootElement.GetProperty("bossHp").GetInt32().Should().Be(PartyRules.BossHpFor(1));
         round.RootElement.GetProperty("goldFound").GetInt32().Should().Be(0);
         round.RootElement.GetProperty("floor").GetInt32().Should().Be(1);
         using var next = await PromptWhenReadyAsync(client, id);

@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -28,7 +29,7 @@ public sealed class JoinPartyHandler(IMemoryCache cache, IPartyNotifier notifier
             if (!party.TryAddMember(new PartyMember(name, request.Class!.Value)))
             {
                 // The domain only says "no"; both causes were a 409 before, and the roster size tells them apart.
-                return party.Members.Count >= Party.MaxMembers
+                return party.Members.Count >= PartyRules.MaxMembers
                     ? JoinPartyErrors.Full(Operation, id)
                     : JoinPartyErrors.NameTaken(Operation, id, name);
             }

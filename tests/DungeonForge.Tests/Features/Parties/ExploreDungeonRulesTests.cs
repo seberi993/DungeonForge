@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -12,7 +13,7 @@ namespace DungeonForge.Tests.Features.Parties;
 
 // Characterizes the turn math that lives in the explore handler (fail damage, gold, the wounded flag) before it moves to
 // Domain/Rules. Expected numbers are written out by hand, not computed with the formulas, so a move or rewrite that changes
-// one fails here. A floor is Party.RoomsPerFloor (4) ordinary rooms then a boss: the boss is turn 4 on floor 1 and turn 9 on floor 2.
+// one fails here. A floor is PartyRules.RoomsPerFloor (4) ordinary rooms then a boss: the boss is turn 4 on floor 1 and turn 9 on floor 2.
 public sealed class ExploreDungeonRulesTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private const int Combat = 0;

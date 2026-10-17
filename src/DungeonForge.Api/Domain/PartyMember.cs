@@ -1,3 +1,5 @@
+using DungeonForge.Api.Domain.Rules;
+
 namespace DungeonForge.Api.Domain;
 
 public sealed class PartyMember
@@ -7,7 +9,7 @@ public sealed class PartyMember
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         Name = name;
         Class = characterClass;
-        MaxHp = MaxHpFor(characterClass);
+        MaxHp = MemberRules.MaxHpFor(characterClass);
         Hp = MaxHp;
     }
 
@@ -22,7 +24,7 @@ public sealed class PartyMember
     public bool IsDefeated => Hp == 0;
 
     // Higher threat is targeted first; ties are resolved by roster order in Party.
-    internal int Threat => Class is CharacterClass.Warrior or CharacterClass.Paladin ? 1 : 0;
+    internal int Threat => MemberRules.Threat(Class);
 
     internal int TakeDamage(int amount)
     {
@@ -44,16 +46,4 @@ public sealed class PartyMember
         Hp += applied;
         return applied;
     }
-
-    private static int MaxHpFor(CharacterClass c) => c switch
-    {
-        CharacterClass.Warrior => 30,
-        CharacterClass.Paladin => 28,
-        CharacterClass.Druid => 22,
-        CharacterClass.Priest => 20,
-        CharacterClass.Bard => 20,
-        CharacterClass.Necromancer => 18,
-        CharacterClass.Mage => 16,
-        _ => throw new ArgumentOutOfRangeException(nameof(c), c, "Unknown character class."),
-    };
 }

@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using FluentAssertions;
@@ -31,35 +32,35 @@ public class PartyFloorTests
     {
         var party = CreateParty();
 
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor - 1);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor - 1);
 
         party.BossMaxHp.Should().Be(0);
-        party.RoomsCleared.Should().Be(Party.RoomsPerFloor - 1);
+        party.RoomsCleared.Should().Be(PartyRules.RoomsPerFloor - 1);
     }
 
     [Fact]
     public void AdvanceProgress_LastOrdinaryRoom_WakesTheBossAtFullHp()
     {
         var party = CreateParty();
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor - 1);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor - 1);
 
         var progress = party.AdvanceProgress(RoomType.Puzzle, 0);
 
         progress.Should().Be(new FloorProgress(BossNext: true, FloorCleared: false));
-        party.BossHp.Should().Be(Party.BossHpFor(1));
-        party.BossMaxHp.Should().Be(Party.BossHpFor(1));
+        party.BossHp.Should().Be(PartyRules.BossHpFor(1));
+        party.BossMaxHp.Should().Be(PartyRules.BossHpFor(1));
     }
 
     [Fact]
     public void AdvanceProgress_BossHit_WearsItDown_AndKeepsBossNext()
     {
         var party = CreateParty();
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
 
         var progress = party.AdvanceProgress(RoomType.Boss, 10);
 
         progress.Should().Be(new FloorProgress(BossNext: true, FloorCleared: false));
-        party.BossHp.Should().Be(Party.BossHpFor(1) - 10);
+        party.BossHp.Should().Be(PartyRules.BossHpFor(1) - 10);
         party.Floor.Should().Be(1);
     }
 
@@ -67,7 +68,7 @@ public class PartyFloorTests
     public void AdvanceProgress_OverkillingTheBoss_DescendsAndResetsTheFloor()
     {
         var party = CreateParty();
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
 
         var progress = party.AdvanceProgress(RoomType.Boss, 999);
 
@@ -85,11 +86,11 @@ public class PartyFloorTests
         party.TakeDamage(20); // the Warrior draws the hit
         var conan = party.Members[0];
         var before = conan.Hp;
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
 
         party.AdvanceProgress(RoomType.Boss, 999);
 
-        conan.Hp.Should().Be(Math.Min(conan.MaxHp, before + (int)Math.Ceiling(conan.MaxHp * Party.FloorHealRatio)));
+        conan.Hp.Should().Be(Math.Min(conan.MaxHp, before + (int)Math.Ceiling(conan.MaxHp * PartyRules.FloorHealRatio)));
     }
 
     [Fact]
@@ -99,7 +100,7 @@ public class PartyFloorTests
         party.TakeDamage(1000); // Conan falls
         var conan = party.Members[0];
         conan.IsDefeated.Should().BeTrue();
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
 
         party.AdvanceProgress(RoomType.Boss, 999);
 
@@ -108,19 +109,19 @@ public class PartyFloorTests
 
     [Fact]
     public void BossHpFor_GrowsWithEachFloor() =>
-        Party.BossHpFor(3).Should().Be(Party.BossHpFor(1) + 2 * Party.BossHpPerFloor);
+        PartyRules.BossHpFor(3).Should().Be(PartyRules.BossHpFor(1) + 2 * PartyRules.BossHpPerFloor);
 
     [Fact]
     public void Snapshot_CarriesFloorAndBossState()
     {
         var party = CreateParty();
-        ClearOrdinaryRooms(party, Party.RoomsPerFloor);
+        ClearOrdinaryRooms(party, PartyRules.RoomsPerFloor);
 
         var snapshot = party.Snapshot();
 
         snapshot.Floor.Should().Be(1);
-        snapshot.RoomsCleared.Should().Be(Party.RoomsPerFloor);
-        snapshot.BossHp.Should().Be(Party.BossHpFor(1));
-        snapshot.BossMaxHp.Should().Be(Party.BossHpFor(1));
+        snapshot.RoomsCleared.Should().Be(PartyRules.RoomsPerFloor);
+        snapshot.BossHp.Should().Be(PartyRules.BossHpFor(1));
+        snapshot.BossMaxHp.Should().Be(PartyRules.BossHpFor(1));
     }
 }
