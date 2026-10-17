@@ -3,20 +3,19 @@ using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.ClaimVault;
 
 // Resolves the claimant's choice in C#. Only a declared share (or a caught pocket) is announced; an unseen pocket is
 // confirmed to the claimant privately and the public only learns that the vault is gone.
 public sealed class ClaimVaultHandler(
-    IMemoryCache cache, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<ClaimVaultHandler> logger)
+    IPartyStore parties, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<ClaimVaultHandler> logger)
 {
     public const string Operation = "Command:ClaimVault";
 
     public async Task<Result<ClaimVaultResponse>> HandleAsync(Guid id, string playerName, VaultChoice choice)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return PartyErrors.NotFound(Operation, id);
         }
@@ -33,7 +32,7 @@ public sealed class ClaimVaultHandler(
                 return PartyErrors.PlayerUnknown(Operation, id, name);
         }
 
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        parties.Save(party);
         var who = party.Members.First(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).Name;
         var loot = claim.Artifact is null ? $"{claim.Gold} gold" : $"{claim.Gold} gold and a {claim.Artifact}";
 

@@ -4,18 +4,17 @@ using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.CastConfrontationVote;
 
 public sealed class CastConfrontationVoteHandler(
-    IMemoryCache cache, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<CastConfrontationVoteHandler> logger)
+    IPartyStore parties, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<CastConfrontationVoteHandler> logger)
 {
     public const string Operation = "Command:CastConfrontationVote";
 
     public async Task<Result<CastVoteResponse>> HandleAsync(Guid id, string playerName, ConfrontationVote vote)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return PartyErrors.NotFound(Operation, id);
         }
@@ -30,7 +29,7 @@ public sealed class CastConfrontationVoteHandler(
                 return CastConfrontationVoteErrors.NotEligible(Operation, id, name);
         }
 
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        parties.Save(party);
         if (result.Resolution is not { } resolution)
         {
             await chaos.PublishAsync(id, new ChaosEvent(

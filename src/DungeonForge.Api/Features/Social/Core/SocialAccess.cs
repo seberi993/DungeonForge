@@ -4,19 +4,18 @@ using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Features.Social.Abilities;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Social.Core;
 
 public sealed record SocialPlayer(Party Party, PartyMember Member);
 
 // What every social slice does first: find the party, check the module is on, resolve the named player.
-public sealed class SocialAccess(IMemoryCache cache, SocialModules modules)
+public sealed class SocialAccess(IPartyStore parties, SocialModules modules)
 {
     // A null module means "any part of the social game", used by the read-only overview.
     public Result<SocialPlayer> Resolve(Guid partyId, string? playerName, SocialModule? module, string operation)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (!parties.TryGet(partyId, out var party))
         {
             return PartyErrors.NotFound(operation, partyId);
         }
@@ -32,7 +31,7 @@ public sealed class SocialAccess(IMemoryCache cache, SocialModules modules)
     }
 
     // Refreshes the sliding expiry after a mutation, like every other party slice.
-    public void Touch(Party party) => cache.Set(PartyCache.Key(party.Id), party, PartyCache.EntryOptions());
+    public void Touch(Party party) => parties.Save(party);
 }
 
 // Pushes what the lock-protected code queued: the narrator's party-wide lines and private words. Failures are logged by

@@ -2,24 +2,22 @@ using DungeonForge.Api.Domain.Rules;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Realtime;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.JoinParty;
 
 // Adds the joiner's hero to an existing party and tells everyone already connected.
-public sealed class JoinPartyHandler(IMemoryCache cache, IPartyNotifier notifier, ILogger<JoinPartyHandler> logger)
+public sealed class JoinPartyHandler(IPartyStore parties, IPartyNotifier notifier, ILogger<JoinPartyHandler> logger)
 {
     public const string Operation = "Command:JoinParty";
 
     public async Task<Result<JoinPartyResponse>> HandleAsync(string? code, JoinPartyRequest request)
     {
-        if (InviteCodes.Normalize(code) is not { } normalized
-            || !cache.TryGetValue(PartyCache.InviteKey(normalized), out Guid id)
-            || !cache.TryGetValue(PartyCache.Key(id), out Party? party)
-            || party is null)
+        if (InviteCodes.Normalize(code) is not { } normalized || !parties.TryGetByInvite(normalized, out var party))
         {
             return PartyErrors.InviteNotFound(Operation, code);
         }
+
+        var id = party.Id;
 
         // Request was validated by the endpoint filter.
         var name = request.Name!.Trim();
@@ -37,7 +35,7 @@ public sealed class JoinPartyHandler(IMemoryCache cache, IPartyNotifier notifier
             state = PartyMapping.ToResponse(party.Snapshot());
         }
 
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        parties.Save(party);
         await BestEffort.RunAsync(
             logger, Operation, id, "PartyUpdated", () => notifier.PartyUpdatedAsync(state, CancellationToken.None));
 

@@ -11,6 +11,7 @@ using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.ExtractRun;
 using DungeonForge.Api.Features.Parties.GetPartyState;
 using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Features.Scores.GetHighScores;
 using DungeonForge.Api.Features.Social;
@@ -23,6 +24,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Free-tier cap for single-instance host: every cache.Set must specify Size.
 builder.Services.AddMemoryCache(o => o.SizeLimit = 1024);
+builder.Services.TryAddSingleton<IPartyStore, PartyStore>();
 
 // JSON contract is camelCase end-to-end (matches Blazor/System.Text.Json defaults).
 builder.Services.ConfigureHttpJsonOptions(o =>

@@ -2,21 +2,20 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.Realtime;
 
 // TODO: Clerk JWT auth (and party membership checks on JoinParty) is a later slice.
 // Refusals throw a HubException (its text is what the client sees, so it stays) and leave a coded event on the server.
 public sealed class DungeonHub(
-    IMemoryCache cache, PlayerConnections connections, ChaosDispatcher chaos, ILogger<DungeonHub> logger) : Hub
+    IPartyStore parties, PlayerConnections connections, ChaosDispatcher chaos, ILogger<DungeonHub> logger) : Hub
 {
     private const string JoinPartyOperation = "Hub:JoinParty";
     private const string RegisterPlayerOperation = "Hub:RegisterPlayer";
 
     public async Task JoinParty(Guid partyId)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out _))
+        if (!parties.TryGet(partyId, out _))
         {
             throw PartyNotFound(JoinPartyOperation, partyId);
         }
@@ -27,7 +26,7 @@ public sealed class DungeonHub(
     // Joins the party group AND binds this connection to a player, which is what private secrets/whispers are addressed to.
     public async Task RegisterPlayer(Guid partyId, string playerName)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (!parties.TryGet(partyId, out var party))
         {
             throw PartyNotFound(RegisterPlayerOperation, partyId);
         }

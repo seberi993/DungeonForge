@@ -4,7 +4,6 @@ using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Social.Core;
 using DungeonForge.Api.Features.Social.Supervision;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Social.Abilities;
 
@@ -71,13 +70,13 @@ public static class AbilityEffects
 }
 
 // The explore handler's only contact with the social game. All three calls are no-ops when nothing social is configured.
-public sealed class SocialTurnPipeline(IMemoryCache cache, SocialModules modules, SocialPipeline pipeline, SocialDelivery delivery)
+public sealed class SocialTurnPipeline(IPartyStore parties, SocialModules modules, SocialPipeline pipeline, SocialDelivery delivery)
 {
     // A lock-in replaces the member's previous choice: no ability listed for an action clears it.
     public void RecordIntents(Guid partyId, IReadOnlyList<PlayerAction>? actions, IReadOnlyList<AbilityIntent>? intents)
     {
         if (!modules.IsEnabled(SocialModule.Abilities)
-            || !cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+            || !parties.TryGet(partyId, out var party))
         {
             return;
         }
@@ -146,7 +145,7 @@ public sealed class SocialTurnPipeline(IMemoryCache cache, SocialModules modules
     }
 
     public Task DeliverAsync(Guid partyId) =>
-        cache.TryGetValue(PartyCache.Key(partyId), out Party? party) && party is not null
+        parties.TryGet(partyId, out var party)
             ? delivery.DeliverAsync(party)
             : Task.CompletedTask;
 }

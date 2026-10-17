@@ -364,7 +364,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
         var cancelling = new CancellingNarrator();
         var handler = new ExploreDungeonHandler(
-            derived.Services.GetRequiredService<IMemoryCache>(),
+            derived.Services.GetRequiredService<IPartyStore>(),
             new FixedRoller(0),
             cancelling,
             new NoopNotifier(),
@@ -386,7 +386,7 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var id = await PartyTestData.CreatePartyAsync(derived.CreateClient());
         var cache = new FaultableCache(derived.Services.GetRequiredService<IMemoryCache>());
         var notifier = new CapturingNotifier();
-        var handler = new ExploreDungeonHandler(cache, new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier,
+        var handler = new ExploreDungeonHandler(new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier,
             NullLogger<ExploreDungeonHandler>.Instance);
 
         (await handler.HandleAsync(id, null)).IsSuccess.Should().BeTrue();

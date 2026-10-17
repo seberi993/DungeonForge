@@ -60,7 +60,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
         var client = derived.CreateClient();
         var id = await PartyTestData.CreatePartyAsync(client);
         var handler = new ExploreDungeonHandler(
-            derived.Services.GetRequiredService<IMemoryCache>(),
+            derived.Services.GetRequiredService<IPartyStore>(),
             new FixedRoller(0),
             new FixedNarrator(),
             notifier,

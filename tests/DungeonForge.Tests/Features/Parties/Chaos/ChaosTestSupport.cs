@@ -126,7 +126,9 @@ internal static class ChaosTestSupport
     ];
 
     public static Party CachedParty(WebApplicationFactory<Program> f, Guid id) =>
-        f.Services.GetRequiredService<IMemoryCache>().Get<Party>(PartyCache.Key(id))!;
+        f.Services.GetRequiredService<IPartyStore>().TryGet(id, out var party)
+            ? party
+            : throw new InvalidOperationException($"Party {id} is not stored.");
 
     public static HubConnection Connect(WebApplicationFactory<Program> f) =>
         new HubConnectionBuilder()

@@ -3,6 +3,7 @@ using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
 using DungeonForge.Tests.Errors;
@@ -170,7 +171,7 @@ public sealed class ExploreDungeonLoggingTests(WebApplicationFactory<Program> fa
         var notifier = new CapturingNotifier();
         using var loggers = LoggerFactory.Create(b => b.AddProvider(logs));
         var handler = new ExploreDungeonHandler(
-            cache, new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier, loggers.CreateLogger<ExploreDungeonHandler>());
+            new PartyStore(cache), new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier, loggers.CreateLogger<ExploreDungeonHandler>());
 
         (await handler.HandleAsync(id, null)).IsSuccess.Should().BeTrue();
         (await handler.HandleAsync(id, new ExploreRequest(WholeParty()))).IsSuccess.Should().BeTrue();

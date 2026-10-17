@@ -8,7 +8,6 @@ using DungeonForge.Api.Features.Parties.SubmitNarration;
 using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Features.Social.Abilities;
 using DungeonForge.Api.Infrastructure.Narration;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
@@ -21,7 +20,7 @@ namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 // AwaitingRoom. A prompt then returns ScenarioPending (no LLM call, no blocking; the text arrives via NarrationReady and
 // the next prompt) and a resolve is rejected, so a turn can neither race a second narrator call nor be resolved twice.
 public sealed class ExploreDungeonHandler(
-    IMemoryCache cache,
+    IPartyStore parties,
     IRoller roller,
     IDungeonNarrator narrator,
     IPartyNotifier notifier,
@@ -87,13 +86,13 @@ public sealed class ExploreDungeonHandler(
             throw;
         }
 
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return PartyErrors.NotFound(operation, id);
         }
 
         var pending = party.CompleteScenario(new PendingEncounter(context!.Room, scenario));
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        parties.Save(party);
         await BroadcastFirstScenarioAsync(party, pending);
         return new ExploreOutcome(PromptResponse(party, pending));
     }
@@ -109,7 +108,7 @@ public sealed class ExploreDungeonHandler(
 
     private (Result<ExploreOutcome>? Early, NarrationContext? Context) BeginPrompt(Guid id, string operation)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return (PartyErrors.NotFound(operation, id), null);
         }
@@ -143,7 +142,7 @@ public sealed class ExploreDungeonHandler(
 
     private void ReleaseScenarioSlot(Guid id)
     {
-        if (cache.TryGetValue(PartyCache.Key(id), out Party? party) && party is not null)
+        if (parties.TryGet(id, out var party))
         {
             party.AbortScenario();
         }
@@ -207,7 +206,7 @@ public sealed class ExploreDungeonHandler(
     }
 
     private bool IsBlind(Guid id) =>
-        cache.TryGetValue(PartyCache.Key(id), out Party? party) && party is { Modifiers.Chaos: true };
+        parties.TryGet(id, out var party) && party is { Modifiers.Chaos: true };
 
     private static IReadOnlyList<RosterEntry> Roster(Party party) =>
         [.. party.Members.Select(m => new RosterEntry(m.Name, m.Class))];
@@ -225,7 +224,7 @@ public sealed class ExploreDungeonHandler(
     // After the Master Turn resolved: the new unclaimed vault is public, and a traitor win ends the run with a reveal.
     private async Task AnnounceChaosAftermathAsync(Guid id)
     {
-        if (chaos is null || !cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (chaos is null || !parties.TryGet(id, out var party))
         {
             return;
         }
@@ -241,7 +240,7 @@ public sealed class ExploreDungeonHandler(
     // Secrets for the room the party is about to enter and the narrator's whispers; both are private to their targets.
     private async Task DeliverPrivateAsync(Guid partyId, RoomType? nextRoom, int turn, IReadOnlyList<Whisper> whispers)
     {
-        if (chaos is null || !cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (chaos is null || !parties.TryGet(partyId, out var party))
         {
             return;
         }
@@ -335,7 +334,7 @@ public sealed class ExploreDungeonHandler(
     {
         try
         {
-            if (nextRoom is null || !cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+            if (nextRoom is null || !parties.TryGet(partyId, out var party))
             {
                 return;
             }
@@ -375,7 +374,7 @@ public sealed class ExploreDungeonHandler(
     // A party that left the cache has nothing to complete, so that counts as stored (the push still goes out).
     private bool TryStoreScenario(Guid partyId, int turn, PendingEncounter next)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (!parties.TryGet(partyId, out var party))
         {
             return true;
         }
@@ -385,7 +384,7 @@ public sealed class ExploreDungeonHandler(
             return false;
         }
 
-        cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
+        parties.Save(party);
         return true;
     }
 
@@ -393,7 +392,7 @@ public sealed class ExploreDungeonHandler(
 
     private Result<ExploreOutcome> StartClientScenario(Guid id, NarrationContext context, string operation)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return PartyErrors.NotFound(operation, id);
         }
@@ -452,7 +451,7 @@ public sealed class ExploreDungeonHandler(
 
     private async Task<bool> CompleteClientScenarioAsync(Guid partyId, int turn, RoomType room, string scenario)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (!parties.TryGet(partyId, out var party))
         {
             return false;
         }
@@ -463,7 +462,7 @@ public sealed class ExploreDungeonHandler(
             return false;
         }
 
-        cache.Set(PartyCache.Key(partyId), party, PartyCache.EntryOptions());
+        parties.Save(party);
         await BroadcastFirstScenarioAsync(party, pending);
         return true;
     }
@@ -472,7 +471,7 @@ public sealed class ExploreDungeonHandler(
     // narrator at once; unparseable turn JSON does the same instead of canning the whole turn.
     public async Task<Result> SubmitClientNarrationAsync(Guid partyId, int turn, string? text, bool declined)
     {
-        if (!cache.TryGetValue(PartyCache.Key(partyId), out Party? party) || party is null)
+        if (!parties.TryGet(partyId, out var party))
         {
             return PartyErrors.NotFound(SubmitNarrationOperation, partyId);
         }
@@ -530,8 +529,7 @@ public sealed class ExploreDungeonHandler(
     private (Result<ExploreOutcome> Result, NarrationContext? Context, bool Success, GetPartyStateResponse? Snapshot) Mutate(
         Guid id, IReadOnlyList<PlayerAction> actions, string operation)
     {
-        var key = PartyCache.Key(id);
-        if (!cache.TryGetValue(key, out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return (PartyErrors.NotFound(operation, id), null, false, null);
         }
@@ -566,7 +564,7 @@ public sealed class ExploreDungeonHandler(
 
             if (!party.AllLockedIn)
             {
-                cache.Set(key, party, PartyCache.EntryOptions());
+                parties.Save(party);
                 var waiting = new WaitingForPartyResponse(
                     party.Id, party.LockedCount, party.RequiredLocks, PartyMapping.ToLockDtos(party.LockStatus));
                 return (new ExploreOutcome(PromptResponse(party, pending), waiting),
@@ -641,10 +639,10 @@ public sealed class ExploreDungeonHandler(
             }
 
             // Mutated in place under the lock; re-Set refreshes the sliding expiry.
-            cache.Set(key, party, PartyCache.EntryOptions());
+            parties.Save(party);
 
-            // Touch the invite entry so its sliding expiry keeps pace with an active party.
-            if (party.InviteCode.Length > 0) cache.TryGetValue(PartyCache.InviteKey(party.InviteCode), out _);
+            // Keep the invite entry's sliding expiry in step with an active party.
+            parties.Touch(party);
 
             var response = new ExploreResponse(
                 party.Id, party.Turn, pending.Room, hit?.TargetName, hit?.Damage ?? 0, gold,

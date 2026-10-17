@@ -2,19 +2,18 @@ using System.Text.Json;
 using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace DungeonForge.Api.Features.Parties.ExtractRun;
 
 // A player walks out of the dungeon. Standard runs have no extraction; with a Traitor Pact this is what can complete the
 // traitor solo-extraction win condition, which is tracked apart from ordinary victory.
-public sealed class ExtractRunHandler(IMemoryCache cache, ChaosDispatcher chaos)
+public sealed class ExtractRunHandler(IPartyStore parties, ChaosDispatcher chaos)
 {
     public const string Operation = "Command:ExtractRun";
 
     public async Task<Result<ExtractResponse>> HandleAsync(Guid id, string playerName)
     {
-        if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
+        if (!parties.TryGet(id, out var party))
         {
             return PartyErrors.NotFound(Operation, id);
         }
@@ -30,7 +29,7 @@ public sealed class ExtractRunHandler(IMemoryCache cache, ChaosDispatcher chaos)
             return PartyErrors.PlayerUnknown(Operation, id, name);
         }
 
-        cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
+        parties.Save(party);
         var outcome = party.EvaluateTraitor();
         await chaos.AnnounceTraitorOutcomeAsync(party, outcome);
         return new ExtractResponse(id, JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()));
