@@ -41,27 +41,27 @@ public sealed class ExploreDungeonHandler(
 
     private bool ClientNarrationOn => options?.Value.ClientNarration == true;
 
-    public Task<ExploreResult> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
+    public Task<Result<ExploreOutcome>> HandleAsync(Guid id, ExploreRequest? request, CancellationToken ct = default) =>
         request?.Actions is not { Count: > 0 } actions
-            ? PromptCoreAsync(id, ct)
+            ? PromptCoreAsync(id, ExploreOperations.GetScenario, ct)
             : request.SubmitOnly
                 ? LockInAsync(id, actions, ct)
-                : ResolveAsync(id, actions, waitingIsConflict: true);
+                : ResolveAsync(id, actions, waitingIsConflict: true, ExploreOperations.ResolveTurn);
 
     // ---- Step 1: present (or re-present) the scenario. Never advances the turn. ----
 
     // Lock-in without the 409: answers the prompt (with lock status) until the last member locks in, which resolves the turn.
-    private async Task<ExploreResult> LockInAsync(Guid id, IReadOnlyList<PlayerAction> actions, CancellationToken ct)
+    private async Task<Result<ExploreOutcome>> LockInAsync(Guid id, IReadOnlyList<PlayerAction> actions, CancellationToken ct)
     {
-        var prompt = await PromptCoreAsync(id, ct);
-        return prompt is { Status: ExploreStatus.Explored, Response.ScenarioPending: false }
-            ? await ResolveAsync(id, actions, waitingIsConflict: false)
+        var prompt = await PromptCoreAsync(id, ExploreOperations.LockIn, ct);
+        return prompt.IsSuccess && !prompt.Value.Response.ScenarioPending
+            ? await ResolveAsync(id, actions, waitingIsConflict: false, ExploreOperations.LockIn)
             : prompt;
     }
 
-    private async Task<ExploreResult> PromptCoreAsync(Guid id, CancellationToken ct)
+    private async Task<Result<ExploreOutcome>> PromptCoreAsync(Guid id, string operation, CancellationToken ct)
     {
-        var (early, context) = BeginPrompt(id);
+        var (early, context) = BeginPrompt(id, operation);
         if (early is { } done)
         {
             return done;
@@ -69,7 +69,7 @@ public sealed class ExploreDungeonHandler(
 
         if (ClientNarrationOn)
         {
-            return StartClientScenario(id, context!);
+            return StartClientScenario(id, context!, operation);
         }
 
         // Only a party's first turn gets here, and only the one request that claimed the scenario slot.
@@ -86,13 +86,13 @@ public sealed class ExploreDungeonHandler(
 
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return new ExploreResult(ExploreStatus.NotFound);
+            return PartyErrors.NotFound(operation, id);
         }
 
         var pending = party.CompleteScenario(new PendingEncounter(context!.Room, scenario));
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
         await BroadcastFirstScenarioAsync(party, pending);
-        return new ExploreResult(ExploreStatus.Explored, PromptResponse(party, pending));
+        return new ExploreOutcome(PromptResponse(party, pending));
     }
 
     // Other clients that received scenarioPending learn the scenario via NarrationReady (empty outcome = scenario only).
@@ -110,28 +110,28 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
-    private (ExploreResult? Early, NarrationContext? Context) BeginPrompt(Guid id)
+    private (Result<ExploreOutcome>? Early, NarrationContext? Context) BeginPrompt(Guid id, string operation)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return (new ExploreResult(ExploreStatus.NotFound), null);
+            return (PartyErrors.NotFound(operation, id), null);
         }
 
         lock (party.SyncRoot)
         {
             if (party.IsPartyDefeated)
             {
-                return (new ExploreResult(ExploreStatus.Defeated), null);
+                return (ExploreErrors.PartyDefeated(operation, id, party.Turn), null);
             }
 
             if (party.Pending is { } existing)
             {
-                return (new ExploreResult(ExploreStatus.Explored, PromptResponse(party, existing)), null);
+                return (new ExploreOutcome(PromptResponse(party, existing)), null);
             }
 
             if (party.AwaitingRoom is { } awaiting)
             {
-                return (new ExploreResult(ExploreStatus.Explored, AwaitingResponse(party, awaiting)), null);
+                return (new ExploreOutcome(AwaitingResponse(party, awaiting)), null);
             }
 
             var room = (RoomType)roller.Next(RoomKinds);
@@ -164,15 +164,16 @@ public sealed class ExploreDungeonHandler(
     // Phase two (narration + next scenario) runs in the background and is pushed to the party as NarrationReady.
 
     // Locks the supplied actions in; the turn resolves only once every member is locked, otherwise the party keeps waiting.
-    private async Task<ExploreResult> ResolveAsync(Guid id, IReadOnlyList<PlayerAction> actions, bool waitingIsConflict)
+    private async Task<Result<ExploreOutcome>> ResolveAsync(
+        Guid id, IReadOnlyList<PlayerAction> actions, bool waitingIsConflict, string operation)
     {
         if (!actions.Any(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
         {
-            return Invalid("At least one non-empty action is required.");
+            return ExploreErrors.NoActions(operation, id);
         }
 
-        var (result, context, success, snapshot) = Mutate(id, actions);
-        if (result.Status == ExploreStatus.Waiting && result.Response is { } waiting && snapshot is not null)
+        var (result, context, success, snapshot) = Mutate(id, actions, operation);
+        if (result.IsSuccess && result.Value.Waiting is not null && snapshot is not null)
         {
             // Locked answers are private in every mode: peers learn who is ready, never what they wrote.
             if (IsBlind(id))
@@ -182,15 +183,15 @@ public sealed class ExploreDungeonHandler(
 
             await BroadcastLockStatusAsync(id, snapshot.LockStatus ?? []);
 
-            return waitingIsConflict ? result : result with { Status = ExploreStatus.Explored, Waiting = null };
+            return waitingIsConflict ? result : new ExploreOutcome(result.Value.Response);
         }
 
-        if (result.Response is not { } response || context is null || snapshot is null)
+        if (result.IsFailure || context is null || snapshot is null)
         {
             return result;
         }
 
-        response = response with { NarrationPending = true };
+        var response = result.Value.Response with { NarrationPending = true };
         await BroadcastAsync(response, snapshot);
         await AnnounceChaosAftermathAsync(response.PartyId);
         if (snapshot.IsPartyDefeated) await RecordScoreAsync(snapshot);
@@ -200,11 +201,11 @@ public sealed class ExploreDungeonHandler(
         if (ClientNarrationOn && context.NextRoom is not null)
         {
             var brief = RegisterClientTurn(response.PartyId, response.Turn, success, context);
-            return result with { Response = response with { Brief = brief } };
+            return new ExploreOutcome(response with { Brief = brief });
         }
 
         _ = Task.Run(() => NarrateAndNotifyAsync(response.PartyId, response.Turn, success, context));
-        return result with { Response = response };
+        return new ExploreOutcome(response);
     }
 
     private bool IsBlind(Guid id) =>
@@ -386,11 +387,11 @@ public sealed class ExploreDungeonHandler(
 
     // ---- Client narration: the prompts go to the browser, its text comes back through SubmitClientNarrationAsync. ----
 
-    private ExploreResult StartClientScenario(Guid id, NarrationContext context)
+    private Result<ExploreOutcome> StartClientScenario(Guid id, NarrationContext context, string operation)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return new ExploreResult(ExploreStatus.NotFound);
+            return PartyErrors.NotFound(operation, id);
         }
 
         var turn = party.Turn;
@@ -399,7 +400,7 @@ public sealed class ExploreDungeonHandler(
         var brief = new NarrationBrief(
             turn, "scenario", NarrationPrompts.ScenarioCompact(context.Room), MasterPromptBuilder.BuildScenario(context),
             null, NarrationPrompts.ScenarioCompactMaxTokens);
-        return new ExploreResult(ExploreStatus.Explored, AwaitingResponse(party, context.Room) with { Brief = brief });
+        return new ExploreOutcome(AwaitingResponse(party, context.Room) with { Brief = brief });
     }
 
     private NarrationBrief RegisterClientTurn(Guid partyId, int turn, bool success, NarrationContext context)
@@ -530,13 +531,13 @@ public sealed class ExploreDungeonHandler(
         }
     }
 
-    private (ExploreResult Result, NarrationContext? Context, bool Success, GetPartyStateResponse? Snapshot) Mutate(
-        Guid id, IReadOnlyList<PlayerAction> actions)
+    private (Result<ExploreOutcome> Result, NarrationContext? Context, bool Success, GetPartyStateResponse? Snapshot) Mutate(
+        Guid id, IReadOnlyList<PlayerAction> actions, string operation)
     {
         var key = PartyCache.Key(id);
         if (!cache.TryGetValue(key, out Party? party) || party is null)
         {
-            return (new ExploreResult(ExploreStatus.NotFound), null, false, null);
+            return (PartyErrors.NotFound(operation, id), null, false, null);
         }
 
         // Per-party lock: serializes mutation against Party.Snapshot() readers and concurrent resolves.
@@ -544,27 +545,27 @@ public sealed class ExploreDungeonHandler(
         {
             if (party.IsPartyDefeated)
             {
-                return (new ExploreResult(ExploreStatus.Defeated), null, false, null);
+                return (ExploreErrors.PartyDefeated(operation, id, party.Turn), null, false, null);
             }
 
             party.TryResolveConfrontation(roller);
             if (party.Confrontation is not null)
             {
-                return (Invalid("A confrontation is in progress; settle the vote before the party moves on."), null, false, null);
+                return (ExploreErrors.ConfrontationInProgress(operation, id, party.Turn), null, false, null);
             }
 
             if (party.Pending is null)
             {
-                return (Invalid(party.AwaitingRoom is null
-                    ? "There is no active encounter to resolve."
-                    : "The next scenario is still being written; wait for it before acting."), null, false, null);
+                return (party.AwaitingRoom is null
+                    ? ExploreErrors.NoActiveEncounter(operation, id, party.Turn)
+                    : ExploreErrors.ScenarioPending(operation, id, party.Turn), null, false, null);
             }
 
             SubmitAll(party, actions);
             var pending = party.Pending!;
             if (pending.Discussion is not { Count: > 0 } discussion)
             {
-                return (Invalid("At least one non-empty action is required."), null, false, null);
+                return (ExploreErrors.NoActions(operation, id), null, false, null);
             }
 
             if (!party.AllLockedIn)
@@ -572,7 +573,7 @@ public sealed class ExploreDungeonHandler(
                 cache.Set(key, party, PartyCache.EntryOptions());
                 var waiting = new WaitingForPartyResponse(
                     party.Id, party.LockedCount, party.RequiredLocks, PartyMapping.ToLockDtos(party.LockStatus));
-                return (new ExploreResult(ExploreStatus.Waiting, PromptResponse(party, pending), Waiting: waiting),
+                return (new ExploreOutcome(PromptResponse(party, pending), waiting),
                     null, false, PartyMapping.ToResponse(party.Snapshot()));
             }
 
@@ -661,7 +662,7 @@ public sealed class ExploreDungeonHandler(
                 Treachery = covert.Log,
             };
 
-            return (new ExploreResult(ExploreStatus.Explored, response), context, success, PartyMapping.ToResponse(party.Snapshot()));
+            return (new ExploreOutcome(response), context, success, PartyMapping.ToResponse(party.Snapshot()));
         }
     }
 
@@ -671,8 +672,6 @@ public sealed class ExploreDungeonHandler(
             var characterClass = party.Members.FirstOrDefault(m => m.Name == action.Name)?.Class ?? CharacterClass.Warrior;
             return new ActionBeat(action.Name, characterClass, ActionVerbs.Pick(characterClass, action.Text), action.Text);
         })];
-
-    private static ExploreResult Invalid(string error) => new(ExploreStatus.InvalidRequest, Error: error);
 
     // Game math lives here, never in the narrator.
     // Each member whose own action failed takes this hit; it grows as the dungeon deepens.

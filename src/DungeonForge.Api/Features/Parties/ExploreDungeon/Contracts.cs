@@ -132,22 +132,9 @@ public sealed record NarrationReady(
     string? NextScene = null,
     string? Source = null);
 
-
-public enum ExploreStatus
-{
-    Explored,
-    NotFound,
-    Defeated,
-    InvalidRequest,
-    Waiting,
-}
-
-// Waiting: not every member has locked in yet (HTTP 409). Waiting carries the 409 body.
-public readonly record struct ExploreResult(
-    ExploreStatus Status,
-    ExploreResponse? Response = null,
-    string? Error = null,
-    WaitingForPartyResponse? Waiting = null);
+// What a successful explore call answers. Waiting is set while not every member has locked in: that is a success variant
+// and the endpoint sends it as the 409 body (WaitingForPartyResponse), with Response holding the prompt state.
+public readonly record struct ExploreOutcome(ExploreResponse Response, WaitingForPartyResponse? Waiting = null);
 
 // 409 body of a direct resolve while members are still missing.
 public sealed record WaitingForPartyResponse(

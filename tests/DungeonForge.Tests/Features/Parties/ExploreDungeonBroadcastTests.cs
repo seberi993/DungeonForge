@@ -1,8 +1,10 @@
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
 using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Caching.Memory;
@@ -75,8 +77,8 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
 
         var result = await handler.HandleAsync(id, null);
 
-        result.Status.Should().Be(ExploreStatus.Explored);
-        result.Response!.Scenario.Should().Be("scenario");
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Response.Scenario.Should().Be("scenario");
         notifier.TurnResolvedCalls.Should().Be(0);
     }
 
@@ -90,7 +92,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
 
         var result = await handler.HandleAsync(id, new ExploreRequest(ExploreTestSupport.WholeParty()));
 
-        result.Status.Should().Be(ExploreStatus.Explored);
+        result.IsSuccess.Should().BeTrue();
         notifier.TurnResolvedCalls.Should().Be(1);
         notifier.PartyUpdatedCalls.Should().Be(1);
     }
@@ -113,6 +115,7 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
     }
 
     [Fact]
+    [CoversError(ErrorCodes.Turn.NoActions)]
     public async Task Resolve_OnlyControlCharacterAction_BroadcastsNothing()
     {
         var notifier = new RecordingNotifier();
@@ -122,7 +125,8 @@ public sealed class ExploreDungeonBroadcastTests(WebApplicationFactory<Program> 
 
         var result = await handler.HandleAsync(id, new ExploreRequest([ExploreTestSupport.Act("\u0007")]));
 
-        result.Status.Should().Be(ExploreStatus.InvalidRequest);
+        result.Error!.Code.Should().Be(ErrorCodes.Turn.NoActions);
+        result.Error.Operation.Should().Be(ExploreOperations.ResolveTurn);
         notifier.TurnResolvedCalls.Should().Be(0);
         notifier.PartyUpdatedCalls.Should().Be(0);
     }

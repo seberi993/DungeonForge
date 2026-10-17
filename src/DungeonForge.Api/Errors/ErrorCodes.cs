@@ -35,6 +35,15 @@ public static class ErrorCodes
         public const string NotEligible = "vote.not_eligible";
     }
 
+    public static class Turn
+    {
+        public const string PartyDefeated = "turn.party_defeated";
+        public const string ConfrontationInProgress = "turn.confrontation_in_progress";
+        public const string NoActiveEncounter = "turn.no_active_encounter";
+        public const string ScenarioPending = "turn.scenario_pending";
+        public const string NoActions = "turn.no_actions";
+    }
+
     public static class Narration
     {
         public const string NotAwaited = "narration.not_awaited";

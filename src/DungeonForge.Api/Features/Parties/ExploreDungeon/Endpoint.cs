@@ -1,5 +1,5 @@
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
@@ -7,20 +7,19 @@ namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 public sealed class ExploreDungeonEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapPost("/parties/{id:guid}/explore", async Task<Results<Ok<ExploreResponse>, NotFound, Conflict, Conflict<WaitingForPartyResponse>, ValidationProblem>> (
-                Guid id, ExploreDungeonHandler handler, CancellationToken ct, [FromBody] ExploreRequest? request = null) =>
-                await handler.HandleAsync(id, request, ct) switch
-                {
-                    { Status: ExploreStatus.Explored, Response: { } response } => TypedResults.Ok(response),
-                    { Status: ExploreStatus.Defeated } => TypedResults.Conflict(),
-                    { Status: ExploreStatus.Waiting, Waiting: { } waiting } => TypedResults.Conflict(waiting),
-                    { Status: ExploreStatus.InvalidRequest } r => TypedResults.ValidationProblem(
-                        new Dictionary<string, string[]> { ["actions"] = [r.Error ?? "Invalid request."] }),
-                    _ => TypedResults.NotFound(),
-                })
+        app.MapPost("/parties/{id:guid}/explore", async Task<IResult> (
+                Guid id, ExploreDungeonHandler handler, HttpContext http, CancellationToken ct, [FromBody] ExploreRequest? request = null) =>
+                (await handler.HandleAsync(id, request, ct)).Match<IResult>(
+                    // Waiting is a success variant: the 409 body the Web client reads as "waiting".
+                    outcome => outcome.Waiting is { } waiting ? TypedResults.Conflict(waiting) : TypedResults.Ok(outcome.Response),
+                    error => ErrorMapping.ToProblem(error, http)))
            .AddEndpointFilter(async (ctx, next) =>
-               ExploreRequestLimits.Validate(ctx.Arguments.OfType<ExploreRequest>().FirstOrDefault()?.Actions) is { } error
-                   ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["actions"] = [error] })
-                   : await next(ctx))
+           {
+               var request = ctx.Arguments.OfType<ExploreRequest>().FirstOrDefault();
+               return ExploreRequestLimits.Validate(request?.Actions) is { } error
+                   ? ValidationErrors.ToProblem(
+                       ExploreOperations.For(request), new Dictionary<string, string[]> { ["actions"] = [error] }, ctx.HttpContext)
+                   : await next(ctx);
+           })
            .WithName("ExploreDungeon");
 }

@@ -375,8 +375,8 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
 
         cancelling.Cancel = false;
         var retry = await handler.HandleAsync(id, null);
-        retry.Status.Should().Be(ExploreStatus.Explored);
-        retry.Response!.Scenario.Should().Be("Calm now. What do you do?");
+        retry.IsSuccess.Should().BeTrue();
+        retry.Value.Response.Scenario.Should().Be("Calm now. What do you do?");
     }
 
     [Fact]
@@ -389,17 +389,17 @@ public sealed class ExploreDungeonNarrationTests(WebApplicationFactory<Program> 
         var handler = new ExploreDungeonHandler(cache, new FixedRoller(0, Succeed), new FaultArmingNarrator(cache), notifier,
             NullLogger<ExploreDungeonHandler>.Instance);
 
-        (await handler.HandleAsync(id, null)).Status.Should().Be(ExploreStatus.Explored);
+        (await handler.HandleAsync(id, null)).IsSuccess.Should().BeTrue();
         var resolved = await handler.HandleAsync(id, new ExploreRequest(WholeParty()));
-        resolved.Status.Should().Be(ExploreStatus.Explored);
+        resolved.IsSuccess.Should().BeTrue();
 
         var ready = await notifier.NarrationAsync;
         ready.NextScenario.Should().NotBeNullOrWhiteSpace();
 
         cache.FailSets = false;
         var next = await handler.HandleAsync(id, null);
-        next.Response!.ScenarioPending.Should().BeFalse();
-        next.Response.Scenario.Should().NotBeNullOrWhiteSpace();
+        next.Value.Response.ScenarioPending.Should().BeFalse();
+        next.Value.Response.Scenario.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
