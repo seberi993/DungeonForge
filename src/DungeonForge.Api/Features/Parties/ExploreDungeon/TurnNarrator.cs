@@ -63,19 +63,19 @@ public sealed class TurnNarrator(
     public async Task NarrateAndNotifyAsync(Guid partyId, int turn, bool success, NarrationContext context)
     {
         TurnNarration narration;
-        var source = "server";
+        var source = NarrationSources.Server;
         try
         {
             // The narrator has its own timeout and every failure falls back to deterministic flavor.
             narration = await NarrateTurnSafeAsync(partyId, success, context);
-            if (narration.FromFallback) source = "fallback";
+            if (narration.FromFallback) source = NarrationSources.Fallback;
         }
         catch (Exception ex)
         {
             using var scope = LogScope.Begin(logger, ExploreOperations.NarrateTurn, partyId, turn);
             logger.NarrationPhaseFailed(ex);
             narration = FallbackFlavor.Complete(null, success, context);
-            source = "fallback";
+            source = NarrationSources.Fallback;
         }
 
         await FinishTurnAsync(partyId, turn, success, context, narration, source);
@@ -103,7 +103,7 @@ public sealed class TurnNarrator(
             }
 
             narration = FallbackFlavor.Complete(null, success, context);
-            source = "fallback";
+            source = NarrationSources.Fallback;
             RecoverStuckScenario(partyId, turn, context.NextRoom, narration);
         }
 

@@ -7,6 +7,7 @@ using DungeonForge.Api.Features.Parties.Realtime;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using DungeonForge.Api.Infrastructure.Narration;
+using Microsoft.Extensions.Options;
 
 namespace DungeonForge.Tests.Features.Parties;
 
@@ -32,7 +33,9 @@ internal static class ExploreTestSupport
     {
         loggers ??= NullLoggerFactory.Instance;
         var turns = new TurnNarrator(parties, narrator, notifier, loggers.CreateLogger<TurnNarrator>());
-        return new ExploreDungeonHandler(parties, roller, turns, notifier, loggers.CreateLogger<ExploreDungeonHandler>());
+        var clientNarration = new ClientNarrationCoordinator(
+            parties, turns, Options.Create(new NarrationOptions()), loggers.CreateLogger<ClientNarrationCoordinator>());
+        return new ExploreDungeonHandler(parties, roller, turns, clientNarration, notifier, loggers.CreateLogger<ExploreDungeonHandler>());
     }
 
     /// <summary>Success roll value that always fails without fumbling (above the 85% cap, below the fumble line).</summary>
