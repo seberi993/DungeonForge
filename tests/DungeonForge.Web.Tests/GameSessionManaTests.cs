@@ -27,7 +27,7 @@ public class GameSessionManaTests
     {
         var sut = Started(cls);
 
-        sut.MaxMana.Should().Be(GameSession.MaxManaFor(cls)).And.BeGreaterThan(0);
+        sut.MaxMana.Should().Be(ManaRules.MaxFor(cls)).And.BeGreaterThan(0);
         sut.Mana.Should().Be(sut.MaxMana);
     }
 
@@ -97,7 +97,7 @@ public class GameSessionManaTests
 
         sut.Apply(Resolved(1));
 
-        sut.Mana.Should().Be(sut.MaxMana - 30 + GameSession.ManaRegenPerTurn);
+        sut.Mana.Should().Be(sut.MaxMana - 30 + ManaRules.RegenPerTurn);
     }
 
     [Fact]

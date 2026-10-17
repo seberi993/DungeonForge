@@ -565,7 +565,7 @@ public class DungeonRoomTests : TestContext
             SpellsBody = """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]"""
         };
         var cut = RenderWithScenario(handler);
-        var max = GameSession.MaxManaFor(CharacterClass.Warrior);
+        var max = ManaRules.MaxFor(CharacterClass.Warrior);
         cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be(max.ToString());
         cut.WaitForState(() => _session.HasSpells);
         cut.Find("#action-text").Input("I cast Smite on the troll");

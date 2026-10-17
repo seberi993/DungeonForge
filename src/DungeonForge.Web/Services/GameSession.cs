@@ -2,7 +2,7 @@ using DungeonForge.Web.Models;
 
 namespace DungeonForge.Web.Services;
 
-public sealed class GameSession
+public sealed partial class GameSession
 {
     private readonly List<LogEntry> _log = [];
     private List<MemberDto> _members = [];
@@ -56,189 +56,12 @@ public sealed class GameSession
     public StageShow? Show { get; private set; }
     public CharacterClass PlayerClass => Me?.Class ?? CharacterClass.Warrior;
 
-    // ---- Mana: a client-side estimate for this player's hero only (the server has no mana pool). ----
-
-    public const int ManaRegenPerTurn = 10;
-
-    public static int MaxManaFor(CharacterClass cls) => cls switch
-    {
-        CharacterClass.Warrior => 20,
-        CharacterClass.Paladin => 40,
-        CharacterClass.Bard => 50,
-        CharacterClass.Druid => 60,
-        CharacterClass.Priest => 60,
-        CharacterClass.Necromancer => 70,
-        CharacterClass.Mage => 80,
-        _ => 40
-    };
-
-    private int? _mana;
-    private int _reservedMana;
-    private IReadOnlyList<SpellDto> _spells = [];
-
-    public int MaxMana => MaxManaFor(PlayerClass);
-    public int Mana => Math.Clamp(_mana ?? MaxMana, 0, MaxMana);
-
-    public bool HasSpells => _spells.Count > 0;
-
-    public void SetSpells(IReadOnlyList<SpellDto> spells) => _spells = [.. spells];
-
-    // Spends the cost of the (longest-named) spell mentioned in the action; a later lock-in replaces an earlier one.
-    public int ReserveMana(string actionText)
-    {
-        ReleaseMana();
-        var spell = _spells
-            .Where(s => actionText.Contains(s.Name, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(s => s.Name.Length)
-            .FirstOrDefault();
-        if (spell is null) return 0;
-
-        var before = Mana;
-        _mana = Math.Max(0, before - spell.ManaCost);
-        _reservedMana = before - _mana.Value;
-        Changed?.Invoke();
-        return spell.ManaCost;
-    }
-
-    public void ReleaseMana()
-    {
-        if (_reservedMana == 0) return;
-        _mana = Math.Min(MaxMana, Mana + _reservedMana);
-        _reservedMana = 0;
-        Changed?.Invoke();
-    }
-
-    // ---- Chaos mode: private whispers/secrets addressed to this player only, newest last. ----
-
-    public const int MaxPrivateMessages = 5;
-    private readonly List<PrivateMessageDto> _private = [];
-    public IReadOnlyList<PrivateMessageDto> PrivateMessages => _private;
-
-    public void AddPrivateMessage(PrivateMessageDto message)
-    {
-        if (string.IsNullOrWhiteSpace(message.Text)) return;
-        _private.Add(message);
-        if (_private.Count > MaxPrivateMessages) _private.RemoveAt(0);
-        Changed?.Invoke();
-    }
-
-    public bool ApplyLockStatus(Guid partyId, IReadOnlyList<LockStatusDto> status)
-    {
-        if (partyId != PartyId) return false;
-        LockStatus = [.. status];
-        Changed?.Invoke();
-        return true;
-    }
-    public bool NarrationPending { get; private set; }
-    public bool HasScenario => Scenario is not null;
-    private int _narrationTurn;
-    private (int Turn, string Outcome, string? NextScenario, RoomType? NextRoomType, string? NextScene)? _earlyNarration;
-    private const string NarrationPlaceholder = "The dungeon falls quiet; the tale of this moment is lost to the mist.";
-
-    public bool ApplyDiscussion(Guid partyId, IReadOnlyList<PlayerAction> actions)
-    {
-        if (partyId != PartyId) return false;
-        Discussion = [.. actions];
-        Changed?.Invoke();
-        return true;
-    }
-
-    // Own text (if any) replaces this player's shared action; teammates' non-blank shared actions are kept.
-    public IReadOnlyList<PlayerAction> BuildActions(string? ownText)
-    {
-        var own = ownText?.Trim();
-        var actions = Discussion
-            .Where(a => !string.IsNullOrWhiteSpace(a.Text) && (a.MemberId != PlayerId || string.IsNullOrEmpty(own)))
-            .ToList();
-        if (!string.IsNullOrEmpty(own)) actions.Add(new PlayerAction(PlayerId, PlayerName, own));
-        return actions;
-    }
-
-    // Matches by turn; narration landing before the resolve response is held until that turn is applied.
-    public bool ApplyNarration(Guid partyId, int turn, string outcome, string? nextScenario = null, RoomType? nextRoomType = null, string? nextScene = null, string? source = null)
-    {
-        if (partyId != PartyId) return false;
-        if (turn == Turn && !string.IsNullOrEmpty(outcome)) NarrationSource = source;
-        if (string.IsNullOrEmpty(outcome)) return ApplyScenarioOnly(turn, nextScenario, nextRoomType, nextScene);
-        var index = _log.FindIndex(e => e.Turn == turn);
-        if (index < 0)
-        {
-            if (turn <= Turn) return false;
-            _earlyNarration = (turn, outcome, nextScenario, nextRoomType, nextScene);
-            return false;
-        }
-
-        _log[index] = _log[index] with { Outcome = outcome };
-        if (turn == Turn)
-        {
-            LastOutcome = outcome;
-            Scenario = nextScenario;
-            Scene = nextScene;
-            if (nextRoomType is { } nextRoom) PendingRoom = nextRoom;
-            ScenarioPending = false;
-        }
-        if (turn == _narrationTurn) NarrationPending = false;
-        Changed?.Invoke();
-        return true;
-    }
-
-    // Empty-outcome broadcast (first-turn scenario): only fills a missing scenario for the current turn; never logs an outcome.
-    private bool ApplyScenarioOnly(int turn, string? nextScenario, RoomType? nextRoomType, string? nextScene)
-    {
-        if (turn != Turn || nextScenario is null || Scenario is not null) return false;
-        Scenario = nextScenario;
-        Scene = nextScene;
-        if (nextRoomType is { } scenarioRoom) PendingRoom = scenarioRoom;
-        ScenarioPending = false;
-        Changed?.Invoke();
-        return true;
-    }
-
-    // Gives up waiting for narration and/or the next scenario so the player can re-prompt.
-    public bool ExpireNarration(int turn)
-    {
-        var narrationWaiting = NarrationPending && _narrationTurn == turn;
-        var scenarioWaiting = ScenarioPending && Turn == turn;
-        if (!narrationWaiting && !scenarioWaiting) return false;
-        if (narrationWaiting)
-        {
-            NarrationPending = false;
-            LastOutcome = NarrationPlaceholder;
-            var index = _log.FindIndex(e => e.Turn == turn);
-            if (index >= 0) _log[index] = _log[index] with { Outcome = NarrationPlaceholder };
-        }
-        ScenarioPending = false;
-        Changed?.Invoke();
-        return true;
-    }
-
-    // Prompt/discussion step does not advance the turn, so it bypasses the strictly-newer guard (stale turns still rejected).
-    public bool ApplyPrompt(ExploreResponse result)
-    {
-        if (result.PartyId != PartyId || result.Turn < Turn) return false;
-        if (result.Scenario is null && !result.ScenarioPending) return false;
-        Scenario = result.Scenario;
-        ScenarioPending = result.Scenario is null;
-        if (result.Discussion is not null) Discussion = [.. result.Discussion];
-        PendingRoom = result.RoomType;
-        if (result.LockStatus is not null) LockStatus = [.. result.LockStatus];
-        Changed?.Invoke();
-        return true;
-    }
-
-    private void ClearScenario()
-    {
-        Scenario = null;
-        Scene = null;
-        ScenarioPending = false;
-    }
-
     public bool Apply(ExploreResponse result)
     {
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
         _reservedMana = 0;
-        _mana = Math.Min(MaxMana, Mana + ManaRegenPerTurn);
+        _mana = Math.Min(MaxMana, Mana + ManaRules.RegenPerTurn);
         Tally(result);
         var finishedScenario = Scenario;
         var finishedScene = Scene;
@@ -343,42 +166,6 @@ public sealed class GameSession
     }
 
     public bool ApplyRemote(ExploreResponse result) => Apply(result);
-
-    // ---- Run tally for the end-of-run screen; built only from turns this browser saw resolve. ----
-
-    private readonly Dictionary<string, int> _passes = [];
-    private int _roomsWon, _roomsLost, _crits, _fumbles, _worstHit;
-    private string? _worstHitName;
-
-    public RunSummary Summary
-    {
-        get
-        {
-            // First-listed wins a tie: the party order is stable and a plain max-by would pick an arbitrary dictionary entry.
-            var mvp = _members.Select(m => m.Name).Where(_passes.ContainsKey).OrderByDescending(n => _passes[n]).FirstOrDefault();
-            return new RunSummary(Turn, Gold, _roomsWon, _roomsLost, _crits, _fumbles,
-                mvp, mvp is null ? 0 : _passes[mvp], _worstHitName, _worstHit,
-                string.IsNullOrWhiteSpace(LastOutcome) || LastOutcome == NarrationPlaceholder ? null : LastOutcome);
-        }
-    }
-
-    private void Tally(ExploreResponse result)
-    {
-        if (result.Success) _roomsWon++; else _roomsLost++;
-        foreach (var roll in result.Rolls ?? [])
-        {
-            if (roll.Roll < roll.Chance) _passes[roll.Name] = _passes.GetValueOrDefault(roll.Name) + 1;
-            if (roll.Crit) _crits++;
-            if (roll.Fumble) _fumbles++;
-        }
-
-        foreach (var hit in result.Hits ?? [])
-        {
-            if (hit.Damage <= _worstHit) continue;
-            _worstHit = hit.Damage;
-            _worstHitName = hit.Name;
-        }
-    }
 
     public void MarkDefeated()
     {
