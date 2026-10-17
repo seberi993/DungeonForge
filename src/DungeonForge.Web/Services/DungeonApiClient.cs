@@ -62,20 +62,10 @@ public sealed class DungeonApiClient(HttpClient http)
         try
         {
             using var response = await send();
-            switch (response.StatusCode)
-            {
-                case HttpStatusCode.NotFound:
-                    return new(ApiStatus.NotFound, Error: "Not found.");
-                case HttpStatusCode.Conflict:
-                    return await IsWaitingBodyAsync(response, ct)
-                        ? new(ApiStatus.Waiting, Error: "Waiting for party members.")
-                        : new(ApiStatus.Conflict, Error: "Conflict.");
-                case HttpStatusCode.BadRequest:
-                    return new(ApiStatus.ValidationError, Error: await ReadValidationMessageAsync(response, ct));
-            }
-
             if (!response.IsSuccessStatusCode)
-                return new(ApiStatus.Failed, Error: $"Server returned {(int)response.StatusCode}.");
+            {
+                return await FailureAsync<T>(response, ct);
+            }
 
             var value = await response.Content.ReadFromJsonAsync<T>(Json, ct);
             return value is null
@@ -88,45 +78,79 @@ public sealed class DungeonApiClient(HttpClient http)
         }
     }
 
-    // A 409 with {"status":"waiting"} means other members have not locked in yet; any other 409 means the party is defeated.
-    private static async Task<bool> IsWaitingBodyAsync(HttpResponseMessage response, CancellationToken ct)
+    private static async Task<ApiResult<T>> FailureAsync<T>(HttpResponseMessage response, CancellationToken ct) where T : class
     {
-        try
+        using var body = ProblemBody.Parse(await response.Content.ReadAsStringAsync(ct));
+        return response.StatusCode switch
         {
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            return doc.RootElement.ValueKind == JsonValueKind.Object &&
-                   doc.RootElement.TryGetProperty("status", out var status) &&
-                   status.ValueKind == JsonValueKind.String &&
-                   status.GetString() == "waiting";
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+            HttpStatusCode.NotFound => body.Result<T>(ApiStatus.NotFound, "Not found."),
+            // A coded body is an error. Without a code, {"status":"waiting"} means other members have not locked in yet and
+            // any other 409 means the party is defeated.
+            HttpStatusCode.Conflict when body.Code is null && body.IsWaiting => new(ApiStatus.Waiting, Error: "Waiting for party members."),
+            HttpStatusCode.Conflict => body.Result<T>(ApiStatus.Conflict, "Conflict."),
+            HttpStatusCode.BadRequest => body.Result<T>(ApiStatus.ValidationError, body.ValidationMessage ?? "The request was invalid."),
+            _ => body.Result<T>(ApiStatus.Failed, $"Server returned {(int)response.StatusCode}."),
+        };
     }
 
-    private static async Task<string> ReadValidationMessageAsync(HttpResponseMessage response, CancellationToken ct)
+    // Tolerant reader for an error response: ProblemDetails from this API, the waiting body, or anything else (empty, text).
+    private sealed class ProblemBody : IDisposable
     {
-        const string fallback = "The request was invalid.";
-        try
+        private readonly JsonDocument? _doc;
+
+        private ProblemBody(JsonDocument? doc) => _doc = doc;
+
+        public static ProblemBody Parse(string text)
         {
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
-                doc.RootElement.TryGetProperty("errors", out var errors) &&
-                errors.ValueKind == JsonValueKind.Object)
+            try
             {
-                var messages = errors.EnumerateObject()
-                    .SelectMany(p => p.Value.ValueKind == JsonValueKind.Array ? p.Value.EnumerateArray() : [])
-                    .Where(e => e.ValueKind == JsonValueKind.String)
-                    .Select(e => e.GetString()!)
-                    .ToList();
-                if (messages.Count > 0) return string.Join(" ", messages);
+                var doc = JsonDocument.Parse(text);
+                return new ProblemBody(doc.RootElement.ValueKind == JsonValueKind.Object ? doc : null);
+            }
+            catch (JsonException)
+            {
+                return new ProblemBody(null);
             }
         }
-        catch (JsonException)
+
+        public string? Code => Text("code");
+
+        public string? Description => Text("detail");
+
+        public bool IsWaiting => Text("status") == "waiting";
+
+        public IReadOnlyDictionary<string, string>? Parameters =>
+            _doc is not null && _doc.RootElement.TryGetProperty("parameters", out var p) && p.ValueKind == JsonValueKind.Object
+                ? p.EnumerateObject().Where(e => e.Value.ValueKind == JsonValueKind.String).ToDictionary(e => e.Name, e => e.Value.GetString()!)
+                : null;
+
+        // The `errors` messages the API puts on every 400, else the problem's own description.
+        public string? ValidationMessage
         {
+            get
+            {
+                if (_doc is not null && _doc.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+                {
+                    var messages = errors.EnumerateObject()
+                        .SelectMany(p => p.Value.ValueKind == JsonValueKind.Array ? p.Value.EnumerateArray() : [])
+                        .Where(e => e.ValueKind == JsonValueKind.String)
+                        .Select(e => e.GetString()!)
+                        .ToList();
+                    if (messages.Count > 0) return string.Join(" ", messages);
+                }
+
+                return Description;
+            }
         }
 
-        return fallback;
+        public ApiResult<T> Result<T>(ApiStatus status, string error) where T : class =>
+            new(status, Error: error, Code: Code, Description: Description, Parameters: Parameters);
+
+        public void Dispose() => _doc?.Dispose();
+
+        private string? Text(string name) =>
+            _doc is not null && _doc.RootElement.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
     }
 }

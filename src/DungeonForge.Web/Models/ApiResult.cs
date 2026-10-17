@@ -10,7 +10,15 @@ public enum ApiStatus
     Failed
 }
 
-public sealed record ApiResult<T>(ApiStatus Status, T? Value = default, string? Error = null) where T : class
+// Error is the message to show a player. Code, Description and Parameters are the server's ProblemDetails fields
+// (`code`, `detail`, `parameters`): null on success, on the waiting 409, and when the server sent no problem body.
+public sealed record ApiResult<T>(
+    ApiStatus Status,
+    T? Value = default,
+    string? Error = null,
+    string? Code = null,
+    string? Description = null,
+    IReadOnlyDictionary<string, string>? Parameters = null) where T : class
 {
     public bool IsSuccess => Status == ApiStatus.Success;
 }
