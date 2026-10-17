@@ -128,7 +128,6 @@ public class ExtractionHardeningTests
 
         party.Snapshot().Members.Single(m => m.Name == "Merlin").IsDefeated.Should().BeTrue();
         party.RequiredLocks.Should().Be(3);
-        party.TakeDamage(1).TargetName.Should().NotBe("Merlin");
         party.TryExtract("Merlin").Should().BeFalse();
     }
 

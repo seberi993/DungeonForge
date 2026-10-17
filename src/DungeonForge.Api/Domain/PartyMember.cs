@@ -23,8 +23,6 @@ public sealed class PartyMember
 
     public bool IsDefeated => Hp == 0;
 
-    // Higher threat is targeted first; ties are resolved by roster order in Party.
-    internal int Threat => MemberRules.Threat(Class);
 
     internal int TakeDamage(int amount)
     {

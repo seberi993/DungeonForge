@@ -86,17 +86,4 @@ public class PartyActionTests
         party.Pending!.Discussion!.Should().HaveCount(8).And.Contain(a => a.Text == "replaced");
     }
 
-    [Fact]
-    public void ActionBonusCount_IsCappedAtMemberCount()
-    {
-        var party = CreateParty();
-        party.ActionBonusCount.Should().Be(0);
-        party.TrySetPending(new PendingEncounter(RoomType.Puzzle, "p"));
-        for (var i = 0; i < 5; i++)
-        {
-            party.TrySubmitAction(new PlayerAction(Guid.NewGuid(), "n", "x"));
-        }
-
-        party.ActionBonusCount.Should().Be(1);
-    }
 }

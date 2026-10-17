@@ -210,7 +210,6 @@ public class PartyVaultTests
         party.CastVote("Dru", ConfrontationVote.Banish, new ScriptedRoller(0));
 
         party.IsPartyDefeated.Should().BeFalse();
-        party.TakeDamage(1).TargetName.Should().NotBe("Conan");
     }
 
     [Fact]

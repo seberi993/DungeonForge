@@ -92,28 +92,6 @@ public sealed partial class Party
         return new Party(id, name, members.ToArray(), createdAt, inviteCode, modifiers ?? new PartyModifiers(), time ?? TimeProvider.System);
     }
 
-    // TODO: resistances are not modeled yet; `element` is accepted but ignored (all elements deal the same damage).
-    public DamageResult TakeDamage(int amount, ElementType element = ElementType.Physical)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
-
-        lock (SyncRoot)
-        {
-            // First max in roster order wins ties.
-            PartyMember? target = null;
-            foreach (var m in Members)
-            {
-                if (!m.IsDefeated && !IsOut(m.Name) && (target is null || m.Threat > target.Threat))
-                {
-                    target = m;
-                }
-            }
-
-            return target is null
-                ? new DamageResult(string.Empty, 0)
-                : new DamageResult(target.Name, target.TakeDamage(amount));
-        }
-    }
 
     public int Heal(string memberName, int amount)
     {
@@ -137,14 +115,6 @@ public sealed partial class Party
 
     public PendingEncounter? Pending { get { lock (SyncRoot) { return _pending; } } }
 
-    // First writer wins; returns whichever encounter is pending afterwards.
-    public PendingEncounter TrySetPending(PendingEncounter encounter)
-    {
-        lock (SyncRoot)
-        {
-            return _pending ??= encounter;
-        }
-    }
 
     // Room of the scenario being generated (rolled in C#); null when idle or a scenario is already pending.
     public RoomType? AwaitingRoom { get { lock (SyncRoot) { return _awaitingRoom; } } }
@@ -274,13 +244,6 @@ public sealed partial class Party
         }
     }
 
-    public void ClearLocks()
-    {
-        lock (SyncRoot)
-        {
-            _locks.Clear();
-        }
-    }
 
     public int LockedCount { get { lock (SyncRoot) { return _locks.Count; } } }
 
@@ -326,31 +289,7 @@ public sealed partial class Party
         }
     }
 
-    // Distinct acting members in the pending discussion, capped at the roster size (bonus basis).
-    public int ActionBonusCount
-    {
-        get
-        {
-            lock (SyncRoot)
-            {
-                var distinct = _pending?.Discussion?.Select(a => a.MemberId).Distinct().Count() ?? 0;
-                return Math.Min(distinct, Members.Count);
-            }
-        }
-    }
 
-    // Applies a resolved choice atomically: damage (null when none), gold, turn advance, pending cleared.
-    public DamageResult? ApplyChoiceOutcome(int damage, int gold)
-    {
-        lock (SyncRoot)
-        {
-            var hit = damage > 0 ? TakeDamage(damage) : null;
-            AdvanceTurn(gold);
-            SettleVaultIfWiped();
-            _pending = null;
-            return hit;
-        }
-    }
 
     // Applies a resolved turn where each failed member took their own hit: damage per named member, gold, turn advance,
     // pending cleared. Unknown or already-defeated members are skipped; the applied hits are returned in order.
