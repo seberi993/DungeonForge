@@ -29,6 +29,12 @@ public static class ErrorCodes
         public const string ConfrontationActive = "vault.confrontation_active";
     }
 
+    public static class Vote
+    {
+        public const string NoConfrontation = "vote.no_confrontation";
+        public const string NotEligible = "vote.not_eligible";
+    }
+
     public static class Extract
     {
         public const string NoPact = "extract.no_pact";

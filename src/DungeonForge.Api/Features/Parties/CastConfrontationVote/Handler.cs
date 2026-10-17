@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
@@ -10,20 +11,23 @@ namespace DungeonForge.Api.Features.Parties.CastConfrontationVote;
 public sealed class CastConfrontationVoteHandler(
     IMemoryCache cache, IRoller roller, IPartyNotifier notifier, ChaosDispatcher chaos, ILogger<CastConfrontationVoteHandler> logger)
 {
-    public async Task<CastVoteResult> HandleAsync(Guid id, string playerName, ConfrontationVote vote)
+    public const string Operation = "Command:CastConfrontationVote";
+
+    public async Task<Result<CastVoteResponse>> HandleAsync(Guid id, string playerName, ConfrontationVote vote)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return new CastVoteResult(CastVoteStatus.NotFound);
+            return PartyErrors.NotFound(Operation, id);
         }
 
-        var result = party.CastVote(playerName.Trim(), vote, roller);
+        var name = playerName.Trim();
+        var result = party.CastVote(name, vote, roller);
         switch (result.Status)
         {
             case VoteStatus.NoConfrontation:
-                return new CastVoteResult(CastVoteStatus.NoConfrontation);
+                return CastConfrontationVoteErrors.NoConfrontation(Operation, id);
             case VoteStatus.NotEligible:
-                return new CastVoteResult(CastVoteStatus.NotEligible);
+                return CastConfrontationVoteErrors.NotEligible(Operation, id, name);
         }
 
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
@@ -31,15 +35,13 @@ public sealed class CastConfrontationVoteHandler(
         {
             await chaos.PublishAsync(id, new ChaosEvent(
                 ChaosEvent.Confrontation, $"A ballot was cast ({result.Cast} of {result.Required})."));
-            return new CastVoteResult(CastVoteStatus.Recorded, new CastVoteResponse(id, false, result.Cast, result.Required));
+            return new CastVoteResponse(id, false, result.Cast, result.Required);
         }
 
         await chaos.PublishAsync(id, new ChaosEvent(ChaosEvent.ConfrontationResolved, Verdict(resolution)));
         await BroadcastStateAsync(party);
         await chaos.AnnounceTraitorOutcomeAsync(party, party.EvaluateTraitor());
-        return new CastVoteResult(
-            CastVoteStatus.Recorded,
-            new CastVoteResponse(id, true, result.Cast, result.Required, JsonNamingPolicy.CamelCase.ConvertName(resolution.Outcome.ToString())));
+        return new CastVoteResponse(id, true, result.Cast, result.Required, JsonNamingPolicy.CamelCase.ConvertName(resolution.Outcome.ToString()));
     }
 
     private static string Verdict(ConfrontationResolution r)
