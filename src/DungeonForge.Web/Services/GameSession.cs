@@ -12,7 +12,10 @@ public sealed class GameSession
     // The hero this browser plays: the creator's first hero, or the one a joiner picked.
     public string? MyName { get; private set; }
     private MemberDto? Me => _members.FirstOrDefault(m => m.Name == MyName) ?? _members.FirstOrDefault();
-    public string PlayerName => Me?.Name ?? "Adventurer";
+    // What the server calls a player whose name is blank (the Api's ExploreRequestLimits.DefaultActionName).
+    public const string DefaultPlayerName = "Adventurer";
+
+    public string PlayerName => Me?.Name ?? DefaultPlayerName;
     public Guid PartyId { get; private set; }
     public string InviteCode { get; private set; } = "";
     public string Name { get; private set; } = "";
@@ -43,7 +46,7 @@ public sealed class GameSession
     public string? Scene { get; private set; }
     public bool ScenarioPending { get; private set; }
     public string? LastOutcome { get; private set; }
-    // Where the latest outcome came from: "model" (a browser's local model), "server", or "fallback" (canned text).
+    // Where the latest outcome came from: a NarrationSources value (a browser's local model, the server, or canned fallback text).
     public string? NarrationSource { get; private set; }
     public IReadOnlyList<PlayerAction> Discussion { get; private set; } = [];
     public IReadOnlyList<LockStatusDto> LockStatus { get; private set; } = [];

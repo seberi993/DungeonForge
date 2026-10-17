@@ -167,7 +167,7 @@ public sealed class TurnResolver(
                 continue;
             }
 
-            var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
+            var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, ExploreRequestLimits.DefaultActionName);
             party.TryLockIn(new PlayerAction(action.MemberId, name, text, CleanCovert(action.Covert)));
         }
     }

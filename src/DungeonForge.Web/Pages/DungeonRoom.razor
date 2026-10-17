@@ -97,7 +97,7 @@
     else if (Session.LastOutcome is { } outcome)
     {
         <p id="last-outcome" class="outcome"><TypewriterText Text="@outcome" OnComplete="() => _outcomeTyped = outcome" /></p>
-        @if (Session.NarrationSource == "fallback")
+        @if (Session.NarrationSource == NarrationSources.Fallback)
         {
             <p id="fallback-note" class="fallback-note">The narrator is out of words, so this was canned text.</p>
         }

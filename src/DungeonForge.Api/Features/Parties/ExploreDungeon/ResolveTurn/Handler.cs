@@ -75,7 +75,7 @@ public sealed class ResolveTurnHandler(
     {
         foreach (var action in actions.Where(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
         {
-            var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
+            var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, ExploreRequestLimits.DefaultActionName);
             await chaos.AnnouncePlayerReadyAsync(id, name);
         }
     }

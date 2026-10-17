@@ -10,6 +10,9 @@ public static class ExploreRequestLimits
     public const int MaxActionTextLength = 200;
     public const int MaxActionNameLength = 40;
 
+    // What an action is credited to when its name is blank once sanitized.
+    public const string DefaultActionName = "Adventurer";
+
     // Null when valid.
     public static string? Validate(IReadOnlyList<PlayerAction>? actions)
     {
