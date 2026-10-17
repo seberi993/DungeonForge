@@ -13,7 +13,7 @@ public sealed class GetScenarioHandler(
     IRoller roller,
     TurnNarrator turns,
     ClientNarrationCoordinator clientNarration,
-    VocabularySelector? vocabulary = null)
+    VocabularySelector vocabulary)
 {
     // `operation` is the caller's name for errors: LockIn answers the scenario first, under its own operation.
     public async Task<Result<ExploreOutcome>> HandleAsync(Guid id, string operation, CancellationToken ct)
@@ -83,7 +83,7 @@ public sealed class GetScenarioHandler(
             return ScenarioClaim.Claimed(new NarrationContext(room, party.Name, party.Turn, ExploreResponses.IsWounded(party))
             {
                 Roster = ExploreResponses.Roster(party),
-                Motifs = vocabulary?.Pick() ?? [],
+                Motifs = vocabulary.Pick(),
             });
         }
     }

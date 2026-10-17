@@ -18,9 +18,9 @@ public sealed class ResolveTurnHandler(
     TurnNarrator turns,
     ClientNarrationCoordinator clientNarration,
     IPartyNotifier notifier,
+    IScoreBoard scores,
+    ChaosDispatcher chaos,
     ILogger<ResolveTurnHandler> logger,
-    IScoreBoard? scores = null,
-    ChaosDispatcher? chaos = null,
     SocialTurnPipeline? social = null)
 {
     // `operation` is the caller's name for errors: LockIn resolves through here under its own operation.
@@ -73,7 +73,6 @@ public sealed class ResolveTurnHandler(
 
     private async Task BroadcastReadyAsync(Guid id, IReadOnlyList<PlayerAction> actions)
     {
-        if (chaos is null) return;
         foreach (var action in actions.Where(a => NarrationText.Clean(a.Text, ExploreRequestLimits.MaxActionTextLength).Length > 0))
         {
             var name = NarrationText.Sanitize(action.Name, ExploreRequestLimits.MaxActionNameLength, "Adventurer");
@@ -84,7 +83,7 @@ public sealed class ResolveTurnHandler(
     // After the Master Turn resolved: the new unclaimed vault is public, and a traitor win ends the run with a reveal.
     private async Task AnnounceChaosAftermathAsync(Guid id)
     {
-        if (chaos is null || !parties.TryGet(id, out var party))
+        if (!parties.TryGet(id, out var party))
         {
             return;
         }
@@ -101,7 +100,6 @@ public sealed class ResolveTurnHandler(
     // A board outage never blocks the turn.
     private async Task RecordScoreAsync(GetPartyStateResponse party)
     {
-        if (scores is null) return;
         try
         {
             await scores.RecordAsync(new RunScore(

@@ -13,8 +13,8 @@ public sealed class TurnNarrator(
     IPartyStore parties,
     IDungeonNarrator narrator,
     IPartyNotifier notifier,
-    ILogger<TurnNarrator> logger,
-    ChaosDispatcher? chaos = null)
+    ChaosDispatcher chaos,
+    ILogger<TurnNarrator> logger)
 {
     public async Task<string> GenerateScenarioAsync(Guid partyId, NarrationContext context, CancellationToken ct)
     {
@@ -136,7 +136,7 @@ public sealed class TurnNarrator(
     // Secrets for the room the party is about to enter and the narrator's whispers; both are private to their targets.
     private async Task DeliverPrivateAsync(Guid partyId, RoomType? nextRoom, int turn, IReadOnlyList<Whisper> whispers)
     {
-        if (chaos is null || !parties.TryGet(partyId, out var party))
+        if (!parties.TryGet(partyId, out var party))
         {
             return;
         }

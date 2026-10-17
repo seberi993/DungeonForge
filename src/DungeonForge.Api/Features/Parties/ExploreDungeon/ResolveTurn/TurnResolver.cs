@@ -13,7 +13,7 @@ namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 public sealed class TurnResolver(
     IPartyStore parties,
     IRoller roller,
-    VocabularySelector? vocabulary = null,
+    VocabularySelector vocabulary,
     SocialTurnPipeline? social = null)
 {
     internal TurnResolution Resolve(Guid id, IReadOnlyList<PlayerAction> actions, string operation)
@@ -155,7 +155,7 @@ public sealed class TurnResolver(
             Failed = [.. failed.Select(f => f.TargetName)],
             Downed = [.. party.Members.Where(m => m.IsDefeated).Select(m => m.Name)],
             Roster = ExploreResponses.Roster(party),
-            Motifs = vocabulary?.Pick() ?? [],
+            Motifs = vocabulary.Pick(),
             Treachery = covert.Log,
         };
 

@@ -1,11 +1,13 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Features.Parties.Chaos;
 using DungeonForge.Api.Features.Parties;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using DungeonForge.Api.Features.Scores;
 using DungeonForge.Api.Infrastructure.Narration;
 using Microsoft.Extensions.Options;
 
@@ -32,12 +34,15 @@ internal static class ExploreTestSupport
         IPartyStore parties, IRoller roller, IDungeonNarrator narrator, IPartyNotifier notifier, ILoggerFactory? loggers = null)
     {
         loggers ??= NullLoggerFactory.Instance;
-        var turns = new TurnNarrator(parties, narrator, notifier, loggers.CreateLogger<TurnNarrator>());
+        var chaos = new ChaosDispatcher(notifier, new RandomRoller(), loggers.CreateLogger<ChaosDispatcher>());
+        var vocabulary = new VocabularySelector(new RandomRoller());
+        var turns = new TurnNarrator(parties, narrator, notifier, chaos, loggers.CreateLogger<TurnNarrator>());
         var clientNarration = new ClientNarrationCoordinator(
             parties, turns, Options.Create(new NarrationOptions()), loggers.CreateLogger<ClientNarrationCoordinator>());
-        var getScenario = new GetScenarioHandler(parties, roller, turns, clientNarration);
+        var getScenario = new GetScenarioHandler(parties, roller, turns, clientNarration, vocabulary);
         var resolveTurn = new ResolveTurnHandler(
-            parties, new TurnResolver(parties, roller), turns, clientNarration, notifier, loggers.CreateLogger<ResolveTurnHandler>());
+            parties, new TurnResolver(parties, roller, vocabulary), turns, clientNarration, notifier, new InMemoryScoreBoard(), chaos,
+            loggers.CreateLogger<ResolveTurnHandler>());
         return new ExploreDungeonHandler(getScenario, new LockInHandler(getScenario, resolveTurn), resolveTurn);
     }
 
