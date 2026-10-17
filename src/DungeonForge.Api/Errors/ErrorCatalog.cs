@@ -59,9 +59,32 @@ public static partial class ErrorCatalog
         return problems;
     }
 
+    // Every operation string (`Command:X`, `Query:X`, `Hub:X`, `Chaos:X`, `Background:X`) declared as a constant on a handler,
+    // an `*Operations` class or the hub, with the namespace of the slice that owns it.
+    public static IReadOnlyList<OperationInfo> Operations(Assembly assembly) =>
+    [
+        .. assembly.GetTypes()
+            .SelectMany(t => t.GetFields(AllStatic | BindingFlags.Instance).Where(f => f.DeclaringType == t).Select(f => (Type: t, Field: f)))
+            .Where(x => x.Field is { IsLiteral: true } && x.Field.FieldType == typeof(string)
+                && (x.Field.Name.EndsWith("Operation", StringComparison.Ordinal) || x.Type.Name.EndsWith("Operations", StringComparison.Ordinal)))
+            .Select(x => new OperationInfo((string)x.Field.GetRawConstantValue()!, x.Type.Namespace ?? string.Empty))
+            .Where(o => OperationFormat().IsMatch(o.Operation))
+            .DistinctBy(o => o.Operation)
+            .OrderBy(o => o.Operation, StringComparer.Ordinal),
+    ];
+
     private static IEnumerable<Type> Flatten(Type root) =>
         new[] { root }.Concat(root.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).SelectMany(Flatten));
 
     [GeneratedRegex(@"^[a-z][a-z0-9]*\.[a-z][a-z0-9_]*$")]
     private static partial Regex CodeFormat();
+
+    [GeneratedRegex(@"^(Command|Query|Hub|Chaos|Background):.+$")]
+    private static partial Regex OperationFormat();
+}
+
+// Namespace of the slice that owns an operation constant; Folder is where that slice lives under src/DungeonForge.Api.
+public sealed record OperationInfo(string Operation, string Namespace)
+{
+    public string Folder => Namespace.Replace("DungeonForge.Api.", string.Empty).Replace('.', '/');
 }

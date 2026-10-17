@@ -13,6 +13,7 @@ public class ErrorCatalogTests
         public const string NoSpec = "fake.no_spec";
         public const string NoTest = "fake.no_test";
         public const string Malformed = "Fake-Malformed";
+        public const string Dashed = "fake-dashed";
     }
 
     private static class FakeSpecs
@@ -20,6 +21,7 @@ public class ErrorCatalogTests
         public static readonly ErrorSpec Covered = new(FakeCodes.Covered, ErrorKind.NotFound, "Covered.");
         public static readonly ErrorSpec NoTest = new(FakeCodes.NoTest, ErrorKind.Conflict, "No test.");
         public static readonly ErrorSpec Malformed = new(FakeCodes.Malformed, ErrorKind.Conflict, "Malformed.");
+        public static readonly ErrorSpec Dashed = new(FakeCodes.Dashed, ErrorKind.Conflict, "Dashed.");
         public static readonly ErrorSpec Orphan = new("fake.orphan", ErrorKind.Conflict, "Not a constant.");
         public static readonly ErrorSpec Duplicate = new(FakeCodes.Covered, ErrorKind.Conflict, "Twice.");
     }
@@ -28,7 +30,7 @@ public class ErrorCatalogTests
     public void Codes_ListsEveryConstant()
     {
         ErrorCatalog.Codes(typeof(FakeCodes)).Should().BeEquivalentTo(
-            FakeCodes.Covered, FakeCodes.NoSpec, FakeCodes.NoTest, FakeCodes.Malformed);
+            FakeCodes.Covered, FakeCodes.NoSpec, FakeCodes.NoTest, FakeCodes.Malformed, FakeCodes.Dashed);
     }
 
     [Fact]
@@ -45,6 +47,7 @@ public class ErrorCatalogTests
         problems.Should().Contain(p => p.Contains(FakeCodes.NoSpec) && p.Contains("no spec"));
         problems.Should().Contain(p => p.Contains(FakeCodes.NoTest) && p.Contains("[CoversError]"));
         problems.Should().Contain(p => p.Contains(FakeCodes.Malformed) && p.Contains("<area>.<reason>"));
+        problems.Should().Contain(p => p.Contains(FakeCodes.Dashed) && p.Contains("<area>.<reason>"));
         problems.Should().Contain(p => p.Contains("fake.orphan") && p.Contains("not an ErrorCodes constant"));
         problems.Should().Contain(p => p.Contains(FakeCodes.Covered) && p.Contains("more than one spec"));
     }
