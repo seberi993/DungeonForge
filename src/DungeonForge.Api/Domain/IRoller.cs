@@ -1,4 +1,4 @@
-namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
+namespace DungeonForge.Api.Domain;
 
 public interface IRoller
 {

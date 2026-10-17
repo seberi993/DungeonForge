@@ -1,5 +1,5 @@
 using System.Text;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Api.Domain;
 
 namespace DungeonForge.Api.Infrastructure.Narration;
 

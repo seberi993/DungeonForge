@@ -1,3 +1,4 @@
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Infrastructure.Narration;
 using DungeonForge.Tests.Features.Parties.Chaos;

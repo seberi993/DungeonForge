@@ -4,14 +4,6 @@ using DungeonForge.Api.Infrastructure.Narration;
 
 namespace DungeonForge.Api.Features.Parties.ExploreDungeon;
 
-public enum RoomType
-{
-    Combat,
-    Chest,
-    Puzzle,
-    Boss,
-}
-
 public static class ExploreRequestLimits
 {
     public const int MaxActions = 8;

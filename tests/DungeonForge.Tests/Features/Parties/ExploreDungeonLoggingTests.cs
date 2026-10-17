@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Parties.Realtime;

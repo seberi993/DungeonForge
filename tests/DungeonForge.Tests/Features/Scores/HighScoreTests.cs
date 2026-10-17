@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Features.Scores;
 using FluentAssertions;

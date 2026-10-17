@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Errors;
 using Microsoft.Extensions.Options;
 

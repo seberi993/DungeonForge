@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Endpoints;
 using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.CastConfrontationVote;

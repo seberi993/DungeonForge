@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using DungeonForge.Api.Domain;
 using DungeonForge.Api.Features.Parties.ExploreDungeon;
 using DungeonForge.Api.Infrastructure.Narration;
 using FluentAssertions;
