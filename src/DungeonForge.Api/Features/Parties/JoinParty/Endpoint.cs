@@ -1,6 +1,5 @@
-using DungeonForge.Api.Domain;
 using DungeonForge.Api.Endpoints;
-using Microsoft.AspNetCore.Http.HttpResults;
+using DungeonForge.Api.Errors;
 
 namespace DungeonForge.Api.Features.Parties.JoinParty;
 
@@ -9,14 +8,9 @@ public sealed class JoinPartyEndpoint : IEndpoint
     private const int MaxMemberNameLength = 32;
 
     public void MapEndpoint(IEndpointRouteBuilder app) =>
-        app.MapPost("/parties/by-code/{code}/join", async Task<Results<Ok<JoinPartyResponse>, NotFound, Conflict>> (
-                string code, JoinPartyRequest request, JoinPartyHandler handler) =>
-                await handler.HandleAsync(code, request) switch
-                {
-                    { Status: JoinPartyStatus.Joined, Response: { } response } => TypedResults.Ok(response),
-                    { Status: JoinPartyStatus.Conflict } => TypedResults.Conflict(),
-                    _ => TypedResults.NotFound(),
-                })
+        app.MapPost("/parties/by-code/{code}/join", async Task<IResult> (
+                string code, JoinPartyRequest request, JoinPartyHandler handler, HttpContext http) =>
+                (await handler.HandleAsync(code, request)).ToHttp(http))
            .AddEndpointFilter(async (ctx, next) =>
            {
                var request = ctx.GetArgument<JoinPartyRequest>(1);
@@ -36,7 +30,7 @@ public sealed class JoinPartyEndpoint : IEndpoint
                }
 
                return errors.Count > 0
-                   ? TypedResults.ValidationProblem(errors)
+                   ? ValidationErrors.ToProblem(JoinPartyHandler.Operation, errors, ctx.HttpContext)
                    : await next(ctx);
            })
            .WithName("JoinParty");

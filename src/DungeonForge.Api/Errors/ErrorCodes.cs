@@ -18,5 +18,12 @@ public static class ErrorCodes
     {
         public const string NotFound = "party.not_found";
         public const string InviteNotFound = "party.invite_not_found";
+        public const string NameTaken = "party.name_taken";
+        public const string Full = "party.full";
+    }
+
+    public static class Validation
+    {
+        public const string InvalidRequest = "validation.invalid_request";
     }
 }
