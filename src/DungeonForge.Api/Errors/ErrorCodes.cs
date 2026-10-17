@@ -20,7 +20,14 @@ public static class ErrorCodes
         public const string InviteNotFound = "party.invite_not_found";
         public const string NameTaken = "party.name_taken";
         public const string Full = "party.full";
+        public const string PlayerUnknown = "party.player_unknown";
     }
+
+    public static class Extract
+    {
+        public const string NoPact = "extract.no_pact";
+    }
+
 
     public static class Validation
     {

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DungeonForge.Api.Domain;
+using DungeonForge.Api.Errors;
 using DungeonForge.Api.Features.Parties.Chaos;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -9,28 +10,29 @@ namespace DungeonForge.Api.Features.Parties.ExtractRun;
 // traitor solo-extraction win condition, which is tracked apart from ordinary victory.
 public sealed class ExtractRunHandler(IMemoryCache cache, ChaosDispatcher chaos)
 {
-    public async Task<ExtractResult> HandleAsync(Guid id, string playerName)
+    public const string Operation = "Command:ExtractRun";
+
+    public async Task<Result<ExtractResponse>> HandleAsync(Guid id, string playerName)
     {
         if (!cache.TryGetValue(PartyCache.Key(id), out Party? party) || party is null)
         {
-            return new ExtractResult(ExtractStatus.NotFound);
+            return PartyErrors.NotFound(Operation, id);
         }
 
         if (!party.Modifiers.TraitorPact)
         {
-            return new ExtractResult(ExtractStatus.NoPact);
+            return ExtractRunErrors.NoPact(Operation, id);
         }
 
-        if (!party.TryExtract(playerName.Trim()))
+        var name = playerName.Trim();
+        if (!party.TryExtract(name))
         {
-            return new ExtractResult(ExtractStatus.UnknownPlayer);
+            return PartyErrors.PlayerUnknown(Operation, id, name);
         }
 
         cache.Set(PartyCache.Key(id), party, PartyCache.EntryOptions());
         var outcome = party.EvaluateTraitor();
         await chaos.AnnounceTraitorOutcomeAsync(party, outcome);
-        return new ExtractResult(
-            ExtractStatus.Extracted,
-            new ExtractResponse(id, JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString())));
+        return new ExtractResponse(id, JsonNamingPolicy.CamelCase.ConvertName(outcome.ToString()));
     }
 }
