@@ -3,6 +3,7 @@ WORKDIR /src
 COPY Directory.Build.props ./
 COPY src/DungeonForge.Api/DungeonForge.Api.csproj src/DungeonForge.Api/
 RUN dotnet restore src/DungeonForge.Api/DungeonForge.Api.csproj
+COPY src/Shared/ src/Shared/
 COPY src/DungeonForge.Api/ src/DungeonForge.Api/
 RUN dotnet publish src/DungeonForge.Api/DungeonForge.Api.csproj -c Release -o /app --no-restore
 
