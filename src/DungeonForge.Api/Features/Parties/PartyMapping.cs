@@ -11,7 +11,7 @@ internal static class PartyMapping
     public static GetPartyStateResponse ToResponse(PartySnapshot s) =>
         new(s.Id, s.Name, ToMemberDtos(s), s.CreatedAt, s.Gold, s.Turn, s.IsPartyDefeated,
             s.InviteCode.Length == 0 ? "" : InviteCodes.Format(s.InviteCode), ToLockDtos(s.LockStatus),
-            s.Floor, s.RoomsCleared, s.BossHp, s.BossMaxHp);
+            s.Floor, s.RoomsCleared, s.BossHp, s.BossMaxHp, s.SetupAnswered, s.SetupPending);
 
     public static IReadOnlyList<LockStatusDto> ToLockDtos(IEnumerable<MemberLockStatus> status) =>
         status.Select(l => new LockStatusDto(l.Name, l.LockedIn)).ToList();

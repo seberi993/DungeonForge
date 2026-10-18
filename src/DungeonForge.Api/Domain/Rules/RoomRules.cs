@@ -10,8 +10,13 @@ public static class RoomRules
     // only when a floor's ordinary rooms run out or the boss is already awake.
     public static readonly IReadOnlyList<RoomType> Rollable = [RoomType.Combat, RoomType.Chest, RoomType.Puzzle];
 
-    // One roller call, Next(Rollable.Count): the call order the scripted-roller tests depend on.
-    public static RoomType Roll(IRoller roller) => Rollable[roller.Next(Rollable.Count)];
+    // One roller call, Next(Rollable.Count): the call order the scripted-roller tests depend on. When the players' words lean
+    // toward one kind of room, ONE more call Next(100) is appended and may swap the rolled room for the favored one.
+    public static RoomType Roll(IRoller roller, StoryLean lean = default)
+    {
+        var room = Rollable[roller.Next(Rollable.Count)];
+        return lean.Favored is { } favored && roller.Next(100) < lean.SwapPercent ? favored : room;
+    }
 
     // Each member whose own action failed takes this hit; it grows as the dungeon deepens.
     // The boss hits harder per floor and does not scale with the turn count, so a long floor stays fair.

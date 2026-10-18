@@ -32,10 +32,9 @@ public sealed class CreatePartyEndpoint : IEndpoint
                }
                else if (members.Any(m => m is null
                    || string.IsNullOrWhiteSpace(m.Name)
-                   || m.Class is not { } cls
-                   || !Enum.IsDefined(cls)))
+                   || (m.Class is { } cls && !Enum.IsDefined(cls))))
                {
-                   errors["members"] = ["Every member needs a name and a valid class."];
+                   errors["members"] = ["Every member needs a name and, if given, a valid class."];
                }
 
                else if (members.Count > MaxMembers)

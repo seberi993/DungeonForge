@@ -93,7 +93,7 @@ public class StageDirectorTests
 
         Run(d, beatMs * 0.3);
         var early = d.Frame().Caption;
-        early.Who.Should().Contain("Conan").And.Contain("Warrior");
+        early.Who.Should().Contain("Conan").And.NotContain("Warrior");
         early.Say.Should().Contain("I charge the goblin");
         early.Tag.Should().BeEmpty();
 

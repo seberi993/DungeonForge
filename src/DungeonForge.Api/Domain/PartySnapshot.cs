@@ -17,4 +17,6 @@ public sealed record PartySnapshot(
     int Floor = 1,
     int RoomsCleared = 0,
     int BossHp = 0,
-    int BossMaxHp = 0);
+    int BossMaxHp = 0,
+    int SetupAnswered = 0,
+    bool SetupPending = false);

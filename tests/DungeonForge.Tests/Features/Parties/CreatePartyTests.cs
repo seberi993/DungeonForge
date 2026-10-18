@@ -132,12 +132,12 @@ public class CreatePartyTests(WebApplicationFactory<Program> factory) : IClassFi
     }
 
     [Fact]
-    public async Task Post_MemberClassMissing_ReturnsBadRequest()
+    public async Task Post_MemberClassMissing_DealsAHiddenClass()
     {
         var response = await PartyTestData.PostPartyAsync(
             factory.CreateClient(), members: [new { name = "Conan" }]);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Theory]

@@ -24,7 +24,6 @@ public class DungeonRoomStatsTests : DungeonRoomTestBase
     {
         var cut = Render(new FakeHandler(HttpStatusCode.OK));
         cut.Find("#stat-name").TextContent.Should().Contain("Heroes");
-        cut.Find("#stat-hp").TextContent.Should().Contain("46/46");
         cut.FindAll("#members li").Should().HaveCount(2);
         cut.Find("#member-0").TextContent.Should().Contain("Conan").And.Contain("30/30");
         cut.Find("#member-1").TextContent.Should().Contain("Merlin").And.Contain("16/16");
@@ -73,7 +72,6 @@ public class DungeonRoomStatsTests : DungeonRoomTestBase
 
         cut.WaitForAssertion(() => cut.Find("#member-0").TextContent.Should().Contain("26/30"));
         cut.Find("#member-1").TextContent.Should().Contain("16/16");
-        cut.Find("#stat-hp").TextContent.Should().Contain("42/46");
         cut.Find(".log-entry").TextContent.Should().Contain("Conan took 4 damage");
     }
 
@@ -125,20 +123,30 @@ public class DungeonRoomStatsTests : DungeonRoomTestBase
     }
 
     [Fact]
-    public void SpellbookToggle_OpensDrawer_SpellsAreReadOnlyAndLeaveActionBoxUntouched()
+    public void Room_HidesSpellbookClassesAndAbilities()
     {
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]""");
-        var cut = RenderWithScenario(handler);
-        cut.FindAll(".spell").Should().BeEmpty();
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
 
-        cut.Find("button#toggle-spellbook").Click();
-        cut.WaitForAssertion(() => cut.FindAll(".spell").Should().HaveCount(1));
-        handler.LastSpellsRequest!.RequestUri!.AbsolutePath.Should().Be("/api/classes/warrior/spells");
-        cut.Find("#action-text").Input("Charge");
+        cut.FindAll("#toggle-spellbook, .spellbook-drawer, .member-class, .abilities").Should().BeEmpty();
+    }
 
-        cut.FindAll(".spell button").Should().BeEmpty();
-        cut.Find("#action-text").GetAttribute("value").Should().Be("Charge");
+    [Fact]
+    public void DmFeed_SpeaksInOrder_Challenge_ThenWhispers_ThenTheActionBox()
+    {
+        var cut = RenderWithScenario(new FakeHandler(HttpStatusCode.OK));
+        cut.InvokeAsync(() => _hub.RaisePrivate(new PrivateMessageDto("whisper", "Merlin pocketed 12 gold.")));
+
+        cut.WaitForAssertion(() =>
+        {
+            var html = cut.Find("#scenario-panel").InnerHtml;
+            var challenge = html.IndexOf("The challenge", StringComparison.Ordinal);
+            var whispers = html.IndexOf("id=\"whispers\"", StringComparison.Ordinal);
+            var action = html.IndexOf("id=\"action-box\"", StringComparison.Ordinal);
+            challenge.Should().BeGreaterThanOrEqualTo(0);
+            challenge.Should().BeLessThan(whispers);
+            whispers.Should().BeLessThan(action);
+        });
+        cut.FindAll("#whispers").Should().HaveCount(1);
     }
 
     [Fact]

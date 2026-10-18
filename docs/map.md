@@ -21,15 +21,15 @@ Where things live. Start here instead of searching. Update when a file or folder
 | `Program.cs` | DI (handlers are `AddSingleton`), exception handler, CORS, `AddEndpoints`/`MapEndpoints` under `/api` |
 | `Endpoints/` | `IEndpoint`, reflection registration |
 | `Features/<Group>/<Feature>/` | Vertical slices: `Contracts.cs`, `Endpoint.cs`, `Handler.cs`, `Errors.cs` |
-| `Features/Parties/` | Party slices (`CreateParty`, `JoinParty`, `JoinByCode`, `GetPartyState`, `UnlockTurn`, `ClaimVault`, `CastConfrontationVote`, `ExtractRun`, `SubmitNarration`) |
+| `Features/Parties/` | Party slices (`CreateParty`, `JoinParty`, `JoinByCode`, `GetPartyState`, `GetSetup`, `SubmitSetup` (the opening scene each player paints in free text), `UnlockTurn`, `ClaimVault`, `CastConfrontationVote`, `ExtractRun`, `SubmitNarration`) |
 | `Features/Parties/ExploreDungeon/` | The turn. One route `POST /explore`; `GetScenario/`, `LockIn/`, `ResolveTurn/` handlers; `TurnNarrator.cs`, `ClientNarrationCoordinator.cs`, `ExploreResponses.cs` |
 | `Features/Parties/Chaos/` | `ChaosDispatcher`, `ChaosText` (all player-facing chaos sentences) |
 | `Features/Parties/Realtime/` | `DungeonHub`, `IPartyNotifier`, `PlayerConnections` |
 | `Features/Parties/PartyStore.cs` | `IPartyStore` (`TryGet`, `Save`, `Touch`): the only access to party cache entries |
 | `Features/Social/` | Social layer: seed, peers, asks, abilities, supervision |
 | `Features/Scores/`, `Features/Classes/`, `Features/Health/` | High scores, class spells, health |
-| `Domain/` | `Party` (+`Party.Chaos`, `Party.Traitor`) facade with internal `TurnLocks`, `ScenarioSlot`, `FloorState`, `ChaosState`; one `SyncRoot` lock; `IRoller` |
-| `Domain/Rules/` | Pure static game math: `RoomRules`, `ActionOdds`, `PartyRules`, `MemberRules`, `ConfrontationRules`, `Perception`, `TraitorPact`, `CovertResolver`, `RoomSecrets`, `Gaslighting` |
+| `Domain/` | `Party` (+`Party.Chaos`, `Party.Traitor`, `Party.Setup`: opening answers, recent outcomes, story lean) facade with internal `TurnLocks`, `ScenarioSlot`, `FloorState`, `ChaosState`; one `SyncRoot` lock; `IRoller` |
+| `Domain/Rules/` | Pure static game math: `RoomRules`, `ActionOdds`, `PartyRules`, `MemberRules`, `StoryLean` (answer keywords nudge the room roll), `ConfrontationRules`, `Perception`, `TraitorPact`, `CovertResolver`, `RoomSecrets`, `Gaslighting` |
 | `Errors/` | `Result<T>`, `Error`/`ErrorSpec`, `ErrorCodes`, `ErrorMapping` (`ToHttp`), `Param` allow-list, `LogEvents`, `BestEffort`, `PipelineExceptionHandler` |
 | `Infrastructure/Narration/` | Gemini Flash narrator (`GeminiNarratorService`, `KeyPool`), prompts, static/fallback narrator |
 | `Infrastructure/Scores/` | Supabase score board |
@@ -42,10 +42,9 @@ Layering (enforced by `LayeringTests`): `Domain` and `Errors` never reference `F
 |---|---|
 | `Pages/DungeonRoom.razor` + `.Actions/.Hub/.Narration/.Sound.cs` | The game screen, split by concern |
 | `Pages/PartyLobby.razor` | Create/join |
-| `Services/GameSession*.cs` | Client game state, partials: `Locks`, `Mana`, `Narration`, `Tally`, `Chaos` |
-| `Services/ManaRules.cs` | Mana math (client-only) |
+| `Services/GameSession*.cs` | Client game state, partials: `Locks`, `Setup`, `Narration`, `Tally`, `Chaos` |
 | `Services/DungeonApiClient.cs`, `DungeonHubClient.cs` | REST and SignalR clients |
-| `Components/` | Panels, `SpellbookDrawer`, `SocialPanel`; `Stage/StageDirector.cs` is the one allowed >250-line file (one animation timeline) |
+| `Components/` | Panels, `ScenePainter` (opening-scene questions), `SocialPanel`; `Stage/StageDirector.cs` is the one allowed >250-line file (one animation timeline) |
 | `Models/` | DTOs mirroring Api JSON, `NarrationSources` wire strings |
 
 ## Tests

@@ -22,4 +22,7 @@ public static class Limits
 
     // Actions in one explore request: at most one per member.
     public const int MaxActions = 8;
+
+    // A free-text answer to one of the DM's opening-scene questions.
+    public const int MaxSetupAnswerLength = 300;
 }

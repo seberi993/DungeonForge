@@ -10,22 +10,6 @@ public class DungeonApiClientLockTests
     private static readonly Guid Id = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
     [Fact]
-    public async Task GetSpells_ParsesBareArray_AndUsesCamelCaseClassPath()
-    {
-        var handler = new FakeHandler(HttpStatusCode.OK,
-            """[{"name":"Smite","classId":"paladin","element":"holy","manaCost":5,"description":"Holy blow."}]""");
-        var sut = new DungeonApiClient(handler.CreateClient());
-
-        var result = await sut.GetSpellsAsync(CharacterClass.Paladin);
-
-        result.Status.Should().Be(ApiStatus.Success);
-        result.Value.Should().ContainSingle();
-        result.Value![0].Should().Be(new SpellDto("Smite", CharacterClass.Paladin, ElementType.Holy, 5, "Holy blow."));
-        handler.LastRequest!.Method.Should().Be(HttpMethod.Get);
-        handler.LastRequest.RequestUri!.AbsolutePath.Should().Be("/api/classes/paladin/spells");
-    }
-
-    [Fact]
     public async Task Unlock_PostsMemberId_AndParsesLockStatus()
     {
         var member = Guid.NewGuid();

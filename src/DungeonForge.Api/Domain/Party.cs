@@ -273,7 +273,8 @@ public sealed partial class Party
             return new PartySnapshot(
                 Id, Name, CreatedAt, InviteCode, _gold, _turn, IsPartyDefeated,
                 Members.Select(m => new MemberSnapshot(m.Name, m.Class, m.Hp, m.MaxHp, !IsInPlay(m))).ToArray(),
-                LockStatus, _progress.Floor, _progress.RoomsCleared, _progress.BossHp, _progress.BossMaxHp);
+                LockStatus, _progress.Floor, _progress.RoomsCleared, _progress.BossHp, _progress.BossMaxHp,
+                _setup.Count, SetupPending);
         }
     }
 }

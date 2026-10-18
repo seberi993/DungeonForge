@@ -637,7 +637,7 @@ public sealed class StageDirector
             var eff = Effective(show.Room, b.Verb);
             var (tag, tagClass) = Tag(eff, show.Success);
             if (RollFor(show, b.Name) is { } roll) (tag, tagClass) = ExtremeTag(roll) ?? (tag, tagClass);
-            return new StageCaption($"{b.Name} · {b.Class}",$"“{b.Text}”", p >= 0.58 ? tag : "", p >= 0.58 ? tagClass : "");
+            return new StageCaption(b.Name,$"“{b.Text}”", p >= 0.58 ? tag : "", p >= 0.58 ? tagClass : "");
         }
 
         if (show is not null && _show is not null)

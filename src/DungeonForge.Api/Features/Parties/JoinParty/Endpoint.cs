@@ -25,9 +25,9 @@ public sealed class JoinPartyEndpoint : IEndpoint
                    errors["name"] = [$"Name must be at most {MaxMemberNameLength} characters."];
                }
 
-               if (request?.Class is not { } cls || !Enum.IsDefined(cls))
+               if (request?.Class is { } cls && !Enum.IsDefined(cls))
                {
-                   errors["class"] = ["A valid class is required."];
+                   errors["class"] = ["That class does not exist."];
                }
 
                return errors.Count > 0

@@ -21,7 +21,6 @@ public partial class DungeonRoom
 
     // Faint rotating hint shown while the action box is empty.
     private readonly Random _rng = new();
-    private IReadOnlyList<string>? _spellNames;
     private string _suggestion = "";
     private Timer? _suggestionTimer;
 
@@ -35,7 +34,6 @@ public partial class DungeonRoom
 
         Reroll();
         StartSuggestionTimer();
-        _ = LoadSpellsAsync();
         _local = Services.GetService(typeof(ILocalNarrator)) as ILocalNarrator;
         if (_local is not null)
         {

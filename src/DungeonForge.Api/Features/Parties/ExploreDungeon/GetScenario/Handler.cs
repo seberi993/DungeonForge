@@ -78,12 +78,19 @@ public sealed class GetScenarioHandler(
                 return ScenarioClaim.Answered(new ExploreOutcome(ExploreResponses.Awaiting(party, awaiting)));
             }
 
-            var room = RoomRules.Roll(roller);
+            if (party.SetupPending)
+            {
+                return ScenarioClaim.Answered(SetupErrors.Pending(operation, id));
+            }
+
+            var room = RoomRules.Roll(roller, party.StoryLean);
             party.TryBeginScenario(room);
             return ScenarioClaim.Claimed(new NarrationContext(room, party.Name, party.Turn, ExploreResponses.IsWounded(party))
             {
                 Roster = ExploreResponses.Roster(party),
                 Motifs = vocabulary.Pick(),
+                SetupAnswers = party.SetupAnswers,
+                StoryTags = party.StoryLean.Describe(),
             });
         }
     }

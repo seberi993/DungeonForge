@@ -23,6 +23,13 @@ public static class ErrorCodes
         public const string PlayerUnknown = "party.player_unknown";
     }
 
+    public static class Setup
+    {
+        public const string Pending = "setup.pending";
+        public const string NotInSetup = "setup.not_in_setup";
+        public const string AlreadyAnswered = "setup.already_answered";
+    }
+
     public static class Vault
     {
         public const string NoVault = "vault.no_vault";

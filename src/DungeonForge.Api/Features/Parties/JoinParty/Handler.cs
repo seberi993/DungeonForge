@@ -24,7 +24,7 @@ public sealed class JoinPartyHandler(IPartyStore parties, IPartyNotifier notifie
         GetPartyStateResponse state;
         lock (party.SyncRoot)
         {
-            if (!party.TryAddMember(new PartyMember(name, request.Class!.Value)))
+            if (!party.TryAddMember(new PartyMember(name, request.Class ?? HiddenClasses.For(party.Members.Count))))
             {
                 // The domain only says "no"; both causes were a 409 before, and the roster size tells them apart.
                 return party.Members.Count >= PartyRules.MaxMembers

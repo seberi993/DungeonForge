@@ -20,7 +20,6 @@
             <span id="stat-name" class="party-name">Party: @Session.Name</span>
         </div>
         <nav class="toolbar-actions" aria-label="Game menu">
-            <button id="toggle-spellbook" type="button" class="btn btn-secondary" @onclick="() => _spellbookOpen = !_spellbookOpen"><span aria-hidden="true">📖</span> Spellbook</button>
             <details class="menu invite">
                 <summary class="btn btn-secondary"><span aria-hidden="true">📨</span> Invite</summary>
                 <div class="menu-panel">
@@ -65,12 +64,11 @@
         <span id="stat-floor" class="hud-chip chip-floor">Floor: @Session.Floor</span>
         <span id="stat-turn" class="hud-chip chip-turn">Turn: @Session.Turn</span>
         <span id="stat-gold" class="hud-chip chip-gold">Gold: @Session.Gold</span>
-        <span id="stat-hp" class="hud-chip chip-hp">HP: @Session.TotalHp/@Session.TotalMaxHp</span>
     </div>
 
     <div class="room-grid">
     <aside class="room-side">
-        <PartyPanel Members="Session.Members" MyName="@Session.PlayerName" Mana="Session.Mana" MaxMana="Session.MaxMana" />
+        <PartyPanel Members="Session.Members" MyName="@Session.PlayerName" />
         <SocialPanel />
         @if (Session.BossMaxHp > 0)
         {
@@ -78,9 +76,14 @@
         }
     </aside>
     <div class="room-main">
+    @if (Session.SetupPending)
+    {
+        <ScenePainter />
+    }
+    else
+    {
     <AsciiStage Members="Session.Members" Turn="Session.Turn" Room="Session.PendingRoom" Scene="Session.Scene" Narration="Session.Scenario"
                 Show="Session.Show" NarrationPending="@(Session.NarrationPending || Session.ScenarioPending)" OnShowComplete="OnShowComplete" OnCue="PlayCueAsync" />
-    <SpellbookDrawer Class="Session.PlayerClass" Open="_spellbookOpen" OnClose="() => _spellbookOpen = false" OnSpellsLoaded="OnSpellsLoaded" />
 
     @if (_offline)
     {
@@ -97,6 +100,7 @@
     }
     else if (Session.LastOutcome is { } outcome)
     {
+        <p class="dm-label">What happened</p>
         <p id="last-outcome" class="outcome"><TypewriterText Text="@outcome" OnComplete="() => _outcomeTyped = outcome" /></p>
         @if (Session.NarrationSource == NarrationSources.Fallback)
         {
@@ -104,16 +108,10 @@
         }
     }
 
-    @if (Session.PrivateMessages.Count > 0)
+    @* The DM speaks in a fixed order: what happened, the challenge it throws, then private whispers; the action box comes last. *@
+    @if (Session.PrivateMessages.Count > 0 && !Session.HasScenario)
     {
-        <ul id="whispers" class="whispers" aria-label="Private whispers">
-            @foreach (var message in Session.PrivateMessages)
-            {
-                <li class="whisper whisper-@message.Kind">
-                    <span class="whisper-tag">@WhisperLabel(message.Kind)</span> @message.Text
-                </li>
-            }
-        </ul>
+        @WhisperList
     }
 
     @if (Session.IsDefeated)
@@ -126,7 +124,12 @@
     else if (Session.HasScenario)
     {
         <div id="scenario-panel" class="scenario-panel">
+            <p class="dm-label">The challenge</p>
             <p id="scenario" class="scenario"><TypewriterText Text="@Session.Scenario" Hold="@(Session.LastOutcome is not null && _outcomeTyped != Session.LastOutcome)" /></p>
+            @if (Session.PrivateMessages.Count > 0)
+            {
+                @WhisperList
+            }
             <div id="action-box" class="action-box">
                 <label for="action-text">What do you do?</label>
                 <textarea id="action-text" maxlength="@Limits.MaxActionTextLength" disabled="@IsLocked" placeholder="@_suggestion" @bind="_actionText" @bind:event="oninput"></textarea>
@@ -191,7 +194,19 @@
             }
         </div>
     </details>
+    }
     </div>
     </div>
     </div>
+}
+
+@code {
+    private RenderFragment WhisperList => @<ul id="whispers" class="whispers" aria-label="Private whispers">
+        @foreach (var message in Session.PrivateMessages)
+        {
+            <li class="whisper whisper-@message.Kind">
+                <span class="whisper-tag">@WhisperLabel(message.Kind)</span> @message.Text
+            </li>
+        }
+    </ul>;
 }

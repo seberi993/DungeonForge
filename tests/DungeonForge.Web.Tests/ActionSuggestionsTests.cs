@@ -12,18 +12,10 @@ public class ActionSuggestionsTests
     }
 
     [Fact]
-    public void Pick_SometimesNudgesTowardTheSpellbook_NamingASpell()
+    public void Pick_NeverNamesSpellsOrClasses()
     {
-        var picks = Enumerable.Range(0, 200).Select(i => ActionSuggestions.Pick(new Random(i), ["Fireball"])).ToList();
+        var picks = Enumerable.Range(0, 200).Select(i => ActionSuggestions.Pick(new Random(i))).ToList();
 
-        picks.Should().Contain(p => p.Contains("Fireball"));
-        picks.Should().OnlyContain(p => !string.IsNullOrWhiteSpace(p));
-    }
-
-    [Fact]
-    public void Pick_WithoutSpells_FallsBackToGenericSpellHint()
-    {
-        Enumerable.Range(0, 200).Select(i => ActionSuggestions.Pick(new Random(i)))
-            .Should().Contain(ActionSuggestions.GenericSpell);
+        picks.Should().OnlyContain(p => !string.IsNullOrWhiteSpace(p) && !p.Contains("spell", StringComparison.OrdinalIgnoreCase));
     }
 }

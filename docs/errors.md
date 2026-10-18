@@ -23,6 +23,9 @@ the covering test. Search the code string to land on all of them.
 | `party.not_found` | NotFound | 404 | No party with that id exists, or it has expired. | `src/DungeonForge.Api/Errors/PartyErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/GetPartyStateErrorTests.cs#UnknownParty_Returns404Problem`, `tests/DungeonForge.Tests/Features/Parties/UnlockTurnErrorTests.cs#UnknownParty_Returns404Problem_NamingThePartyAndTheOperation` |
 | `party.player_unknown` | Validation | 400 | No active player with that name. | `src/DungeonForge.Api/Errors/PartyErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/ExtractRunErrorTests.cs#UnknownPlayer_Returns400Problem_WithTheMessageUnderPlayerName` |
 | `request.malformed` | Validation | 400 | The request body is missing or is not valid JSON for this endpoint. | `src/DungeonForge.Api/Errors/PipelineErrors.cs` | `tests/DungeonForge.Tests/Infrastructure/UnexpectedErrorTests.cs#MalformedBody_Returns400Problem_WithTheMessageUnderErrorsBody` |
+| `setup.already_answered` | Conflict | 409 | That player has already answered the opening question. | `src/DungeonForge.Api/Errors/SetupErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/SetupTests.cs#AnsweringTwice_Returns409` |
+| `setup.not_in_setup` | Conflict | 409 | This party is not painting an opening scene. | `src/DungeonForge.Api/Errors/SetupErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/SetupTests.cs#PartyWithoutSetup_RejectsAnswers` |
+| `setup.pending` | Conflict | 409 | The party is still painting the opening scene; every player must answer first. | `src/DungeonForge.Api/Errors/SetupErrors.cs` | `tests/DungeonForge.Tests/Features/Parties/SetupTests.cs#Explore_IsBlocked_UntilEveryoneAnswers` |
 | `social.already_replied` | Conflict | 409 | You already answered that whisper. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
 | `social.ask_cooldown` | Conflict | 429 | Too soon; let the last whisper settle. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#AskingAgainTooSoon_IsRateLimited_UntilTheCooldownPasses` |
 | `social.ask_not_found` | NotFound | 404 | That whisper has faded or never existed. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
@@ -77,6 +80,7 @@ The `operation` of an error or coded log event, and the folder of the slice that
 | `Command:SubmitNarration` | `Features/Parties/ExploreDungeon` |
 | `Command:SubmitPeerAnswer` | `Features/Social/Peers/SubmitPeerAnswer` |
 | `Command:SubmitSeed` | `Features/Social/Seed/SubmitSeed` |
+| `Command:SubmitSetup` | `Features/Parties/SubmitSetup` |
 | `Command:UnlockTurn` | `Features/Parties/UnlockTurn` |
 | `Hub:JoinParty` | `Features/Parties/Realtime` |
 | `Hub:RegisterPlayer` | `Features/Parties/Realtime` |
@@ -86,6 +90,7 @@ The `operation` of an error or coded log event, and the folder of the slice that
 | `Query:GetPartyState` | `Features/Parties/GetPartyState` |
 | `Query:GetPeerPrompt` | `Features/Social/Peers/GetPeerPrompt` |
 | `Query:GetScenario` | `Features/Parties/ExploreDungeon` |
+| `Query:GetSetup` | `Features/Parties/GetSetup` |
 | `Query:JoinByCode` | `Features/Parties/JoinByCode` |
 
 ## Log events

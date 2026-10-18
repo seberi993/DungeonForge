@@ -104,29 +104,11 @@ public class SocialPanelTests : TestContext
     }
 
     [Fact]
-    public void Gifts_ShowFlavorAndAHint_NeverANumber_AndRecoveringOnesCannotBePicked()
+    public void Gifts_AreNotShown_EvenWhenTheServerDealsThem()
     {
         var cut = Render(MeJson(abilities: $"[{Gift},{Tired}]"));
 
-        var items = cut.FindAll(".ability").ToList();
-        items.Should().HaveCount(2);
-        items[0].TextContent.Should().Contain("Bulwark").And.Contain("A wall of will.").And.Contain("Turns blows aside");
-        items[1].QuerySelector(".ability-pick")!.HasAttribute("disabled").Should().BeTrue();
-        items[1].TextContent.Should().Contain("Recovering");
-        cut.Find("#abilities").TextContent.Should().NotMatchRegex("[0-9]");
-    }
-
-    [Fact]
-    public void PickingAGift_SelectsItForTheTurn_AndPickingItAgainClearsIt()
-    {
-        var cut = Render(MeJson(abilities: $"[{Gift}]"));
-
-        cut.Find(".ability-pick").Click();
-        _session.SelectedAbilityId.Should().Be("ab_1");
-        cut.Find(".ability").ClassList.Should().Contain("chosen");
-
-        cut.Find(".ability-pick").Click();
-        _session.SelectedAbilityId.Should().BeNull();
+        cut.FindAll(".ability, #abilities").Should().BeEmpty();
     }
 
     [Fact]

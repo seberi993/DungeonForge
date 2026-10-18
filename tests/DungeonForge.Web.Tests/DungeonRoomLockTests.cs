@@ -31,30 +31,6 @@ public class DungeonRoomLockTests : DungeonRoomTestBase
     }
 
     [Fact]
-    public void Mana_StartsFull_SpendsOnSpellLockIn_AndRefundsOnUnlock()
-    {
-        var calls = 0;
-        var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () =>
-            calls++ == 0
-                ? LockedPromptJson()
-                : $$"""{"partyId":"{{Id}}","lockStatus":[{"name":"Conan","lockedIn":false},{"name":"Merlin","lockedIn":false}]}""")
-        {
-            SpellsBody = """[{"name":"Smite","classId":"warrior","element":"holy","manaCost":5,"description":"Holy blow."}]"""
-        };
-        var cut = RenderWithScenario(handler);
-        var max = ManaRules.MaxFor(CharacterClass.Warrior);
-        cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be(max.ToString());
-        cut.WaitForState(() => _session.HasSpells);
-        cut.Find("#action-text").Input("I cast Smite on the troll");
-
-        cut.Find("button#lock-in").Click();
-
-        cut.WaitForAssertion(() => cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be((max - 5).ToString()));
-        cut.Find("button#unlock-turn").Click();
-        cut.WaitForAssertion(() => cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be(max.ToString()));
-    }
-
-    [Fact]
     public void Unlock_PostsMemberId_ReenablesLockIn_AndUpdatesStatus()
     {
         var calls = 0;

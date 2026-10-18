@@ -5,7 +5,7 @@
 @inject IDungeonHubClient Hub
 @implements IDisposable
 
-@* The social game in one panel: the door's question, teammate micro-prompts and your gifts, plus the whisper, settings and
+@* The social game in one panel: the door's question, teammate micro-prompts and plus the whisper, settings and
    debrief cards. It renders nothing when the server has the social game switched off (every call answers 404), so it can be
    removed from the room without touching anything else. Only flavor is shown while the run lasts: tags and words, no numbers. *@
 @if (_me is { } me)
@@ -41,23 +41,6 @@
                     }
                 </div>
             </div>
-        }
-
-        @if (me.Abilities.Count > 0)
-        {
-            <ul id="abilities" class="abilities" aria-label="Your gifts">
-                @foreach (var ability in me.Abilities)
-                {
-                    var chosen = Session.SelectedAbilityId == ability.Id;
-                    <li class="ability @(chosen ? "chosen" : "") @(ability.Ready ? "" : "recovering")">
-                        <button class="ability-pick" disabled="@(!ability.Ready)" aria-pressed="@chosen" @onclick="() => ToggleAbility(ability)">
-                            <strong class="ability-name">@ability.Name</strong>
-                            <span class="ability-flavor">@ability.Flavor</span>
-                            <span class="ability-hint">@(ability.Ready ? ability.Hint : "Recovering...")</span>
-                        </button>
-                    </li>
-                }
-            </ul>
         }
 
         <AsksCard Me="me" OnChanged="ReloadAsync" />
@@ -166,9 +149,6 @@
 
     private Task AnswerPeerAsync(PeerPromptDto prompt, string choice) => RunAsync(async () =>
         Failure(await Api.SubmitPeerAnswerAsync(Session.PartyId, Session.PlayerName, prompt.PromptId, choice)));
-
-    private void ToggleAbility(AbilityDto ability) =>
-        Session.SelectedAbilityId = Session.SelectedAbilityId == ability.Id ? null : ability.Id;
 
     private static string Label(string choice) => choice switch
     {

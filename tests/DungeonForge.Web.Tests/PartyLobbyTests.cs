@@ -30,7 +30,7 @@ public class PartyLobbyTests : TestContext
     }
 
     [Fact]
-    public void Create_PostsRosterRowsWithChosenClasses()
+    public void Create_PostsRosterRows_WithNoClassPicker_AndAsksToPaintTheScene()
     {
         var handler = new FakeHandler(HttpStatusCode.Created,
             $$"""{"partyId":"{{Id}}","name":"Heroes","members":[],"createdAt":"2026-01-01T00:00:00+00:00"}""");
@@ -40,11 +40,11 @@ public class PartyLobbyTests : TestContext
         cut.Find("input#member-name-0").Change("Conan");
         cut.Find("button#add-member").Click();
         cut.Find("input#member-name-1").Change("Merlin");
-        cut.Find("select#member-class-1").Change("Mage");
         cut.Find("button#create-party").Click();
 
         cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
-        handler.LastRequestBody.Should().Contain("\"members\":[{\"name\":\"Conan\",\"class\":\"warrior\"},{\"name\":\"Merlin\",\"class\":\"mage\"}]");
+        handler.LastRequestBody.Should().Contain("\"name\":\"Conan\"").And.Contain("\"name\":\"Merlin\"").And.Contain("\"paintScene\":true").And.NotContain("\"class\":\"");
+        cut.FindAll("select").Should().BeEmpty();
     }
 
     [Fact]
@@ -113,14 +113,14 @@ public class PartyLobbyTests : TestContext
         cut.Find("input#join-id").Change(Id.ToString());
         cut.Find("button#join-party").Click();
 
-        cut.WaitForAssertion(() => cut.Find("#join-members").TextContent.Should().Contain("Conan").And.Contain("Warrior"));
+        cut.WaitForAssertion(() => cut.Find("#join-members").TextContent.Should().Contain("Conan").And.NotContain("Warrior"));
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be($"/api/parties/{Id}");
         new Uri(Nav.Uri).AbsolutePath.Should().Be("/");
         _session.HasParty.Should().BeFalse();
     }
 
     [Fact]
-    public void Join_Confirm_PostsChosenNameAndClass_AndRemembersMyHero()
+    public void Join_Confirm_PostsChosenName_AndRemembersMyHero()
     {
         var joined = false;
         var handler = new FakeHandler(HttpStatusCode.OK, bodyFactory: () => joined
@@ -135,16 +135,14 @@ public class PartyLobbyTests : TestContext
 
         joined = true;
         cut.Find("input#join-name").Change("Zed");
-        cut.Find("select#join-class").Change("Mage");
         cut.Find("button#confirm-join").Click();
 
         cut.WaitForAssertion(() => Nav.Uri.Should().EndWith("/dungeon"));
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/api/parties/by-code/K7F2-9QXM/join");
-        handler.LastRequestBody.Should().Be("""{"name":"Zed","class":"mage"}""");
+        handler.LastRequestBody.Should().Contain("\"name\":\"Zed\"").And.NotContain("\"class\":\"");
         _session.PartyId.Should().Be(Id);
         _session.InviteCode.Should().Be("K7F2-9QXM");
         _session.PlayerName.Should().Be("Zed");
-        _session.PlayerClass.Should().Be(DungeonForge.Web.Models.CharacterClass.Mage);
     }
 
     [Fact]

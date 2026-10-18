@@ -124,11 +124,16 @@ public sealed class TurnResolver(
         // that is awake (or just woken by the floor's last room) is always the next room.
         RoomType? nextRoom = null;
         var floorCleared = false;
+        foreach (var action in discussion)
+        {
+            party.NoteStory(action.Text);
+        }
+
         if (!party.IsPartyDefeated)
         {
             var progress = party.AdvanceProgress(pending.Room, bossDamage);
             floorCleared = progress.FloorCleared;
-            nextRoom = progress.BossNext ? RoomType.Boss : RoomRules.Roll(roller);
+            nextRoom = progress.BossNext ? RoomType.Boss : RoomRules.Roll(roller, party.StoryLean);
             party.TryBeginScenario(nextRoom.Value);
         }
 
@@ -152,6 +157,9 @@ public sealed class TurnResolver(
             Roster = ExploreResponses.Roster(party),
             Motifs = vocabulary.Pick(),
             Treachery = covert.Log,
+            SetupAnswers = party.SetupAnswers,
+            StoryTags = party.StoryLean.Describe(),
+            RecentOutcomes = party.RecentOutcomes,
         };
 
         return TurnResolution.Resolved(new ExploreOutcome(response), context, success, PartyMapping.ToResponse(party.Snapshot()));

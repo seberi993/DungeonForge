@@ -19,13 +19,13 @@ public enum CharacterClass
     Bard
 }
 
-public sealed record MemberRequest(string Name, CharacterClass Class);
+public sealed record MemberRequest(string Name, CharacterClass? Class = null);
 
-public sealed record CreatePartyRequest(string Name, IReadOnlyList<MemberRequest> Members);
+public sealed record CreatePartyRequest(string Name, IReadOnlyList<MemberRequest> Members, bool PaintScene = true);
 
 public sealed record MemberDto(string Name, CharacterClass Class, int Hp, int MaxHp, bool IsDefeated);
 
-public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<MemberDto> Members, DateTimeOffset CreatedAt, string InviteCode = "");
+public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<MemberDto> Members, DateTimeOffset CreatedAt, string InviteCode = "", bool SetupPending = false);
 
 public sealed record ExploreResponse(
     Guid PartyId,
@@ -96,7 +96,9 @@ public sealed record PartyStateDto(
     int Floor = 1,
     int RoomsCleared = 0,
     int BossHp = 0,
-    int BossMaxHp = 0);
+    int BossMaxHp = 0,
+    int SetupAnswered = 0,
+    bool SetupPending = false);
 
 public sealed record LockStatusDto(string Name, bool LockedIn);
 
@@ -104,24 +106,20 @@ public sealed record LockStatusDto(string Name, bool LockedIn);
 public sealed record PrivateMessageDto(string Kind, string Text);
 public sealed record ChaosEventDto(string Kind, string Text);
 
-public sealed record JoinPartyRequest(string Name, CharacterClass Class);
+public sealed record JoinPartyRequest(string Name, CharacterClass? Class = null);
+
+// The DM's opening question for this player, and how many of the party have painted the scene so far.
+public sealed record SetupDto(Guid PartyId, string Question, bool Answered, int AnsweredCount, int Total, bool Pending);
+
+public sealed record SubmitSetupRequest(string PlayerName, string Text, bool ForceStart = false);
+
+public sealed record SubmitSetupResponse(Guid PartyId, int AnsweredCount, int Total, bool Pending);
 
 public sealed record JoinPartyResponse(string MemberName, PartyStateDto State);
 
 public sealed record UnlockRequest(Guid MemberId);
 
 public sealed record UnlockResponse(Guid PartyId, IReadOnlyList<LockStatusDto> LockStatus);
-
-public enum ElementType
-{
-    Physical,
-    Fire,
-    Ice,
-    Holy,
-    Unholy
-}
-
-public sealed record SpellDto(string Name, CharacterClass ClassId, ElementType Element, int ManaCost, string Description);
 
 // The run so far, tallied client-side from resolved turns for the end-of-run screen. MVP = most passed rolls.
 public sealed record RunSummary(

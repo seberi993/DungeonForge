@@ -27,29 +27,8 @@ public static class ActionSuggestions
         "Whisper sweet nothings to the treasure",
     ];
 
-    public static readonly IReadOnlyList<string> SpellTemplates =
-    [
-        "Cast {0} at something that definitely didn't deserve it",
-        "Use {0} and hope for the best, loudly",
-        "Unleash {0} just to see everyone's faces",
-        "Try {0} on the weirdest thing in the room",
-    ];
+    public static string Pick(Random rng) => Pool[rng.Next(Pool.Count)];
 
-    public const string GenericSpell = "Use a spell on whatever looks most offended by it";
-
-    // Roughly one in three picks nudges the player toward their spellbook.
-    public static string Pick(Random rng, IReadOnlyList<string>? spells = null)
-    {
-        if (rng.Next(3) == 0)
-        {
-            if (spells is { Count: > 0 })
-                return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                    SpellTemplates[rng.Next(SpellTemplates.Count)], spells[rng.Next(spells.Count)]);
-            return GenericSpell;
-        }
-
-        return Pool[rng.Next(Pool.Count)];
-    }
 
     // A bright hue (0-359) so each suggestion shows up in its own colour.
     public static int PickHue(Random rng) => rng.Next(360);

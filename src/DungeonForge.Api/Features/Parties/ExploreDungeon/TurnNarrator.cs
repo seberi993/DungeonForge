@@ -107,6 +107,11 @@ public sealed class TurnNarrator(
             RecoverStuckScenario(partyId, turn, context.NextRoom, narration);
         }
 
+        if (parties.TryGet(partyId, out var told))
+        {
+            told.RecordOutcome(narration.Outcome);
+        }
+
         var ready = new NarrationReady(
             partyId, turn, narration.Outcome, context.NextRoom is null ? null : narration.Next, context.NextRoom,
             narration.NextScene.Length == 0 ? null : narration.NextScene, source);

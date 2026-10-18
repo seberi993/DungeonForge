@@ -42,16 +42,16 @@ public class VitalsComponentTests : TestContext
         [new("Conan", CharacterClass.Warrior, 30, 30, false), new("Merlin", CharacterClass.Mage, 0, 16, true)];
 
     [Fact]
-    public void PartyPanel_ShowsEachHeroWithHp_AndManaOnlyForMe()
+    public void PartyPanel_ShowsEachHeroWithHp_AndNoClassOrMana()
     {
         var cut = RenderComponent<PartyPanel>(p => p
-            .Add(c => c.Members, Heroes).Add(c => c.MyName, "Conan").Add(c => c.Mana, 12).Add(c => c.MaxMana, 20));
+            .Add(c => c.Members, Heroes).Add(c => c.MyName, "Conan"));
 
         cut.FindAll("#members li").Should().HaveCount(2);
         cut.Find("#member-0").TextContent.Should().Contain("Conan").And.Contain("30/30");
         cut.Find("#member-0").ClassList.Should().Contain("me");
-        cut.Find("#member-0 .mana-bar").GetAttribute("aria-valuenow").Should().Be("12");
-        cut.FindAll("#member-1 .mana-bar").Should().BeEmpty();
+        cut.FindAll(".mana-bar, .member-class, .member-icon").Should().BeEmpty();
+        cut.Find("#member-0").TextContent.Should().NotContain("Warrior");
     }
 
     [Fact]

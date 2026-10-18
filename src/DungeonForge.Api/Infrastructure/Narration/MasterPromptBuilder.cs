@@ -26,7 +26,7 @@ public static class MasterPromptBuilder
 
     // First-turn scenario request.
     public static string BuildScenario(NarrationContext ctx) =>
-        Header(ctx, "Scene", ctx.Room) + Motifs(ctx) + RunFlavor.Describe(ctx.PartyName, ctx.Turn);
+        Header(ctx, "Scene", ctx.Room) + Motifs(ctx) + RunFlavor.Describe(ctx.PartyName, ctx.Turn) + PlayerCanon(ctx, ScenarioCanonBudget) + Leanings(ctx);
 
     // Resolve-turn request: result of the party's combined plan, the room it was for, and the room that follows.
     public static string Build(bool success, NarrationContext ctx)
@@ -53,6 +53,7 @@ public static class MasterPromptBuilder
 
         AppendRoster(sb, ctx.Roster);
         AppendTreachery(sb, ctx.Treachery);
+        sb.Append(PlayerCanon(ctx, TurnCanonBudget)).Append(Leanings(ctx)).Append(RecentOutcomes(ctx));
 
         var first = true;
         foreach (var action in ctx.Actions)
@@ -81,6 +82,42 @@ public static class MasterPromptBuilder
     public const int MaxMotifLength = 60;
     public const int MaxTreacheryEntries = 4;
     public const int MaxTreacheryLength = 160;
+
+    public const int ScenarioCanonBudget = 1200;
+    public const int TurnCanonBudget = 500;
+    public const int MaxRecentOutcomes = 3;
+    public const int MaxRecentOutcomeLength = 120;
+
+    // What the players painted in the opening scene: canon the DM builds on for the whole run, trimmed to a budget.
+    private static string PlayerCanon(NarrationContext ctx, int budget)
+    {
+        var sb = new StringBuilder();
+        foreach (var answer in ctx.SetupAnswers)
+        {
+            var text = NarrationText.Clean(answer.Text, Limits.MaxSetupAnswerLength);
+            if (text.Length == 0) continue;
+
+            var entry = $"{NarrationText.Sanitize(answer.Name, MaxNameLength, NeutralMember)}: {text}";
+            if (sb.Length + entry.Length + 3 > budget) break;
+
+            sb.Append(sb.Length == 0 ? string.Empty : " | ").Append(entry);
+        }
+
+        return sb.Length == 0 ? string.Empty : $" The players painted this world in their own words (canon; build on it, never contradict it): {sb}.";
+    }
+
+    // The DM's last few lines, so the next one does not echo their wording, imagery or opening words.
+    private static string RecentOutcomes(NarrationContext ctx)
+    {
+        var recent = ctx.RecentOutcomes.TakeLast(MaxRecentOutcomes).Select(o => NarrationText.Clean(o, MaxRecentOutcomeLength)).Where(o => o.Length > 0).ToArray();
+        return recent.Length == 0 ? string.Empty : $" Already told (do not repeat their words or images): {string.Join(" | ", recent)}.";
+    }
+
+    private static string Leanings(NarrationContext ctx)
+    {
+        var tags = ctx.StoryTags.Take(3).Select(t => NarrationText.Clean(t, MaxMotifLength)).Where(t => t.Length > 0).ToArray();
+        return tags.Length == 0 ? string.Empty : $" The party keeps turning out to be: {string.Join("; ", tags)}. Tempt or test that.";
+    }
 
     // Injected set dressing (chosen in C# with variance) so the model stops reaching for stock dungeon scenery.
     private static string Motifs(NarrationContext ctx)

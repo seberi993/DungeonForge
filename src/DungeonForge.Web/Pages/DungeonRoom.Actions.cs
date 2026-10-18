@@ -11,21 +11,9 @@ public partial class DungeonRoom
 {
     private void Reroll()
     {
-        _suggestion = ActionSuggestions.Pick(_rng, _spellNames);
+        _suggestion = ActionSuggestions.Pick(_rng);
     }
 
-    private void OnSpellsLoaded(IReadOnlyList<string> names) => _spellNames = names;
-
-    // Spell costs drive the mana estimate, so they load up front rather than when the spellbook first opens.
-    private async Task LoadSpellsAsync()
-    {
-        try
-        {
-            var result = await Api.GetSpellsAsync(Session.PlayerClass);
-            if (!_disposed && result.IsSuccess) Session.SetSpells(result.Value!);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or ObjectDisposedException) { }
-    }
 
     private void StartSuggestionTimer() =>
         _suggestionTimer = new Timer(_ => Dispatch(() =>
@@ -55,7 +43,6 @@ public partial class DungeonRoom
     }
 
     private const int MaxActionLength = 200;
-    private bool _spellbookOpen;
     private int? _lockedTurn;
 
     // The server's lock status is the source of truth, so a reload or reconnect still shows this player as locked.
@@ -96,7 +83,6 @@ public partial class DungeonRoom
             {
                 case ApiStatus.Success:
                     _lockedTurn = null;
-                    Session.ReleaseMana();
                     Session.ApplyLockStatus(Session.PartyId, result.Value!.LockStatus);
                     break;
                 case ApiStatus.NotFound:
@@ -145,7 +131,6 @@ public partial class DungeonRoom
                         if (locking)
                         {
                             _lockedTurn = lockedAtTurn;
-                            Session.ReserveMana(actions![0].Text);
                         }
                         if (Session.ApplyPrompt(response)) WatchNarration();
                     }
@@ -154,7 +139,6 @@ public partial class DungeonRoom
                     if (locking)
                     {
                         _lockedTurn = Session.Turn;
-                        Session.ReserveMana(actions![0].Text);
                     }
                     break;
                 case ApiStatus.Conflict:

@@ -23,8 +23,15 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<PartyStateDto>> GetPartyByCodeAsync(string inviteCode, CancellationToken ct = default) =>
         SendAsync<PartyStateDto>(() => http.GetAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}", ct), ct);
 
-    public Task<ApiResult<JoinPartyResponse>> JoinPartyAsync(string inviteCode, string name, CharacterClass characterClass, CancellationToken ct = default) =>
-        SendAsync<JoinPartyResponse>(() => http.PostAsJsonAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}/join", new JoinPartyRequest(name, characterClass), Json, ct), ct);
+    public Task<ApiResult<JoinPartyResponse>> JoinPartyAsync(string inviteCode, string name, CancellationToken ct = default) =>
+        SendAsync<JoinPartyResponse>(() => http.PostAsJsonAsync($"/api/parties/by-code/{Uri.EscapeDataString(inviteCode.Trim())}/join", new JoinPartyRequest(name), Json, ct), ct);
+
+    // The DM's opening question for this player (the party paints the first scene before any room exists).
+    public Task<ApiResult<SetupDto>> GetSetupAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
+        SendAsync<SetupDto>(() => http.GetAsync($"/api/parties/{partyId}/setup?playerName={Uri.EscapeDataString(playerName)}", ct), ct);
+
+    public Task<ApiResult<SubmitSetupResponse>> SubmitSetupAsync(Guid partyId, string playerName, string text, bool forceStart = false, CancellationToken ct = default) =>
+        SendAsync<SubmitSetupResponse>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/setup", new SubmitSetupRequest(playerName, text, forceStart), Json, ct), ct);
 
     // No actions = request (or re-read) the pending scenario, sent without a body.
     // Actions + submitOnly = share input with the party; actions alone = resolve the turn.
@@ -66,9 +73,6 @@ public sealed class DungeonApiClient(HttpClient http)
 
     public Task<ApiResult<DebriefDto>> GetDebriefAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
         SendAsync<DebriefDto>(() => http.GetAsync($"/api/parties/{partyId}/social/debrief?playerName={Uri.EscapeDataString(playerName)}", ct), ct);
-
-    public Task<ApiResult<IReadOnlyList<SpellDto>>> GetSpellsAsync(CharacterClass characterClass, CancellationToken ct = default) =>
-        SendAsync<IReadOnlyList<SpellDto>>(() => http.GetAsync($"/api/classes/{characterClass.ToString().ToLowerInvariant()}/spells", ct), ct);
 
     public Task<ApiResult<HighScoresResponse>> GetHighScoresAsync(int limit = 10, CancellationToken ct = default) =>
         SendAsync<HighScoresResponse>(() => http.GetAsync($"/api/scores?limit={limit}", ct), ct);

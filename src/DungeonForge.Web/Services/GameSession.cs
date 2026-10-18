@@ -39,6 +39,7 @@ public sealed partial class GameSession
         InviteCode = party.InviteCode;
         Name = party.Name;
         _members = [.. party.Members];
+        SetupPending = party.SetupPending;
     }
 
     public string? Scenario { get; private set; }
@@ -60,8 +61,6 @@ public sealed partial class GameSession
     {
         if (result.PartyId != PartyId || result.Turn <= Turn) return false;
         Turn = result.Turn;
-        _reservedMana = 0;
-        _mana = Math.Min(MaxMana, Mana + ManaRules.RegenPerTurn);
         Tally(result);
         var finishedScenario = Scenario;
         var finishedScene = Scene;
@@ -125,6 +124,8 @@ public sealed partial class GameSession
         ApplyDepth(party);
         IsDefeated = party.IsPartyDefeated;
         LockStatus = party.LockStatus is null ? [] : [.. party.LockStatus];
+        SetupPending = party.SetupPending;
+        SetupAnswered = party.SetupAnswered;
     }
 
     private void ApplyDepth(PartyStateDto party)
@@ -138,7 +139,8 @@ public sealed partial class GameSession
     public bool ApplyPartyState(PartyStateDto party)
     {
         if (party.PartyId != PartyId || party.Turn < Turn) return false;
-        if (party.Turn == Turn) return ApplyRoster(party);
+        var setupMoved = ApplySetup(party);
+        if (party.Turn == Turn) return ApplyRoster(party) || setupMoved;
         _members = [.. party.Members];
         Gold = party.Gold;
         Turn = party.Turn;
@@ -186,9 +188,7 @@ public sealed partial class GameSession
         Floor = 1;
         BossHp = BossMaxHp = 0;
         IsDefeated = false;
-        _mana = null;
-        _reservedMana = 0;
-        _spells = [];
+        ClearSetup();
         _passes.Clear();
         _roomsWon = _roomsLost = _crits = _fumbles = _worstHit = 0;
         _worstHitName = null;

@@ -17,10 +17,16 @@ public static class NarrationPrompts
         TurnNarrationParser.WhisperFormat + " (under 20 words), told to one party member from the roster about another, " +
         "hinting they skimmed gold, lied or plan a betrayal. Rumors only; no numbers or rules. ";
 
+    // The players tell the story; the DM only throws challenges at it. Shared by every system prompt.
+    public const string StoryRule =
+        "The players' own words are canon: continue their story, reuse their places, names and details, and let what they " +
+        "said and did bend what comes next. Every scenario poses one concrete challenge that tests what they claimed to want or fear. " +
+        "Vary your openings and imagery; never start two lines alike. ";
+
     private static readonly string Persona =
         "You are the narrator of a dark-fantasy dungeon crawl: a sadistic gossiper who relishes the party's suffering, " +
         "biting, contemptuous and never kind. Feed their distrust of one another with insinuation and rumor, and push " +
-        "them toward suspicion and backstabbing. " + ConcisenessRule + TropeBan + "Prefer unsettling architecture and flesh-and-metal imagery over stock dungeon scenery. ";
+        "them toward suspicion and backstabbing. " + StoryRule + ConcisenessRule + TropeBan + "Prefer unsettling architecture and flesh-and-metal imagery over stock dungeon scenery. ";
 
     // Flavor only: the mockery never changes the C#-decided result. Insults aim at choices and competence, never at who people are.
     private const string Snark =

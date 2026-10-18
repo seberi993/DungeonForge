@@ -31,6 +31,15 @@ public sealed record NarrationContext(RoomType Room, string PartyName, int Turn,
     public IReadOnlyList<RosterEntry> Roster { get; init; } = [];
     public IReadOnlyList<string> Motifs { get; init; } = [];
     public IReadOnlyList<string> Treachery { get; init; } = [];
+
+    // What each player painted in the opening scene (free text, canon for the whole run). Empty when the party skipped setup.
+    public IReadOnlyList<SetupAnswer> SetupAnswers { get; init; } = [];
+
+    // The last few outcomes the DM already told, so it does not reuse their wording or imagery.
+    public IReadOnlyList<string> RecentOutcomes { get; init; } = [];
+
+    // What the party's own words keep leaning toward (e.g. "greedy for loot"); the DM tempts or tests them with it.
+    public IReadOnlyList<string> StoryTags { get; init; } = [];
 }
 
 // Outcome of the resolved turn plus the next scenario, produced by ONE model call. Next is empty when no next room exists.
