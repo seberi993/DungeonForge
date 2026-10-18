@@ -21,7 +21,9 @@ public sealed record MySocialDto(
     int AskTokens,
     bool AsksAvailable,
     IReadOnlyList<InboxAskDto> Inbox,
-    IReadOnlyList<SentAskDto> Sent);
+    IReadOnlyList<SentAskDto> Sent,
+    bool OptedOut = false,
+    bool DebriefOptIn = false);
 
 public sealed record PeerPromptDto(string PromptId, string Question, string About, IReadOnlyList<string> Options, int Remaining);
 
@@ -33,11 +35,35 @@ public sealed record FinalizeRequest(string PlayerName);
 
 public sealed record PeerAnswerRequest(string PlayerName, string PromptId, string Choice);
 
-public sealed record SendAskRequest(string From, IReadOnlyList<string> To, string Text, string Kind);
+public sealed record SendAskRequest(string From, IReadOnlyList<string> To, string Text, string Kind, bool Compel = false);
+
+public sealed record RevealAskRequest(string From);
+
+public sealed record PreferencesRequest(string PlayerName, bool? OptOut = null, bool? DebriefOptIn = null);
 
 public sealed record ReplyAskRequest(string From, string Choice, string? Text);
 
 public sealed record AcceptedDto(bool Accepted = true);
 
+public sealed record PreferencesDto(bool OptOut, bool DebriefOptIn);
+
 // Sent beside the actions, never inside them: the choice of gift stays private to the server.
 public sealed record AbilityIntent(Guid MemberId, string AbilityId);
+
+// The post-run debrief: exact numbers, shown only when the run is over (and only the player's own, when they opted in).
+public sealed record DebriefAbilityDto(string Name, string Archetype, string Rarity, int Budget, int Cooldown, IReadOnlyDictionary<string, int> Effects);
+
+public sealed record DebriefMomentDto(int Turn, string Type, string Verdict, string Rule, string Rationale, bool Model);
+
+public sealed record DebriefDto(
+    string PlayerName,
+    bool OptedIn,
+    IReadOnlyDictionary<string, int>? Axes,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Tone,
+    int? Trust,
+    int? Menace,
+    int? Credibility,
+    IReadOnlyList<DebriefAbilityDto>? Abilities,
+    IReadOnlyList<DebriefMomentDto>? Moments,
+    IReadOnlyDictionary<string, int> Run);

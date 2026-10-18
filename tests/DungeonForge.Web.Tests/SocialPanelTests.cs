@@ -207,6 +207,6 @@ public class SocialPanelTests : TestContext
 
         cut.Find("#ask-send").Click();
 
-        cut.WaitForAssertion(() => cut.Find("#social-error").TextContent.Should().NotBeNullOrWhiteSpace());
+        cut.WaitForAssertion(() => cut.Find("#asks-error").TextContent.Should().NotBeNullOrWhiteSpace());
     }
 }

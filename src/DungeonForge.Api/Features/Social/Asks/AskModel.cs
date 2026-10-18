@@ -28,7 +28,16 @@ public sealed class AskThread(string id, string from, IReadOnlyList<string> to, 
     public static readonly TimeSpan SenderCooldown = TimeSpan.FromSeconds(45);
     public static readonly TimeSpan PairCooldown = TimeSpan.FromSeconds(90);
 
+    // A near-copy of an earlier whisper from the same sender inside this window is refused.
+    public static readonly TimeSpan DuplicateWindow = TimeSpan.FromMinutes(5);
+
     public string Id { get; } = id;
+
+    // The asker pressed the recipients (cost them credibility): they may only answer honestly or dodge.
+    public bool Compelled { get; init; }
+
+    // The asker laid this whisper and its answers bare to the whole party.
+    public bool Revealed { get; set; }
 
     public string From { get; } = from;
 
@@ -57,4 +66,23 @@ public sealed class AskThread(string id, string from, IReadOnlyList<string> to, 
         Text = string.Empty;
         Replies.Clear();
     }
+}
+
+public static class AskText
+{
+    // Word-set overlap: "who has the key?" and "Who has the KEY" are the same whisper; reordered filler is too.
+    public static bool Similar(string a, string b)
+    {
+        var x = Words(a);
+        var y = Words(b);
+        if (x.Count == 0 || y.Count == 0)
+        {
+            return false;
+        }
+
+        return x.Intersect(y).Count() / (double)x.Union(y).Count() > 0.8;
+    }
+
+    private static HashSet<string> Words(string text) =>
+        [.. text.ToLowerInvariant().Split([' ', '.', ',', '!', '?', ';', ':', '"', '\''], StringSplitOptions.RemoveEmptyEntries)];
 }

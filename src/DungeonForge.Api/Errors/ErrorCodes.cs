@@ -70,6 +70,12 @@ public static class ErrorCodes
         public const string AskNotFound = "social.ask_not_found";
         public const string NotRecipient = "social.not_recipient";
         public const string AlreadyReplied = "social.already_replied";
+        public const string BluffForbidden = "social.bluff_forbidden";
+        public const string NotEnoughCredibility = "social.not_enough_credibility";
+        public const string NotAsker = "social.not_asker";
+        public const string NothingToReveal = "social.nothing_to_reveal";
+        public const string DuplicateAsk = "social.duplicate_ask";
+        public const string RunInProgress = "social.run_in_progress";
     }
 
 

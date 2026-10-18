@@ -44,6 +44,11 @@ public sealed class SubmitSeedHandler(
         var parse = (await parser.ParseAsync(question, answer, ct)).Sanitized();
         if (parse.IsLowEffort)
         {
+            lock (party.SyncRoot)
+            {
+                party.Social().Count(SocialMetrics.AbuseFlags);
+            }
+
             return SocialErrors.SeedLowEffort(Operation, id);
         }
 
@@ -72,6 +77,8 @@ public sealed class SubmitSeedHandler(
             }
 
             profile.Seeded = true;
+            social.Count(SocialMetrics.Seeds);
+            if (copied || parse.IsInjection) social.Count(SocialMetrics.AbuseFlags);
             profile.SeedAnswerHash = hash;
 
             finalizedNow = lifecycle.TryFinalize(party, force: false);

@@ -148,7 +148,7 @@ public class AskSliceTests(WebApplicationFactory<Program> factory) : IClassFixtu
         var id = await h.PartyAsync();
         var honest = await SocialHarness.AskIdAsync(await h.AskAsync(id, "Conan", ["Merlin"], "Who has the key?"));
         h.Clock.Advance(TimeSpan.FromSeconds(100));
-        var bluffed = await SocialHarness.AskIdAsync(await h.AskAsync(id, "Conan", ["Lyra"], "Who has the key?"));
+        var bluffed = await SocialHarness.AskIdAsync(await h.AskAsync(id, "Conan", ["Lyra"], "Who is hiding the key?"));
 
         (await h.ReplyAsync(id, honest, "Merlin", "honest", "Dru has it")).EnsureSuccessStatusCode();
         (await h.ReplyAsync(id, bluffed, "Lyra", "bluff", "Dru has it")).EnsureSuccessStatusCode();

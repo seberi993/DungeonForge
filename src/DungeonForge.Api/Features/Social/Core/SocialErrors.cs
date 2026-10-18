@@ -47,6 +47,42 @@ internal static class SocialErrors
     private static readonly ErrorSpec AlreadyRepliedSpec = new(
         ErrorCodes.Social.AlreadyReplied, ErrorKind.Conflict, "You already answered that whisper.");
 
+    private static readonly ErrorSpec BluffForbiddenSpec = new(
+        ErrorCodes.Social.BluffForbidden, ErrorKind.Validation, "You were pressed: answer honestly or dodge.", Field: "choice");
+
+    private static readonly ErrorSpec NotEnoughCredibilitySpec = new(
+        ErrorCodes.Social.NotEnoughCredibility, ErrorKind.Conflict, "Your word is worth too little for that.");
+
+    private static readonly ErrorSpec NotAskerSpec = new(
+        ErrorCodes.Social.NotAsker, ErrorKind.Validation, "Only the one who whispered can do that.",
+        Status: StatusCodes.Status403Forbidden, Field: "playerName");
+
+    private static readonly ErrorSpec NothingToRevealSpec = new(
+        ErrorCodes.Social.NothingToReveal, ErrorKind.Conflict, "There is nothing more to lay bare yet.");
+
+    private static readonly ErrorSpec DuplicateAskSpec = new(
+        ErrorCodes.Social.DuplicateAsk, ErrorKind.Conflict, "You already whispered something very much like that.");
+
+    private static readonly ErrorSpec RunInProgressSpec = new(
+        ErrorCodes.Social.RunInProgress, ErrorKind.Conflict, "The dungeon keeps its secrets until the run is over.");
+
+    public static Error BluffForbidden(string operation, Guid partyId, string name) =>
+        BluffForbiddenSpec.Create(operation, Param.PartyId(partyId), Param.PlayerName(name));
+
+    public static Error NotEnoughCredibility(string operation, Guid partyId, string name) =>
+        NotEnoughCredibilitySpec.Create(operation, Param.PartyId(partyId), Param.PlayerName(name));
+
+    public static Error NotAsker(string operation, Guid partyId, string name) =>
+        NotAskerSpec.Create(operation, Param.PartyId(partyId), Param.PlayerName(name));
+
+    public static Error NothingToReveal(string operation, Guid partyId, string askId) =>
+        NothingToRevealSpec.Create(operation, Param.PartyId(partyId), Param.Code(askId));
+
+    public static Error DuplicateAsk(string operation, Guid partyId, string name) =>
+        DuplicateAskSpec.Create(operation, Param.PartyId(partyId), Param.PlayerName(name));
+
+    public static Error RunInProgress(string operation, Guid partyId) => RunInProgressSpec.Create(operation, Param.PartyId(partyId));
+
     public static Error ModuleDisabled(string operation, Guid partyId) => ModuleDisabledSpec.Create(operation, Param.PartyId(partyId));
 
     public static Error SeedAlreadySubmitted(string operation, Guid partyId, string name) =>

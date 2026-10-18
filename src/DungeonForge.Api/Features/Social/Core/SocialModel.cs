@@ -47,6 +47,9 @@ public sealed class PlayerProfile(string name)
 
     public bool OptedOut { get; set; }
 
+    // Lets the player read their exact hidden profile after the run.
+    public bool DebriefOptIn { get; set; }
+
     public string? SeedAnswerHash { get; set; }
 
     public List<Ability> Abilities { get; } = [];
@@ -101,6 +104,7 @@ public static class SocialEventTypes
     public const string PeerUnanimous = "peer_unanimous";
     public const string AskReply = "ask_reply";
     public const string AskConsensus = "ask_consensus";
+    public const string AskRevealed = "ask_revealed";
 }
 
 public sealed record SocialEvent(

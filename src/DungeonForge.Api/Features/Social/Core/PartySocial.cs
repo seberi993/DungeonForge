@@ -11,6 +11,7 @@ public sealed class PartySocial(ulong runSeed)
 
     private readonly Dictionary<string, PlayerProfile> _profiles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<AuditEntry> _journal = new();
+    private readonly Dictionary<string, int> _counters = new(StringComparer.Ordinal);
     private int _ids;
 
     // Replay handle: every seeded outcome (abilities, prompt picks, noise) derives from it and the purpose string.
@@ -32,12 +33,20 @@ public sealed class PartySocial(ulong runSeed)
     // Set when a consequence changed what everyone sees (HP, gold); delivery then pushes a fresh party snapshot.
     public bool StateChanged { get; set; }
 
+    // Highest floor whose whisper-shards were already handed out (floor 1 is the starting stash).
+    public int RefilledFloor { get; set; } = 1;
+
     // Notices produced under the lock; the handler delivers them to clients once the lock is released.
     public List<SocialNotice> Outbox { get; } = [];
 
     public Dictionary<string, DateTimeOffset> SenderCooldowns { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public Dictionary<(string From, string To), DateTimeOffset> PairCooldowns { get; } = [];
+
+    // Run telemetry: plain counts by name (see SocialMetrics). Server-side only; shown in the opt-in debrief and logged.
+    public IReadOnlyDictionary<string, int> Counters => _counters;
+
+    public void Count(string metric, int by = 1) => _counters[metric] = _counters.GetValueOrDefault(metric) + by;
 
     public IReadOnlyCollection<PlayerProfile> Profiles => _profiles.Values;
 

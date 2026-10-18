@@ -5,9 +5,9 @@
 @inject IDungeonHubClient Hub
 @implements IDisposable
 
-@* The social game in one self-contained panel: the door's question, teammate micro-prompts, your gifts and private whispers.
-   It renders nothing when the server has the social game switched off (every call answers 404), so it can be removed from
-   the room without touching anything else. Only flavor is shown: tags and words, never a number. *@
+@* The social game in one panel: the door's question, teammate micro-prompts and your gifts, plus the whisper, settings and
+   debrief cards. It renders nothing when the server has the social game switched off (every call answers 404), so it can be
+   removed from the room without touching anything else. Only flavor is shown while the run lasts: tags and words, no numbers. *@
 @if (_me is { } me)
 {
     <section id="social" class="social-panel" aria-label="The dungeon's measure of you">
@@ -60,67 +60,14 @@
             </ul>
         }
 
-        @if (me.AsksAvailable)
+        <AsksCard Me="me" OnChanged="ReloadAsync" />
+
+        @if (Session.IsDefeated)
         {
-            <div id="asks" class="social-card">
-                <p class="social-hint">Whisper-shards: <strong id="ask-tokens">@me.AskTokens</strong></p>
-                @if (me.Inbox.Count > 0)
-                {
-                    <ul id="inbox" class="inbox">
-                        @foreach (var ask in me.Inbox)
-                        {
-                            <li class="inbox-ask">
-                                <p><strong>@ask.From</strong> whispers (@ask.Kind): @ask.Text</p>
-                                @if (ask.Replied)
-                                {
-                                    <span class="social-hint">You answered.</span>
-                                }
-                                else
-                                {
-                                    <input class="reply-text" maxlength="80" placeholder="Your answer" value="@ReplyText(ask)" @oninput="e => _replyText[ask.AskId] = e.Value?.ToString() ?? string.Empty" />
-                                    <button class="btn btn-ghost reply-honest" disabled="@_busy" @onclick='() => ReplyAsync(ask, "honest")'>I'll be honest</button>
-                                    <button class="btn btn-ghost reply-dodge" disabled="@_busy" @onclick='() => ReplyAsync(ask, "dodge")'>I'll dodge</button>
-                                    <button class="btn btn-ghost reply-bluff" disabled="@_busy" @onclick='() => ReplyAsync(ask, "bluff")'>I'll bluff</button>
-                                }
-                            </li>
-                        }
-                    </ul>
-                }
-
-                @if (me.Sent.Count > 0)
-                {
-                    <ul id="sent" class="sent">
-                        @foreach (var ask in me.Sent)
-                        {
-                            <li>To @string.Join(", ", ask.To): "@ask.Text"
-                                @foreach (var reply in ask.Replies)
-                                {
-                                    <div class="sent-reply"><strong>@reply.By</strong> @reply.Summary</div>
-                                }
-                            </li>
-                        }
-                    </ul>
-                }
-
-                <details id="ask-composer">
-                    <summary>Whisper to...</summary>
-                    <div class="ask-targets">
-                        @foreach (var other in Session.Members.Where(m => m.Name != Session.PlayerName && !m.IsDefeated))
-                        {
-                            <label class="ask-target"><input type="checkbox" checked="@_askTo.Contains(other.Name)" @onchange="e => ToggleTarget(other.Name, e.Value is true)" /> @other.Name</label>
-                        }
-                    </div>
-                    <select id="ask-kind" @bind="_askKind">
-                        <option value="question">Question</option>
-                        <option value="accusation">Accuse</option>
-                        <option value="offer">Offer</option>
-                        <option value="plea">Plead</option>
-                    </select>
-                    <input id="ask-text" maxlength="140" placeholder="Costs 1 whisper-shard" @bind="_askText" @bind:event="oninput" />
-                    <button id="ask-send" class="btn btn-go" disabled="@(_busy || _askTo.Count == 0 || _askText.Trim().Length == 0 || me.AskTokens < _askTo.Count)" @onclick="SendAskAsync">Whisper</button>
-                </details>
-            </div>
+            <DebriefCard />
         }
+
+        <SocialPreferences Me="me" OnChanged="ReloadAsync" />
 
         @if (_error is not null)
         {
@@ -133,10 +80,6 @@
     private MySocialDto? _me;
     private PeerPromptDto? _prompt;
     private string _seed = "";
-    private string _askKind = "question";
-    private string _askText = "";
-    private readonly HashSet<string> _askTo = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, string> _replyText = [];
     private string? _error;
     private bool _busy;
     private bool _disposed;
@@ -152,6 +95,7 @@
     {
         var mine = await Api.GetMySocialAsync(Session.PartyId, Session.PlayerName);
         if (_disposed) return;
+
         // Anything that is not a full social overview (an error, or some other service's body) means "no social game here".
         if (!mine.IsSuccess || mine.Value is not { Tags: not null, Abilities: not null, Inbox: not null, Sent: not null })
         {
@@ -162,7 +106,7 @@
 
         _me = mine.Value;
         _prompt = null;
-        if (_me!.Seeded)
+        if (_me!.Seeded && !_me.OptedOut)
         {
             var prompt = await Api.GetPeerPromptAsync(Session.PartyId, Session.PlayerName);
             if (!_disposed && prompt.IsSuccess) _prompt = prompt.Value;
@@ -225,32 +169,6 @@
 
     private void ToggleAbility(AbilityDto ability) =>
         Session.SelectedAbilityId = Session.SelectedAbilityId == ability.Id ? null : ability.Id;
-
-    private void ToggleTarget(string name, bool on)
-    {
-        if (on) _askTo.Add(name);
-        else _askTo.Remove(name);
-    }
-
-    private Task SendAskAsync() => RunAsync(async () =>
-    {
-        var result = await Api.SendAskAsync(Session.PartyId, Session.PlayerName, [.. _askTo], _askText.Trim(), _askKind);
-        if (result.IsSuccess)
-        {
-            _askText = "";
-            _askTo.Clear();
-        }
-
-        return Failure(result);
-    });
-
-    private Task ReplyAsync(InboxAskDto ask, string choice) => RunAsync(async () =>
-    {
-        var text = _replyText.GetValueOrDefault(ask.AskId)?.Trim();
-        return Failure(await Api.ReplyAskAsync(Session.PartyId, ask.AskId, Session.PlayerName, choice, string.IsNullOrEmpty(text) ? null : text));
-    });
-
-    private string ReplyText(InboxAskDto ask) => _replyText.GetValueOrDefault(ask.AskId) ?? string.Empty;
 
     private static string Label(string choice) => choice switch
     {

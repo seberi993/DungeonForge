@@ -102,6 +102,7 @@ public sealed class SocialTurnPipeline(IPartyStore parties, SocialModules module
     // Called under the party lock when the turn resolves, with the base odds. Spends cooldowns, queues private notices.
     public TurnPlan Plan(Party party, IReadOnlyList<PlayerAction> discussion, IReadOnlyList<int> chances, int turn)
     {
+        ShardRefill.Apply(party);
         var plan = new TurnPlan(chances);
         if (!modules.IsEnabled(SocialModule.Abilities))
         {

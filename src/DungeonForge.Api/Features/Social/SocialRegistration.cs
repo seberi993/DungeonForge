@@ -1,8 +1,11 @@
 using DungeonForge.Api.Features.Social.Abilities;
 using DungeonForge.Api.Features.Social.Asks.ReplyAsk;
+using DungeonForge.Api.Features.Social.Asks.RevealAsk;
 using DungeonForge.Api.Features.Social.Asks.SendAsk;
 using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Api.Features.Social.Core.GetDebrief;
 using DungeonForge.Api.Features.Social.Core.GetMySocial;
+using DungeonForge.Api.Features.Social.Core.SetPreferences;
 using DungeonForge.Api.Features.Social.Peers;
 using DungeonForge.Api.Features.Social.Peers.GetPeerPrompt;
 using DungeonForge.Api.Features.Social.Peers.SubmitPeerAnswer;
@@ -48,6 +51,7 @@ public static class SocialRegistration
         // Asks module
         services.AddSingleton<SendAskHandler>();
         services.AddSingleton<ReplyAskHandler>();
+        services.AddSingleton<RevealAskHandler>();
 
         // Supervision module: rules are independent; the first (by Order) to claim an event decides it.
         services.AddSingleton<ISocialRule, UnanimousPeerRule>();
@@ -63,6 +67,8 @@ public static class SocialRegistration
         services.TryAddSingleton<SocialTurnPipeline>();
 
         services.AddSingleton<GetMySocialHandler>();
+        services.AddSingleton<SetPreferencesHandler>();
+        services.AddSingleton<GetDebriefHandler>();
         return services;
     }
 }

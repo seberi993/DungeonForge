@@ -50,7 +50,13 @@ public sealed class ReplyAskHandler(SocialAccess access, SocialPipeline pipeline
                 return SocialErrors.AlreadyReplied(Operation, id, member.Name);
             }
 
+            if (thread.Compelled && choice == AskChoice.Bluff)
+            {
+                return SocialErrors.BluffForbidden(Operation, id, member.Name);
+            }
+
             thread.Replies[member.Name] = new AskReply(member.Name, choice, reply.Length == 0 ? null : reply, now);
+            social.Count(SocialMetrics.AsksReplied);
 
             var seen = choice == AskChoice.Dodge
                 ? $"{member.Name} slips the question."

@@ -28,7 +28,9 @@ public sealed record MySocialResponse(
     int AskTokens,
     bool AsksAvailable,
     IReadOnlyList<InboxAskDto> Inbox,
-    IReadOnlyList<SentAskDto> Sent);
+    IReadOnlyList<SentAskDto> Sent,
+    bool OptedOut = false,
+    bool DebriefOptIn = false);
 
 public sealed class GetMySocialHandler(SocialAccess access, SocialModules modules, TimeProvider time)
 {
@@ -77,7 +79,9 @@ public sealed class GetMySocialHandler(SocialAccess access, SocialModules module
                 profile.AskTokens,
                 asksOn && party.Members.Count >= modules.MinPlayersForAsks,
                 inbox,
-                sent);
+                sent,
+                profile.OptedOut,
+                profile.DebriefOptIn);
         }
     }
 

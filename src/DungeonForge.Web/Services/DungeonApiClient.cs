@@ -52,11 +52,20 @@ public sealed class DungeonApiClient(HttpClient http)
     public Task<ApiResult<AcceptedDto>> SubmitPeerAnswerAsync(Guid partyId, string playerName, string promptId, string choice, CancellationToken ct = default) =>
         SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/peer-answer", new PeerAnswerRequest(playerName, promptId, choice), Json, ct), ct);
 
-    public Task<ApiResult<AcceptedDto>> SendAskAsync(Guid partyId, string from, IReadOnlyList<string> to, string text, string kind, CancellationToken ct = default) =>
-        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks", new SendAskRequest(from, to, text, kind), Json, ct), ct);
+    public Task<ApiResult<AcceptedDto>> SendAskAsync(Guid partyId, string from, IReadOnlyList<string> to, string text, string kind, CancellationToken ct = default, bool compel = false) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks", new SendAskRequest(from, to, text, kind, compel), Json, ct), ct);
 
     public Task<ApiResult<AcceptedDto>> ReplyAskAsync(Guid partyId, string askId, string from, string choice, string? text, CancellationToken ct = default) =>
         SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks/{Uri.EscapeDataString(askId)}/reply", new ReplyAskRequest(from, choice, text), Json, ct), ct);
+
+    public Task<ApiResult<AcceptedDto>> RevealAskAsync(Guid partyId, string askId, string from, CancellationToken ct = default) =>
+        SendAsync<AcceptedDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/asks/{Uri.EscapeDataString(askId)}/reveal", new RevealAskRequest(from), Json, ct), ct);
+
+    public Task<ApiResult<PreferencesDto>> SetPreferencesAsync(Guid partyId, string playerName, bool? optOut = null, bool? debriefOptIn = null, CancellationToken ct = default) =>
+        SendAsync<PreferencesDto>(() => http.PostAsJsonAsync($"/api/parties/{partyId}/social/preferences", new PreferencesRequest(playerName, optOut, debriefOptIn), Json, ct), ct);
+
+    public Task<ApiResult<DebriefDto>> GetDebriefAsync(Guid partyId, string playerName, CancellationToken ct = default) =>
+        SendAsync<DebriefDto>(() => http.GetAsync($"/api/parties/{partyId}/social/debrief?playerName={Uri.EscapeDataString(playerName)}", ct), ct);
 
     public Task<ApiResult<IReadOnlyList<SpellDto>>> GetSpellsAsync(CharacterClass characterClass, CancellationToken ct = default) =>
         SendAsync<IReadOnlyList<SpellDto>>(() => http.GetAsync($"/api/classes/{characterClass.ToString().ToLowerInvariant()}/spells", ct), ct);

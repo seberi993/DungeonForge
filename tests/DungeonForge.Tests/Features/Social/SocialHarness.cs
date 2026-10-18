@@ -91,8 +91,11 @@ internal sealed class SocialHarness : IDisposable
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     }
 
-    public Task<HttpResponseMessage> AskAsync(Guid id, string from, string[] to, string text, string kind = "question") =>
-        Client.PostAsJsonAsync($"/api/parties/{id}/social/asks", new { from, to, text, kind });
+    public Task<HttpResponseMessage> AskAsync(Guid id, string from, string[] to, string text, string kind = "question", bool compel = false) =>
+        Client.PostAsJsonAsync($"/api/parties/{id}/social/asks", new { from, to, text, kind, compel });
+
+    public Task<HttpResponseMessage> RevealAsync(Guid id, string askId, string from) =>
+        Client.PostAsJsonAsync($"/api/parties/{id}/social/asks/{askId}/reveal", new { from });
 
     public Task<HttpResponseMessage> ReplyAsync(Guid id, string askId, string from, string choice, string? text = null) =>
         Client.PostAsJsonAsync($"/api/parties/{id}/social/asks/{askId}/reply", new { from, choice, text });

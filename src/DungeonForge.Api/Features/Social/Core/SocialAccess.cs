@@ -128,3 +128,31 @@ public sealed class SocialLifecycle(SocialModules modules, AbilityGenerator gene
         }
     }
 }
+
+// A fresh whisper-shard for every living member each time the party reaches a new floor.
+public static class ShardRefill
+{
+    public const int MaxTokens = 5;
+
+    // Idempotent per floor; safe to call whenever the party lock is held or not (it takes the re-entrant lock itself).
+    public static void Apply(Party party)
+    {
+        lock (party.SyncRoot)
+        {
+            var social = party.Social();
+            var floors = party.Floor - social.RefilledFloor;
+            if (floors <= 0)
+            {
+                return;
+            }
+
+            social.RefilledFloor = party.Floor;
+            foreach (var member in party.Members.Where(m => !m.IsDefeated))
+            {
+                var profile = social.Profile(member.Name);
+                profile.AskTokens = Math.Min(MaxTokens, Math.Max(profile.AskTokens, 0) + floors);
+                social.Outbox.Add(new SocialNotice(member.Name, "narrator", "A fresh whisper-shard forms in your palm."));
+            }
+        }
+    }
+}

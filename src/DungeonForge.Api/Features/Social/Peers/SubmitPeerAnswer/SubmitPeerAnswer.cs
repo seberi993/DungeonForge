@@ -40,6 +40,7 @@ public sealed class SubmitPeerAnswerHandler(
             }
 
             round.Responses[member.Name] = request.Choice!.Value;
+            social.Count(SocialMetrics.PeerAnswers);
             social.PeerAssignments.Remove(member.Name);
 
             var others = party.Members.Count(m => !string.Equals(m.Name, round.About, StringComparison.OrdinalIgnoreCase));
@@ -64,6 +65,7 @@ public sealed class SubmitPeerAnswerHandler(
     {
         var social = party.Social();
         round.Resolved = true;
+        social.Count(SocialMetrics.PeerRoundsResolved);
         var question = PeerQuestions.Find(round.QuestionId)!;
         var rng = SeededRng.For(social.RunSeed, $"peer:{round.Id}");
         var result = PeerAggregator.Aggregate(question, [.. round.Responses.Values], p, rng);

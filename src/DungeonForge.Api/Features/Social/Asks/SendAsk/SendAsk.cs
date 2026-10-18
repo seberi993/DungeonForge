@@ -6,7 +6,8 @@ using DungeonForge.Api.Infrastructure.Narration;
 
 namespace DungeonForge.Api.Features.Social.Asks.SendAsk;
 
-public sealed record SendAskRequest(string? From, IReadOnlyList<string>? To, string? Text, AskKind? Kind);
+// Compel: spend a point of credibility to press the recipients; they can only answer honestly or dodge.
+public sealed record SendAskRequest(string? From, IReadOnlyList<string>? To, string? Text, AskKind? Kind, bool? Compel = null);
 
 public sealed record SendAskResponse(string AskId, DateTimeOffset ExpiresAt, int TokensLeft);
 
@@ -68,7 +69,21 @@ public sealed class SendAskHandler(SocialAccess access, SocialModules modules, C
             if ((social.SenderCooldowns.TryGetValue(sender.Name, out var until) && now < until)
                 || recipients.Any(r => social.PairCooldowns.TryGetValue((sender.Name, r), out var pair) && now < pair))
             {
+                social.Count(SocialMetrics.RateLimited);
                 return SocialErrors.AskCooldown(Operation, id, sender.Name);
+            }
+
+            var compel = request.Compel == true;
+            if (compel && profile.Credibility < 1)
+            {
+                return SocialErrors.NotEnoughCredibility(Operation, id, sender.Name);
+            }
+
+            if (social.Asks.Any(a => string.Equals(a.From, sender.Name, StringComparison.OrdinalIgnoreCase)
+                && !a.IsExpired(now) && now - a.CreatedAt < AskThread.DuplicateWindow && AskText.Similar(a.Text, text)))
+            {
+                social.Count(SocialMetrics.AbuseFlags);
+                return SocialErrors.DuplicateAsk(Operation, id, sender.Name);
             }
 
             // Accusing while your word is worthless costs double.
@@ -79,6 +94,7 @@ public sealed class SendAskHandler(SocialAccess access, SocialModules modules, C
             }
 
             profile.AskTokens -= cost;
+            if (compel) profile.Credibility -= 1;
             tokensLeft = profile.AskTokens;
             social.SenderCooldowns[sender.Name] = now + AskThread.SenderCooldown;
             foreach (var r in recipients)
@@ -86,14 +102,17 @@ public sealed class SendAskHandler(SocialAccess access, SocialModules modules, C
                 social.PairCooldowns[(sender.Name, r)] = now + AskThread.PairCooldown;
             }
 
-            thread = new AskThread(social.NextId("ask"), sender.Name, recipients, text, kind, now, now + AskThread.Lifetime);
+            thread = new AskThread(social.NextId("ask"), sender.Name, recipients, text, kind, now, now + AskThread.Lifetime) { Compelled = compel };
             social.Asks.Add(thread);
+            social.Count(SocialMetrics.AsksSent);
+            if (compel) social.Count(SocialMetrics.AsksCompelled);
         }
 
         access.Touch(party);
         foreach (var recipient in thread.To)
         {
-            await chaos.SendAsync(id, recipient, new PrivateMessage(PrivateKinds.Ask, $"{thread.From} whispers: {thread.Text}"));
+            var pressed = thread.Compelled ? " Someone pressed you: answer honestly or dodge." : string.Empty;
+            await chaos.SendAsync(id, recipient, new PrivateMessage(PrivateKinds.Ask, $"{thread.From} whispers: {thread.Text}{pressed}"));
         }
 
         return new SendAskResponse(thread.Id, thread.ExpiresAt, tokensLeft);

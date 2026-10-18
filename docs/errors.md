@@ -27,12 +27,18 @@ the covering test. Search the code string to land on all of them.
 | `social.ask_cooldown` | Conflict | 429 | Too soon; let the last whisper settle. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#AskingAgainTooSoon_IsRateLimited_UntilTheCooldownPasses` |
 | `social.ask_not_found` | NotFound | 404 | That whisper has faded or never existed. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
 | `social.asks_unavailable` | Conflict | 409 | Whispers need a party of more than three. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ThreePlayersCannotWhisper_FourCan` |
+| `social.bluff_forbidden` | Validation | 400 | You were pressed: answer honestly or dodge. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/CompelRevealTests.cs#APressedRecipient_CannotBluff_ButCanBeHonestOrDodge` |
+| `social.duplicate_ask` | Conflict | 409 | You already whispered something very much like that. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/CompelRevealTests.cs#ANearCopyOfARecentWhisper_IsRefused_ButAnotherQuestionIsFine` |
 | `social.invalid_recipients` | Validation | 400 | Whisper to one to three other living members who are listening. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#Whispering_ToYourselfOrAStranger_IsRejected` |
 | `social.module_disabled` | NotFound | 404 | This part of the game is switched off. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#ADisabledModule_AnswersNotFound_AndTheRestOfTheGameStillWorks` |
 | `social.no_peer_prompt` | Conflict | 409 | There is nothing to ask you about right now. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/PeerSliceTests.cs#Prompt_WithNoOneElseToRate_IsAConflict` |
+| `social.not_asker` | Validation | 403 | Only the one who whispered can do that. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/CompelRevealTests.cs#OnlyTheAsker_CanReveal` |
+| `social.not_enough_credibility` | Conflict | 409 | Your word is worth too little for that. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/CompelRevealTests.cs#Compelling_WithAWorthlessWord_IsRefused_AndSpendsNothing` |
 | `social.not_enough_tokens` | Conflict | 409 | You are out of whisper-shards. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#WithoutShards_AWhisperIsRefused` |
 | `social.not_recipient` | Validation | 403 | That whisper was not meant for you. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ReplyRules_UnknownThread_WrongPlayer_AndRepeats` |
+| `social.nothing_to_reveal` | Conflict | 409 | There is nothing more to lay bare yet. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/CompelRevealTests.cs#Reveal_NeedsAnAnswer_AndCannotBeRepeated` |
 | `social.peer_prompt_unknown` | NotFound | 404 | That question is not waiting for your answer. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/PeerSliceTests.cs#Answer_ForAPromptThatIsNotYours_IsNotFound_AndAnAnswerCannotBeRepeated` |
+| `social.run_in_progress` | Conflict | 409 | The dungeon keeps its secrets until the run is over. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/DebriefAndTelemetryTests.cs#TheDungeonKeepsItsSecrets_UntilTheRunIsOver` |
 | `social.seed_already_submitted` | Conflict | 409 | You already answered the door's question. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#Seed_Twice_IsAConflict` |
 | `social.seed_low_effort` | Validation | 400 | Say a little more; the door wants a real answer. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/SeedAndAbilitiesSliceTests.cs#Seed_LowEffort_AsksForMore_AndDoesNotSpendTheOneAnswer` |
 | `social.too_many_open_asks` | Conflict | 409 | You already have two whispers waiting for answers. | `src/DungeonForge.Api/Features/Social/Core/SocialErrors.cs` | `tests/DungeonForge.Tests/Features/Social/AskSliceTests.cs#ThirdOpenWhisper_IsRefused` |
@@ -65,13 +71,16 @@ The `operation` of an error or coded log event, and the folder of the slice that
 | `Command:LockIn` | `Features/Parties/ExploreDungeon` |
 | `Command:ReplyAsk` | `Features/Social/Asks/ReplyAsk` |
 | `Command:ResolveTurn` | `Features/Parties/ExploreDungeon` |
+| `Command:RevealAsk` | `Features/Social/Asks/RevealAsk` |
 | `Command:SendAsk` | `Features/Social/Asks/SendAsk` |
+| `Command:SetPreferences` | `Features/Social/Core/SetPreferences` |
 | `Command:SubmitNarration` | `Features/Parties/ExploreDungeon` |
 | `Command:SubmitPeerAnswer` | `Features/Social/Peers/SubmitPeerAnswer` |
 | `Command:SubmitSeed` | `Features/Social/Seed/SubmitSeed` |
 | `Command:UnlockTurn` | `Features/Parties/UnlockTurn` |
 | `Hub:JoinParty` | `Features/Parties/Realtime` |
 | `Hub:RegisterPlayer` | `Features/Parties/Realtime` |
+| `Query:GetDebrief` | `Features/Social/Core/GetDebrief` |
 | `Query:GetHighScores` | `Features/Scores/GetHighScores` |
 | `Query:GetMySocial` | `Features/Social/Core/GetMySocial` |
 | `Query:GetPartyState` | `Features/Parties/GetPartyState` |

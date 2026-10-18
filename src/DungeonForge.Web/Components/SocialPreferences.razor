@@ -1,0 +1,39 @@
+@using DungeonForge.Web.Models
+@using DungeonForge.Web.Services
+@inject DungeonApiClient Api
+@inject GameSession Session
+
+<details id="prefs" class="social-prefs">
+    <summary>Social settings</summary>
+    <label class="ask-option"><input id="pref-optout" type="checkbox" checked="@Me.OptedOut" disabled="@_busy" @onchange="e => SetAsync(optOut: e.Value is true)" /> Sit out the social game (no questions about me, no whispers)</label>
+    <label class="ask-option"><input id="pref-debrief" type="checkbox" checked="@Me.DebriefOptIn" disabled="@_busy" @onchange="e => SetAsync(debriefOptIn: e.Value is true)" /> Show me my exact profile after the run</label>
+    @if (_error is not null)
+    {
+        <p id="prefs-error" class="error">@_error</p>
+    }
+</details>
+
+@code {
+    [Parameter, EditorRequired] public MySocialDto Me { get; set; } = default!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _busy;
+    private string? _error;
+
+    private async Task SetAsync(bool? optOut = null, bool? debriefOptIn = null)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.SetPreferencesAsync(Session.PartyId, Session.PlayerName, optOut, debriefOptIn);
+            if (!result.IsSuccess) _error = result.Error ?? "Something went wrong. Try again.";
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
