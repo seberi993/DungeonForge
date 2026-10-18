@@ -36,14 +36,29 @@ public sealed class SocialAccess(IPartyStore parties, SocialModules modules)
 
 // Pushes what the lock-protected code queued: the narrator's party-wide lines and private words. Failures are logged by
 // ChaosDispatcher (BestEffort) and never fail the request.
-public sealed class SocialDelivery(ChaosDispatcher chaos)
+public sealed class SocialDelivery(ChaosDispatcher chaos, IPartyNotifier notifier, ILogger<SocialDelivery> logger)
 {
     public async Task DeliverAsync(Party party)
     {
         IReadOnlyList<SocialNotice> notices;
+        GetPartyStateResponse? state = null;
         lock (party.SyncRoot)
         {
-            notices = party.Social().DrainOutbox();
+            var social = party.Social();
+            notices = social.DrainOutbox();
+
+            // A penalty or reward moved HP or gold: everyone's party panel needs the new numbers.
+            if (social.StateChanged)
+            {
+                social.StateChanged = false;
+                state = PartyMapping.ToResponse(party.Snapshot());
+            }
+        }
+
+        if (state is not null)
+        {
+            await BestEffort.RunAsync(
+                logger, "Social:Deliver", party.Id, "PartyUpdated", () => notifier.PartyUpdatedAsync(state, CancellationToken.None));
         }
 
         foreach (var notice in notices)

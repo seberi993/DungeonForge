@@ -98,6 +98,29 @@ public sealed partial class Party
         }
     }
 
+    // Hurts one named member outside the turn loop (a penalty), without touching the turn. Returns the damage applied.
+    public int DamageMember(string name, int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+
+        lock (SyncRoot)
+        {
+            var member = Members.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase) && !m.IsDefeated);
+            var applied = member?.TakeDamage(amount) ?? 0;
+            SettleVaultIfWiped();
+            return applied;
+        }
+    }
+
+    // Moves the purse by a delta (a fine or a windfall outside the turn loop); it never goes below zero.
+    public void AdjustGold(int delta)
+    {
+        lock (SyncRoot)
+        {
+            _gold = Math.Max(0, _gold + delta);
+        }
+    }
+
     public void AdvanceTurn(int goldFound = 0)
     {
         lock (SyncRoot)

@@ -29,6 +29,9 @@ public sealed class PartySocial(ulong runSeed)
     // Ability each member plans to use on the turn being locked in (by the client's member id). Consumed at resolve.
     public Dictionary<Guid, string> Intents { get; } = [];
 
+    // Set when a consequence changed what everyone sees (HP, gold); delivery then pushes a fresh party snapshot.
+    public bool StateChanged { get; set; }
+
     // Notices produced under the lock; the handler delivers them to clients once the lock is released.
     public List<SocialNotice> Outbox { get; } = [];
 

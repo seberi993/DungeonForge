@@ -207,3 +207,70 @@ public class SupervisionTests
             new(socialEvent.Id, verdict, 1, [], Id, "stub");
     }
 }
+
+public class GameStateConsequenceTests
+{
+    private static readonly ManualTime Clock = new(DateTimeOffset.UtcNow);
+
+    private static Decision Wild(params Consequence[] consequences) =>
+        new("e", Verdict.Punish, 3, consequences, "R-TEST", "test");
+
+    [Fact]
+    public void Hp_IsClampedAndAppliedToTheNamedMember_AndFlagsAStateChange()
+    {
+        var party = PartyTestBuilders.NewParty();
+        var before = party.Members.Single(m => m.Name == "Conan").Hp;
+
+        ConsequenceApplier.Apply(party, Wild(new Consequence.Hp("Conan", -99)));
+
+        party.Members.Single(m => m.Name == "Conan").Hp.Should().Be(before - ConsequenceApplier.MaxHpShift);
+        party.Social().StateChanged.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Healing_IsClampedToTheMaxAndNeverRevivesTheDefeated()
+    {
+        var party = PartyTestBuilders.NewParty();
+        party.ApplyMemberOutcomes([new DamageResult("Conan", 10), new DamageResult("Merlin", 99)], 0);
+        var conan = party.Members.Single(m => m.Name == "Conan");
+        var hurt = conan.Hp;
+
+        ConsequenceApplier.Apply(party, Wild(new Consequence.Hp("Conan", 99), new Consequence.Hp("Merlin", 5)));
+
+        conan.Hp.Should().Be(Math.Min(conan.MaxHp, hurt + ConsequenceApplier.MaxHpShift));
+        party.Members.Single(m => m.Name == "Merlin").IsDefeated.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Gold_IsClamped_NeverGoesNegative_AndANamelessGhostIsIgnored()
+    {
+        var party = PartyTestBuilders.NewParty();
+        party.AdvanceTurn(4);
+
+        ConsequenceApplier.Apply(party, Wild(new Consequence.Gold(-99), new Consequence.Hp("Ghost", -5)));
+
+        party.Gold.Should().Be(0);
+        ConsequenceApplier.Apply(party, Wild(new Consequence.Gold(99)));
+        party.Gold.Should().Be(ConsequenceApplier.MaxGoldShift);
+    }
+
+    [Fact]
+    public void ABluffingThief_LosesHp_AndTheStateChangeIsFlaggedForBroadcast()
+    {
+        var party = PartyTestBuilders.NewParty(PartyTestBuilders.ChaosOn);
+        party.DropVault(20, null);
+        party.ClaimVault("Dru", VaultChoice.Pocket, new ScriptedRoller(99));
+        var dru = party.Members.Single(m => m.Name == "Dru");
+        var before = dru.Hp;
+        var pipeline = new SocialPipeline(
+            new RuleSupervisor([new TheftClaimRule()]), new SocialModules(Options.Create(new SocialOptions())), Clock);
+
+        pipeline.Process(party, pipeline.NewEvent(party, SocialEventTypes.AskReply, 1, ["Dru"], new Dictionary<string, string>
+        {
+            ["from"] = "Conan", ["kind"] = "Accusation", ["choice"] = "Bluff", ["text"] = "Did you take the vault gold?",
+        }));
+
+        dru.Hp.Should().BeLessThan(before);
+        party.Social().StateChanged.Should().BeTrue();
+    }
+}

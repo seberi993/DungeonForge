@@ -106,7 +106,7 @@ public sealed class NarratorJudge(
                 return JudgeOutcome.FellBack;
             }
 
-            ConsequenceApplier.Apply(social, decision);
+            ConsequenceApplier.Apply(party, decision);
             social.Record(new AuditEntry(
                 socialEvent, decision, SeededRng.Derive(social.RunSeed, "event:" + socialEvent.Id + ":llm"), time.GetUtcNow()));
         }

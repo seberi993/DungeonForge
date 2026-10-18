@@ -132,6 +132,11 @@ public abstract record Consequence
 
     public sealed record Tokens(string Player, int Delta) : Consequence;
 
+    // Game-state consequences. Only the C# rules emit these; the model-backed judge cannot (its parser has no such type).
+    public sealed record Hp(string Player, int Delta) : Consequence;
+
+    public sealed record Gold(int Delta) : Consequence;
+
     public sealed record Notice(SocialNotice Message) : Consequence;
 }
 

@@ -59,6 +59,37 @@ public static class ConsequenceApplier
     public const int MaxTokenShift = 2;
     public const int MaxNoticeLength = 140;
 
+    public const int MaxHpShift = 6;
+    public const int MaxGoldShift = 10;
+
+    // Social consequences plus the ones that touch the dungeon itself. The party lock is re-entrant, so callers that
+    // already hold it can call this directly.
+    public static void Apply(Party party, Decision decision)
+    {
+        lock (party.SyncRoot)
+        {
+            var social = party.Social();
+            Apply(social, decision);
+            foreach (var consequence in decision.Consequences)
+            {
+                switch (consequence)
+                {
+                    case Consequence.Hp hp when party.Members.FirstOrDefault(m => string.Equals(m.Name, hp.Player, StringComparison.OrdinalIgnoreCase)) is { } member:
+                        var delta = Math.Clamp(hp.Delta, -MaxHpShift, MaxHpShift);
+                        if (delta < 0) party.DamageMember(member.Name, -delta);
+                        else if (delta > 0) party.Heal(member.Name, delta);
+                        social.StateChanged = true;
+                        break;
+                    case Consequence.Gold gold:
+                        party.AdjustGold(Math.Clamp(gold.Delta, -MaxGoldShift, MaxGoldShift));
+                        social.StateChanged = true;
+                        break;
+                }
+            }
+        }
+    }
+
+    // Social part only (axes, reputation, credibility, tokens, notices); game-state consequences need a Party.
     public static void Apply(PartySocial social, Decision decision)
     {
         foreach (var consequence in decision.Consequences)
@@ -108,7 +139,7 @@ public sealed class SocialPipeline(
             var decision = modules.IsEnabled(SocialModule.Supervision)
                 ? supervisor.Judge(new SocialContext(party, now), socialEvent)
                 : new Decision(socialEvent.Id, Verdict.Ignore, 0, [], "R-OFF", "Supervision module is off.");
-            ConsequenceApplier.Apply(social, decision);
+            ConsequenceApplier.Apply(party, decision);
             social.Record(new AuditEntry(socialEvent, decision, SeededRng.Derive(social.RunSeed, "event:" + socialEvent.Id), now));
             if (decision.Verdict == Verdict.Unresolved)
             {
@@ -187,6 +218,7 @@ public sealed partial class TheftClaimRule : ISocialRule
         {
             return new Decision(e.Id, Verdict.Celebrate, 1,
                 [new Consequence.Reputation(accused, 1, 0),
+                 new Consequence.Hp(accused, 2),
                  new Consequence.Credibility(accuser, 1),
                  new Consequence.Notice(new SocialNotice(accuser, "narrator", "The dark nods: you were right."))],
                 Id, "Gold is pocketed and the accused owned up; honesty is rewarded and the accuser vindicated.");
@@ -198,6 +230,7 @@ public sealed partial class TheftClaimRule : ISocialRule
             return new Decision(e.Id, Verdict.Punish, lied ? 2 : 1,
                 [new Consequence.Reputation(accused, -1, lied ? 1 : 0),
                  new Consequence.Credibility(accused, lied ? -1 : 0),
+                 new Consequence.Hp(accused, lied ? -3 : 0),
                  new Consequence.Credibility(accuser, 1),
                  new Consequence.Notice(new SocialNotice(accuser, "narrator", "A lie curdles in the air. You were right."))],
                 Id, lied
