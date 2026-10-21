@@ -1,0 +1,15 @@
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Shared;
+namespace DungeonForge.Web.Features.Dungeon.Stage;
+
+// One resolved turn to act out: the room it happened in, what each member did, and how it ended.
+public sealed record StageShow(
+    int Turn,
+    RoomType Room,
+    string? Scene,
+    IReadOnlyList<ActionBeat> Beats,
+    bool Success,
+    string? TargetName,
+    int Damage,
+    int GoldFound,
+    IReadOnlyList<RollDto>? Rolls = null);

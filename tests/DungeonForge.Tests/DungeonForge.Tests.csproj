@@ -23,6 +23,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DungeonForge.Api\DungeonForge.Api.csproj" />
+    <ProjectReference Include="..\..\src\DungeonForge.Application\DungeonForge.Application.csproj" />
+    <ProjectReference Include="..\..\src\DungeonForge.Domain\DungeonForge.Domain.csproj" />
+    <ProjectReference Include="..\..\src\DungeonForge.Infrastructure\DungeonForge.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

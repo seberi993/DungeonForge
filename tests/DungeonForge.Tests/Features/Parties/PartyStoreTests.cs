@@ -1,5 +1,6 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties;
+using DungeonForge.Infrastructure.Parties;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;

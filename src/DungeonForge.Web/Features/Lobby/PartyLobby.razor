@@ -1,0 +1,182 @@
+@page "/"
+@using DungeonForge.Shared
+@inject DungeonApiClient Api
+@inject GameSession Session
+@inject NavigationManager Nav
+@using DungeonForge.Web.Core
+@using DungeonForge.Web.Features.Dungeon
+@using DungeonForge.Web.Features.Scores
+
+<div class="lobby-hero">
+    <h1>DungeonForge</h1>
+    <p>Name your party and descend into the dungeon.</p>
+</div>
+
+<div class="lobby-grid">
+<div class="card">
+    <h2>New Party</h2>
+    <label for="party-name">Party name</label>
+    <input id="party-name" @bind="_name" maxlength="@Limits.MaxPartyNameLength" disabled="@_busy" />
+    <div id="roster" class="roster">
+        @for (var i = 0; i < _roster.Count; i++)
+        {
+            var row = _roster[i];
+            <div class="roster-row">
+                <input id="member-name-@i" @bind="row.Name" maxlength="@Limits.MaxMemberNameLength" placeholder="Hero name" disabled="@_busy" />
+            </div>
+        }
+        <div class="roster-actions">
+            <button id="add-member" type="button" class="btn btn-secondary" @onclick="AddMember" disabled="@(_busy || _roster.Count >= MaxRoster)">Add Member</button>
+            <button id="remove-member" type="button" class="btn btn-ghost" @onclick="RemoveMember" disabled="@(_busy || _roster.Count <= 1)">Remove Member</button>
+        </div>
+    </div>
+    <button id="create-party" class="btn btn-primary btn-big" @onclick="CreateAsync" disabled="@_busy">Create Party</button>
+    @if (_error is not null)
+    {
+        <p class="validation-message">@_error</p>
+    }
+</div>
+
+<div class="card">
+    <h2>Join a Party</h2>
+    <label for="join-id">Invite code</label>
+    <input id="join-id" @bind="_joinId" placeholder="XXXX-XXXX" maxlength="40" disabled="@_busy" />
+    <button id="join-party" class="btn btn-secondary" @onclick="FindAsync" disabled="@_busy">Find Party</button>
+    @if (_preview is not null)
+    {
+        <div id="join-preview">
+            <h3>@_preview.Name</h3>
+            <p>Heroes already in this party:</p>
+            <ul id="join-members">
+                @foreach (var m in _preview.Members)
+                {
+                    <li>@m.Name</li>
+                }
+            </ul>
+            <input id="join-name" @bind="_joinName" maxlength="@Limits.MaxMemberNameLength" placeholder="Your hero name" disabled="@_busy" />
+            <button id="confirm-join" class="btn btn-go" @onclick="ConfirmJoinAsync" disabled="@_busy">Join as Hero</button>
+        </div>
+    }
+    @if (_joinError is not null)
+    {
+        <p class="join-error validation-message">@_joinError</p>
+    }
+</div>
+</div>
+
+<HighScoresCard />
+
+@code {
+    private string _joinId = "";
+    private string? _joinError;
+
+    private PartyStateDto? _preview;
+    private string _joinName = "";
+
+    private async Task ConfirmJoinAsync()
+    {
+        _joinError = null;
+        if (_preview is null) return;
+        if (string.IsNullOrWhiteSpace(_joinName))
+        {
+            _joinError = "Enter a hero name.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var result = await Api.JoinPartyAsync(_preview.InviteCode, _joinName.Trim());
+            if (result.IsSuccess)
+            {
+                Session.Join(result.Value!.State, result.Value.MemberName);
+                Nav.NavigateTo("/dungeon");
+                return;
+            }
+
+            _joinError = result.Status switch
+            {
+                ApiStatus.Conflict => "That hero name is taken, or the party is full.",
+                ApiStatus.NotFound => "No party found with that invite code.",
+                _ => result.Error ?? "Could not join the party."
+            };
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task FindAsync()
+    {
+        _joinError = null;
+        _preview = null;
+        var input = _joinId.Trim();
+        if (input.Length == 0)
+        {
+            _joinError = "Enter an invite code.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            // Short invite codes are the norm; a full party id (GUID) still works.
+            var result = Guid.TryParse(input, out var id)
+                ? await Api.GetPartyAsync(id)
+                : await Api.GetPartyByCodeAsync(input);
+            if (result.IsSuccess)
+            {
+                _preview = result.Value;
+                return;
+            }
+
+            _joinError = result.Status == ApiStatus.NotFound
+                ? "No party found with that invite code."
+                : result.Error ?? "Could not join the party.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private const int MaxRoster = 6;
+
+    private sealed class RosterRow
+    {
+        public string Name { get; set; } = "";
+    }
+
+    private readonly List<RosterRow> _roster = [new()];
+
+    private void AddMember() { if (_roster.Count < MaxRoster) _roster.Add(new()); }
+
+    private void RemoveMember() { if (_roster.Count > 1) _roster.RemoveAt(_roster.Count - 1); }
+
+    private string _name = "";
+    private string? _error;
+    private bool _busy;
+
+    private async Task CreateAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var result = await Api.CreatePartyAsync(_name, _roster.Select(r => new MemberRequest(r.Name)).ToList());
+            if (result.IsSuccess)
+            {
+                Session.Start(result.Value!);
+                Nav.NavigateTo("/dungeon");
+                return;
+            }
+
+            _error = result.Error ?? "Could not create the party.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

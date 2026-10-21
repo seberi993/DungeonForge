@@ -1,6 +1,7 @@
-using DungeonForge.Web.Components.Stage;
-using DungeonForge.Web.Models;
 using FluentAssertions;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Dungeon.Stage;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 
@@ -93,7 +94,7 @@ public class StageDirectorTests
 
         Run(d, beatMs * 0.3);
         var early = d.Frame().Caption;
-        early.Who.Should().Contain("Conan").And.Contain("Warrior");
+        early.Who.Should().Contain("Conan").And.NotContain("Warrior");
         early.Say.Should().Contain("I charge the goblin");
         early.Tag.Should().BeEmpty();
 

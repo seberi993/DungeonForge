@@ -1,7 +1,7 @@
-using DungeonForge.Web.Components;
-using DungeonForge.Web.Components.Stage;
-using DungeonForge.Web.Models;
 using FluentAssertions;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Dungeon.Stage;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

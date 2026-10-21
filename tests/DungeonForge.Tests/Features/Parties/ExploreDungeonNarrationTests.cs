@@ -1,10 +1,11 @@
+using DungeonForge.Infrastructure.Parties;
 using System.Net;
 using System.Text.Json;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.Realtime;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Features.Parties.Realtime;
+using DungeonForge.Application.Narration;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Caching.Memory;

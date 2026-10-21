@@ -1,0 +1,65 @@
+using DungeonForge.Domain;
+using DungeonForge.Application.Narration;
+using DungeonForge.Application.Errors;
+
+
+namespace DungeonForge.Infrastructure.Narration;
+
+// Rotates API keys on HTTP 429; any other failure (or exhaustion) yields deterministic fallback flavor.
+public sealed class KeyPoolGeminiNarrator(
+    GeminiNarratorService gemini,
+    IKeyPool pool,
+    ILogger<KeyPoolGeminiNarrator> logger) : IDungeonNarrator
+{
+    private static readonly TimeSpan DefaultCooldown = TimeSpan.FromSeconds(60);
+    private int _exhaustionLogged;
+
+    public async Task<string> GenerateScenarioAsync(NarrationContext ctx, CancellationToken ct)
+    {
+        var result = await RotateAsync((key, token) => gemini.TryGenerateScenarioAsync(ctx, key, token), ct);
+        return result ?? FallbackFlavor.Scenario(ctx.Room, ctx.Turn);
+    }
+
+    public async Task<TurnNarration> NarrateTurnAsync(bool success, NarrationContext ctx, CancellationToken ct)
+    {
+        var result = await RotateAsync((key, token) => gemini.TryNarrateTurnAsync(success, ctx, key, token), ct);
+        return FallbackFlavor.Complete(result, success, ctx);
+    }
+
+    private async Task<T?> RotateAsync<T>(Func<string, CancellationToken, Task<GeminiResult<T>>> call, CancellationToken ct)
+        where T : class
+    {
+        for (var attempt = 0; attempt < pool.Count; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (pool.Next() is not { } lease)
+            {
+                break;
+            }
+
+            Volatile.Write(ref _exhaustionLogged, 0);
+
+            var result = await call(lease.Key, ct);
+            if (!result.RateLimited)
+            {
+                return result.Value;
+            }
+
+            var cooldown = result.RetryAfter ?? DefaultCooldown;
+            pool.Cooldown(lease.Index, cooldown);
+            logger.KeyRateLimited(lease.Index, (int)cooldown.TotalSeconds);
+        }
+
+        // Warn once per exhaustion episode; repeats while keys keep cooling are debug noise.
+        if (Interlocked.Exchange(ref _exhaustionLogged, 1) == 0)
+        {
+            logger.AllKeysRateLimited();
+        }
+        else
+        {
+            logger.NoKeyAvailable();
+        }
+
+        return null;
+    }
+}

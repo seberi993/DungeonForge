@@ -1,4 +1,4 @@
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 

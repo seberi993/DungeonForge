@@ -1,10 +1,11 @@
+using DungeonForge.Infrastructure.Narration;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Domain;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Narration;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;

@@ -1,7 +1,9 @@
 using System.Net;
-using DungeonForge.Web.Models;
-using DungeonForge.Web.Services;
 using FluentAssertions;
+using DungeonForge.Web.Core;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Lobby;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

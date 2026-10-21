@@ -1,4 +1,4 @@
-using DungeonForge.Api.Domain;
+using DungeonForge.Domain;
 
 namespace DungeonForge.Tests.Domain;
 

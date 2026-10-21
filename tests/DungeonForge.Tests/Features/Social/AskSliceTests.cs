@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Parties.Chaos;
-using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Parties.Chaos;
+using DungeonForge.Application.Features.Social.Core;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;

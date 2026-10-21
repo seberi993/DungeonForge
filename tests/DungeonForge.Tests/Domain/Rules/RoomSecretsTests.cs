@@ -1,5 +1,5 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Domain.Rules;
+using DungeonForge.Domain;
+using DungeonForge.Domain.Rules;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using DungeonForge.Tests.Support;

@@ -1,0 +1,107 @@
+using DungeonForge.Web.Features.Social;
+using DungeonForge.Web.Shared;
+namespace DungeonForge.Web.Features.Dungeon;
+
+public sealed record ExploreResponse(
+    Guid PartyId,
+    int Turn,
+    RoomType RoomType,
+    string? TargetName,
+    int Damage,
+    int GoldFound,
+    string FlavorEvent,
+    int Gold,
+    bool IsPartyDefeated,
+    string? LastOutcome = null,
+    IReadOnlyList<PlayerAction>? Discussion = null,
+    bool NarrationPending = false,
+    string? Scenario = null,
+    bool ScenarioPending = false,
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    IReadOnlyList<ActionBeat>? Beats = null,
+    bool Success = false,
+    IReadOnlyList<HitDto>? Hits = null,
+    NarrationBrief? Brief = null,
+    IReadOnlyList<RollDto>? Rolls = null,
+    int Floor = 1,
+    int BossHp = 0,
+    int BossMaxHp = 0,
+    bool FloorCleared = false);
+
+// One member's d100 roll against their chance (a pass is Roll below Chance); Crit/Fumble are the extremes.
+public sealed record RollDto(string Name, int Roll, int Chance, bool Crit, bool Fumble);
+
+// Prompts for the browser's local model; sent only to the request that claimed the narration slot.
+public sealed record NarrationBrief(int Turn, string Kind, string System, string User, string? JsonSchema, int MaxTokens);
+
+public sealed record SubmitNarrationRequest(int Turn, string? Text, bool? Declined);
+
+// One member's own damage from a failed action; TargetName/Damage on the response mirror the first hit.
+public sealed record HitDto(string Name, int Damage);
+
+public enum ActionVerb
+{
+    Strike,
+    Cast,
+    Stab,
+    Heal
+}
+
+// One member’s on-screen action for a resolved turn; the stage plays these in order.
+public sealed record ActionBeat(string Name, CharacterClass Class, ActionVerb Verb, string Text);
+
+public sealed record PlayerAction(Guid MemberId, string Name, string Text);
+
+public sealed record NarrationReady(Guid PartyId, int Turn, string Outcome, string? NextScenario = null, RoomType? NextRoomType = null, string? NextScene = null, string? Source = null);
+
+public sealed record ExploreRequest(IReadOnlyList<PlayerAction>? Actions = null, bool? SubmitOnly = null, IReadOnlyList<AbilityIntent>? Abilities = null);
+
+public sealed record LogEntry(int Turn, RoomType RoomType, string? TargetName, int Damage, int GoldFound, string FlavorEvent, string? Outcome = null, string? Scenario = null);
+
+public sealed record PartyStateDto(
+    Guid PartyId,
+    string Name,
+    IReadOnlyList<MemberDto> Members,
+    DateTimeOffset CreatedAt,
+    int Gold,
+    int Turn,
+    bool IsPartyDefeated,
+    string InviteCode = "",
+    IReadOnlyList<LockStatusDto>? LockStatus = null,
+    int Floor = 1,
+    int RoomsCleared = 0,
+    int BossHp = 0,
+    int BossMaxHp = 0,
+    int SetupAnswered = 0,
+    bool SetupPending = false);
+
+public sealed record LockStatusDto(string Name, bool LockedIn);
+
+// Chaos mode: PrivateMessage goes to this player only (whispers, secrets, traitor briefing); ChaosEvent is party-wide.
+public sealed record PrivateMessageDto(string Kind, string Text);
+public sealed record ChaosEventDto(string Kind, string Text);
+
+// The DM's opening question for this player, and how many of the party have painted the scene so far.
+public sealed record SetupDto(Guid PartyId, string Question, bool Answered, int AnsweredCount, int Total, bool Pending);
+
+public sealed record SubmitSetupRequest(string PlayerName, string Text, bool ForceStart = false);
+
+public sealed record SubmitSetupResponse(Guid PartyId, int AnsweredCount, int Total, bool Pending);
+
+public sealed record UnlockRequest(Guid MemberId);
+
+public sealed record UnlockResponse(Guid PartyId, IReadOnlyList<LockStatusDto> LockStatus);
+
+// The run so far, tallied client-side from resolved turns for the end-of-run screen. MVP = most passed rolls.
+public sealed record RunSummary(
+    int Turns,
+    int Gold,
+    int RoomsWon,
+    int RoomsLost,
+    int Crits,
+    int Fumbles,
+    string? MvpName,
+    int MvpPasses,
+    string? WorstHitName,
+    int WorstHit,
+    string? Verdict);

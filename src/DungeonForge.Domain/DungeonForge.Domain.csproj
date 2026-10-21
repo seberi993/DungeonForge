@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Entities, value objects and pure game rules. Depends on nothing but Shared. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DungeonForge.Shared\DungeonForge.Shared.csproj" />
+    <InternalsVisibleTo Include="DungeonForge.Application" />
+    <InternalsVisibleTo Include="DungeonForge.Tests" />
+  </ItemGroup>
+
+</Project>

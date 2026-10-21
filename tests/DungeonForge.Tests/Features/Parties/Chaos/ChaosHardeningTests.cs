@@ -1,5 +1,5 @@
-using DungeonForge.Api.Domain.Rules;
-using DungeonForge.Api.Domain;
+using DungeonForge.Domain.Rules;
+using DungeonForge.Domain;
 using FluentAssertions;
 using DungeonForge.Tests.Support;
 

@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Text;
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 
 namespace DungeonForge.Tests.Errors;
 
@@ -26,7 +26,7 @@ internal static class ErrorsDoc
         [.. tests.GetTypes()
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
             .SelectMany(m => m.GetCustomAttributes<CoversErrorAttribute>().Select(a => new CoveredBy(a.Code, a.File, m.Name)))],
-        ErrorCatalog.Operations(api));
+        ErrorCatalog.Operations(api, typeof(Program).Assembly));
 
     public static string Render(IReadOnlyList<ErrorSpec> specs, IReadOnlyList<CoveredBy> covers, IReadOnlyList<OperationInfo> operations)
     {
@@ -73,7 +73,7 @@ internal static class ErrorsDoc
         sb.AppendLine();
         sb.AppendLine("## Log events");
         sb.AppendLine();
-        sb.AppendLine("Failures outside a request's reply are coded log events, not errors: see `src/DungeonForge.Api/Errors/LogEvents.cs`.");
+        sb.AppendLine("Failures outside a request's reply are coded log events, not errors: see `src/DungeonForge.Application/Errors/LogEvents.cs`.");
         sb.AppendLine("Each has a stable `EventId` and `EventName` and is logged inside an `Operation`/`PartyId`/`Turn` scope.");
         return sb.ToString();
     }

@@ -8,9 +8,9 @@ Every handler failure is an `Error` returned in a `Result`; the endpoint maps it
 1. **Test first (red).** HTTP test in `tests/DungeonForge.Tests/Features/<Group>/`, marked `[CoversError(ErrorCodes.<Area>.<Reason>)]`:
    `using var problem = await ProblemBody.ReadAsync(response, HttpStatusCode.Conflict);` then assert `problem.Code`, `problem.Operation`,
    `problem.Parameter("partyId")`. A 400 that the Web client shows must also assert `errors.<field>`. Copy `UnlockTurnErrorTests.cs`.
-2. **Code.** Add a `const string` to the nested class for its area in `src/DungeonForge.Api/Errors/ErrorCodes.cs`, as `<area>.<reason>`
+2. **Code.** Add a `const string` to the nested class for its area in `src/DungeonForge.Application/Errors/ErrorCodes.cs`, as `<area>.<reason>`
    (lower case, underscores): `Vote.NotEligible = "vote.not_eligible"`.
-3. **Spec.** One `static readonly ErrorSpec` per code, in `Features/<Group>/<Feature>/Errors.cs`; shared by several slices: in `Errors/PartyErrors.cs`.
+3. **Spec.** One `static readonly ErrorSpec` per code, in `src/DungeonForge.Application/Features/<Group>/<Feature>/Errors.cs`; shared by several slices: in `src/DungeonForge.Application/Errors/PartyErrors.cs`.
    - `Kind`: `Validation` 400, `NotFound` 404, `Conflict` 409, `Unexpected` 500.
    - Pass a status only when it must differ from the kind (an old state conflict that is a 400): `ErrorKind.Conflict, status: 400`.
    - Pass `Field: "playerName"` when the response must carry `errors.playerName` (the Web client reads `errors` for every 400).

@@ -1,8 +1,8 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties;
-using DungeonForge.Api.Features.Parties.Chaos;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties;
+using DungeonForge.Application.Features.Parties.Chaos;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Features.Parties.Realtime;
 
 namespace DungeonForge.Tests.Errors;
 

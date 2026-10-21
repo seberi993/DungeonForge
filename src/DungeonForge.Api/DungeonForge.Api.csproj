@@ -1,13 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <!-- Composition root and HTTP edge: one endpoint per feature, SignalR hub, ProblemDetails mapping. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <UserSecretsId>63596405-6fa7-4a38-a38d-ee14e8d694cf</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DungeonForge.Application\DungeonForge.Application.csproj" />
+    <ProjectReference Include="..\DungeonForge.Infrastructure\DungeonForge.Infrastructure.csproj" />
     <InternalsVisibleTo Include="DungeonForge.Tests" />
-    <Compile Include="..\Shared\Limits.cs" Link="Shared\Limits.cs" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,5 @@
 using System.Reflection;
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Errors;

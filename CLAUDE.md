@@ -12,13 +12,13 @@
 - Ephemeral State: `IMemoryCache` on single-instance container (zero turn-by-turn DB writes).
 
 ## Architectural Standards
-- Pattern: Vertical Slice CQRS (No MediatR). Features live under `src/DungeonForge.Api/Features/<Group>/<FeatureName>/`.
+- Pattern: Vertical Slice CQRS (No MediatR). Handlers, contracts and errors live in `src/DungeonForge.Application/Features/<Group>/<FeatureName>/`; the endpoint in the same path under `src/DungeonForge.Api/Features/`.
 - Endpoints: Minimal API slices utilizing `IEndpoint` and `AddEndpointFilter` for cross-cutting checks.
 - Handlers return `Result<T>`; failures are coded `Error`s (`Errors/`), mapped to ProblemDetails by `.ToHttp(http)`. See `docs/errors.md`.
-- Party state goes through `IPartyStore`; mutate under `party.SyncRoot`. Game rules and math are pure static classes in `Domain/Rules/` taking `IRoller`; never reorder RNG calls.
-- `Domain` and `Errors` never reference `Features` or `Infrastructure` (`LayeringTests`). Keep `src` files under ~250 lines (exception: `StageDirector.cs`).
-- Zero build warnings. Input limits live in `src/Shared/Limits.cs`, linked into both projects.
-- Where things are: `docs/map.md`. Skills: `cqrs-slice`, `add-error`, `add-game-rule`, `diagnose-failure`.
+- Party state goes through `IPartyStore`; mutate under `party.SyncRoot`. Game rules and math are pure static classes in `src/DungeonForge.Domain/Rules/` taking `IRoller`; never reorder RNG calls.
+- Dependencies point inward: Api -> Infrastructure -> Application -> Domain -> Shared (`LayeringTests`); Domain and Application never touch ASP.NET. Keep `src` files under ~250 lines (exception: `StageDirector.cs`).
+- Zero build warnings. Input limits live in `src/DungeonForge.Shared/Limits.cs`, referenced by Domain and Web.
+- Architecture overview: `README.md`. Where things are: `docs/map.md`. Skills: `cqrs-slice`, `add-error`, `add-game-rule`, `diagnose-failure`.
 - AI Narration: Stateless, concise calls to Google Gemini Flash (free tier) via REST (key `GoogleFlash:ApiKey`). Game rules and math executed in C#.
 
 ## Token Conservation Protocols

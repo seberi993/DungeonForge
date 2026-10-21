@@ -1,4 +1,4 @@
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 using DungeonForge.Tests.Errors;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;

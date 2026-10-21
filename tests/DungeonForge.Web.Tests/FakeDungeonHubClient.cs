@@ -1,5 +1,5 @@
-using DungeonForge.Web.Models;
-using DungeonForge.Web.Services;
+using DungeonForge.Web.Core;
+using DungeonForge.Web.Features.Dungeon;
 
 namespace DungeonForge.Web.Tests;
 

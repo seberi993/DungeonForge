@@ -3,9 +3,9 @@ name: add-game-rule
 description: Add or change a game rule (damage, odds, gold, room, chaos, traitor math) as a pure static class in Domain/Rules with a scripted-roller test. Use when a rule changes or a handler needs new game math.
 ---
 
-Game rules and math run in C#, never in the narrator and never inline in a handler. They live in `src/DungeonForge.Api/Domain/Rules/`.
+Game rules and math run in C#, never in the narrator and never inline in a handler. They live in `src/DungeonForge.Domain/Rules/`.
 
-1. **Find it first.** `Grep` `Domain/Rules/` for the concept (`RoomRules` rooms/gold/damage, `ActionOdds` success odds, `PartyRules` party limits,
+1. **Find it first.** `Grep` `src/DungeonForge.Domain/Rules/` for the concept (`RoomRules` rooms/gold/damage, `ActionOdds` success odds, `PartyRules` party limits,
    `MemberRules` hp/threat, `ConfrontationRules`/`Perception`/`TraitorPact`/`CovertResolver`/`RoomSecrets`/`Gaslighting` chaos mode).
    Extend the matching file; add a new `static class <Name>Rules` only for a new concept.
 2. **Test first (red).** `tests/DungeonForge.Tests/Domain/Rules/<Name>Tests.cs`, one file per rules file, expected numbers written out by hand

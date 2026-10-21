@@ -1,7 +1,7 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Social.Asks;
-using DungeonForge.Api.Features.Social.Core;
-using DungeonForge.Api.Features.Social.Supervision;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Social.Asks;
+using DungeonForge.Application.Features.Social.Core;
+using DungeonForge.Application.Features.Social.Supervision;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;
 using Microsoft.Extensions.Options;

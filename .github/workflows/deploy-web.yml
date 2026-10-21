@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "src/DungeonForge.Web/**"
+      - "src/DungeonForge.Shared/**"
       - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 

@@ -1,4 +1,4 @@
-using DungeonForge.Api.Domain;
+using DungeonForge.Domain;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Domain;

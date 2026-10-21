@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Parties.SubmitNarration;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Parties.SubmitNarration;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;

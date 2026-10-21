@@ -1,6 +1,6 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Narration;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Infrastructure.Narration;

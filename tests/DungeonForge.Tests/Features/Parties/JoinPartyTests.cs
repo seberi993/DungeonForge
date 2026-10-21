@@ -53,7 +53,6 @@ public class JoinPartyTests(WebApplicationFactory<Program> factory) : IClassFixt
 
     [Theory]
     [InlineData("", "bard")]
-    [InlineData("Zed", null)]
     public async Task Join_InvalidBody_ReturnsBadRequest(string name, string? cls)
     {
         var client = factory.CreateClient();
@@ -62,5 +61,16 @@ public class JoinPartyTests(WebApplicationFactory<Program> factory) : IClassFixt
         var response = await client.PostAsJsonAsync($"/api/parties/by-code/{code}/join", new { name, @class = cls });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Join_WithoutAClass_DealsAHiddenOne()
+    {
+        var client = factory.CreateClient();
+        var code = await CreateCodeAsync(client);
+
+        var response = await client.PostAsJsonAsync($"/api/parties/by-code/{code}/join", new { name = "Zed" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }
