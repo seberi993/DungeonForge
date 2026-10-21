@@ -17,6 +17,6 @@ A push to `main` that touches `src/DungeonForge.Web/**` (or the workflow file) t
 6. Report: commit, run result, prod URL.
 
 ## Notes
-- Pushes that only change `src/DungeonForge.Api/**` do not redeploy the frontend; the API runs on Render (`dungeonforge-api-ho2b.onrender.com`) and is deployed there. Say so in the report.
+- Pushes that only change `src/DungeonForge.Domain/**`, `Application`, `Infrastructure` or `Api` do not redeploy the frontend; the API runs on Render (`dungeonforge-api-ho2b.onrender.com`) and is deployed there. Say so in the report.
 - If the Action fails at "Deploy to Vercel", the usual cause is a bad `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` secret ("Project not found"); the user must fix repo secrets. IDs: org `team_51ewVkr7V66JDRhLQgGctRf1`, project `prj_6sqoNiAdGLW2xi9Plk5NVc36GmCM`.
 - If the site loads but calls fail with "Failed to fetch", check the Render API (`curl -i https://dungeonforge-api-ho2b.onrender.com/api/health`); a 502 with `x-render-routing: no-deploy` means Render has no live deploy.

@@ -12,9 +12,9 @@ message carries (a resolve answers with the turn after it; narrator events carry
 
 1. **Find the definition.** `grep -rn "<code>" src docs/errors.md`. Hits: the `ErrorCodes` constant, its `ErrorSpec` (kind, status, description),
    its factory method, and the row in `docs/errors.md` ("Defined in" file and "Covered by" test).
-   For a log event: `grep -n "<EventName>" src/DungeonForge.Api/Errors/LogEvents.cs`, then grep `logger.<EventName>(` for the call site.
+   For a log event: `grep -n "<EventName>" src/DungeonForge.Application/Errors/LogEvents.cs`, then grep `logger.<EventName>(` for the call site.
 2. **Find the raiser.** The factory is called from a handler. The `operation` names it (`Command:ResolveTurn` is under
-   `Features/Parties/ExploreDungeon/`; `docs/errors.md` "Operations" lists each operation's folder). Open that `Handler.cs` and grep the
+   `src/DungeonForge.Application/Features/Parties/ExploreDungeon/`; `docs/errors.md` "Operations" lists each operation's folder). Open that `Handler.cs` and grep the
    factory name.
 3. **Reproduce narrowly.** Run the covering test alone, not the suite:
    `dotnet test tests/DungeonForge.Tests --filter "FullyQualifiedName~<TestClass>.<TestName>"`.

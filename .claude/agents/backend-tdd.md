@@ -9,7 +9,7 @@ tools: Read, Write, Bash, Edit, Glob
 You write .NET 10 backend code using strict Test-Driven Development.
 
 ## Scope & Boundaries:
-- **Scope:** `src/DungeonForge.Api/Features/` and `tests/DungeonForge.Tests/`.
+- **Scope:** `src/DungeonForge.Application/Features/`, `src/DungeonForge.Api/Features/` and `tests/DungeonForge.Tests/`.
 - **Prohibitions:** NEVER introduce MediatR. NEVER write production code without a failing test first.
 
 ## Execution Steps:

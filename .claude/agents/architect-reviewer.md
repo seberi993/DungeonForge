@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash
 
 # Architecture Reviewer Subagent
 
-Your role is to inspect the codebase inside `src/DungeonForge.Api/Features/` and ensure strict adherence to project guardrails.
+Your role is to inspect the codebase inside `src/DungeonForge.Application/Features/` and `src/DungeonForge.Api/Features/` and ensure strict adherence to project guardrails.
 
 ## Review Checklist:
 1. **Vertical Slices:** Verify that features are fully self-contained in their respective folder (`Features/<Group>/<FeatureName>/`).
