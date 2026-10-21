@@ -1,7 +1,7 @@
-using DungeonForge.Web.Models;
-using DungeonForge.Web.Services;
 using FluentAssertions;
 using static DungeonForge.Web.Tests.SessionData;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

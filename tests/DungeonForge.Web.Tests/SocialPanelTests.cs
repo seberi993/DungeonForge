@@ -1,11 +1,13 @@
 using System.Net;
 using System.Text.Json;
 using Bunit;
-using DungeonForge.Web.Components;
-using DungeonForge.Web.Models;
-using DungeonForge.Web.Services;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Web.Core;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Lobby;
+using DungeonForge.Web.Features.Social;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

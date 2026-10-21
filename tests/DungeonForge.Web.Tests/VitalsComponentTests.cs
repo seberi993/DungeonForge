@@ -1,7 +1,7 @@
 using Bunit;
-using DungeonForge.Web.Components;
-using DungeonForge.Web.Models;
 using FluentAssertions;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

@@ -1,9 +1,9 @@
 using Bunit;
-using DungeonForge.Web.Components;
-using DungeonForge.Web.Components.Stage;
-using DungeonForge.Web.Models;
-using DungeonForge.Web.Services;
 using FluentAssertions;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Dungeon.Stage;
+using DungeonForge.Web.Features.Lobby;
+using DungeonForge.Web.Shared;
 
 namespace DungeonForge.Web.Tests;
 

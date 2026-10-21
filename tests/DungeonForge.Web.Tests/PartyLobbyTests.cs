@@ -1,10 +1,11 @@
 using System.Net;
 using Bunit;
 using Bunit.TestDoubles;
-using DungeonForge.Web.Pages;
-using DungeonForge.Web.Services;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using DungeonForge.Web.Core;
+using DungeonForge.Web.Features.Dungeon;
+using DungeonForge.Web.Features.Lobby;
 
 namespace DungeonForge.Web.Tests;
 

@@ -1,5 +1,5 @@
-using DungeonForge.Web.Components;
 using FluentAssertions;
+using DungeonForge.Web.Features.Dungeon;
 
 namespace DungeonForge.Web.Tests;
 

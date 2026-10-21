@@ -1,7 +1,8 @@
 using DungeonForge.Web;
-using DungeonForge.Web.Services;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using DungeonForge.Web.Core;
+using DungeonForge.Web.Features.Dungeon;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
