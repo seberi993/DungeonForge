@@ -1,0 +1,9 @@
+using DungeonForge.Domain;
+
+namespace DungeonForge.Application.Features.Parties.CreateParty;
+
+public sealed record MemberRequest(string? Name, CharacterClass? Class);
+
+public sealed record CreatePartyRequest(string? Name, IReadOnlyList<MemberRequest>? Members, PartyModifiers? Modifiers = null, bool PaintScene = false);
+
+public sealed record PartyResponse(Guid PartyId, string Name, IReadOnlyList<MemberDto> Members, DateTimeOffset CreatedAt, string InviteCode = "", bool SetupPending = false);

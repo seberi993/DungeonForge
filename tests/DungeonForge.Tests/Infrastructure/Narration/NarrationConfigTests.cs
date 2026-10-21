@@ -1,5 +1,5 @@
 using FluentAssertions;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Application.Narration;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

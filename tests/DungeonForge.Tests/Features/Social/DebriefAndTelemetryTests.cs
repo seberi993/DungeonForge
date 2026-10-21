@@ -1,9 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Domain;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Social.Core;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;

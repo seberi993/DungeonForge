@@ -1,7 +1,7 @@
 using System.Text.Json;
-using DungeonForge.Api.Domain.Rules;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Domain.Rules;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;

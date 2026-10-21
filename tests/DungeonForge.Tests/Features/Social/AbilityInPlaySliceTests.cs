@@ -1,9 +1,9 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.Chaos;
-using DungeonForge.Api.Features.Social.Abilities;
-using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties.Chaos;
+using DungeonForge.Application.Features.Social.Abilities;
+using DungeonForge.Application.Features.Social.Core;
 using DungeonForge.Tests.Features.Parties;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -187,7 +187,7 @@ public class TurnPlanTests
         plan.Chances[1] -= 200;
 
         plan.Chance(0).Should().Be(TurnPlan.MaxChance);
-        plan.Chance(1).Should().Be(DungeonForge.Api.Domain.Rules.ActionOdds.MinPercent);
+        plan.Chance(1).Should().Be(DungeonForge.Domain.Rules.ActionOdds.MinPercent);
     }
 
     [Theory]

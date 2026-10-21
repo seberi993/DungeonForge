@@ -1,10 +1,10 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties;
-using DungeonForge.Api.Features.Parties.Realtime;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Features.Parties;
+using DungeonForge.Application.Features.Parties.Realtime;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;

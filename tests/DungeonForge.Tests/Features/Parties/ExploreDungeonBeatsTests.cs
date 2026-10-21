@@ -1,6 +1,6 @@
 using System.Net;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,5 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Domain;
+using DungeonForge.Application.Features.Social.Core;
 using DungeonForge.Tests.Support;
 using FluentAssertions;
 

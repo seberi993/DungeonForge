@@ -1,4 +1,5 @@
-using DungeonForge.Api.Errors;
+using DungeonForge.Api.Http;
+using DungeonForge.Application.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;

@@ -1,4 +1,4 @@
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Features.Parties;

@@ -1,7 +1,7 @@
 using System.Net;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Parties.Chaos;
-using DungeonForge.Api.Features.Social.Core;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Parties.Chaos;
+using DungeonForge.Application.Features.Social.Core;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -167,5 +167,5 @@ public class AskTextTests
     [InlineData("", "anything", false)]
     [InlineData("take the gold", "take the gold and run away fast", false)]
     public void Similar_ComparesWordSets(string a, string b, bool expected) =>
-        DungeonForge.Api.Features.Social.Asks.AskText.Similar(a, b).Should().Be(expected);
+        DungeonForge.Application.Features.Social.Asks.AskText.Similar(a, b).Should().Be(expected);
 }

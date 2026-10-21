@@ -1,5 +1,5 @@
 using System.Net;
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;

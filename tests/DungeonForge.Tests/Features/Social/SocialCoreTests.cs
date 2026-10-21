@@ -1,7 +1,7 @@
-using DungeonForge.Api.Features.Social.Abilities;
-using DungeonForge.Api.Features.Social.Core;
-using DungeonForge.Api.Features.Social.Peers;
-using DungeonForge.Api.Features.Social.Seed;
+using DungeonForge.Application.Features.Social.Abilities;
+using DungeonForge.Application.Features.Social.Core;
+using DungeonForge.Application.Features.Social.Peers;
+using DungeonForge.Application.Features.Social.Seed;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Features.Social;

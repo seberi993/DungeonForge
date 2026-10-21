@@ -1,5 +1,5 @@
 using System.Reflection;
-using DungeonForge.Api.Errors;
+using DungeonForge.Application.Errors;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Errors;
@@ -8,23 +8,23 @@ namespace DungeonForge.Tests.Errors;
 // A stale file fails the golden test; rewrite it with `UPDATE_ERRORS_DOC=1 dotnet test --filter ErrorsDocTests`.
 public class ErrorsDocTests
 {
-    private static readonly ErrorSpec Spec = new("area.thing_missing", ErrorKind.NotFound, "The thing is missing.", DeclaredIn: "/x/src/DungeonForge.Api/Features/A/B/Errors.cs");
+    private static readonly ErrorSpec Spec = new("area.thing_missing", ErrorKind.NotFound, "The thing is missing.", DeclaredIn: "/x/src/DungeonForge.Application/Features/A/B/Errors.cs");
 
     [Fact]
     public void Render_ListsEachCodeWithKindStatusDefinitionAndCoveringTests()
     {
         var doc = ErrorsDoc.Render(
-            [Spec, new ErrorSpec("area.other", ErrorKind.Conflict, "Other.", 400, DeclaredIn: "/x/src/DungeonForge.Api/Features/A/Errors.cs")],
+            [Spec, new ErrorSpec("area.other", ErrorKind.Conflict, "Other.", 400, DeclaredIn: "/x/src/DungeonForge.Application/Features/A/Errors.cs")],
             [
                 new CoveredBy("area.thing_missing", "/x/tests/DungeonForge.Tests/Features/BTests.cs", "Missing_Returns404"),
                 new CoveredBy("area.thing_missing", "/x/tests/DungeonForge.Tests/Features/ATests.cs", "Another_Case"),
             ],
-            [new("Query:GetThing", "DungeonForge.Api.Features.A.B")]);
+            [new("Query:GetThing", "DungeonForge.Application.Features.A.B")]);
 
         doc.Should().Contain(
-            "| `area.thing_missing` | NotFound | 404 | The thing is missing. | `src/DungeonForge.Api/Features/A/B/Errors.cs` | " +
+            "| `area.thing_missing` | NotFound | 404 | The thing is missing. | `src/DungeonForge.Application/Features/A/B/Errors.cs` | " +
             "`tests/DungeonForge.Tests/Features/ATests.cs#Another_Case`, `tests/DungeonForge.Tests/Features/BTests.cs#Missing_Returns404` |");
-        doc.Should().Contain("| `area.other` | Conflict | 400 | Other. | `src/DungeonForge.Api/Features/A/Errors.cs` | none |");
+        doc.Should().Contain("| `area.other` | Conflict | 400 | Other. | `src/DungeonForge.Application/Features/A/Errors.cs` | none |");
         doc.Should().Contain("| `Query:GetThing` | `Features/A/B` |");
     }
 
@@ -40,7 +40,7 @@ public class ErrorsDocTests
     [Fact]
     public void Operations_AreFoundOnHandlersAndOperationClasses()
     {
-        var operations = ErrorCatalog.Operations(typeof(ErrorCodes).Assembly).Select(o => o.Operation).ToList();
+        var operations = ErrorCatalog.Operations(typeof(ErrorCodes).Assembly, typeof(Program).Assembly).Select(o => o.Operation).ToList();
 
         operations.Should().Contain(["Command:UnlockTurn", "Query:GetScenario", "Command:ResolveTurn", "Hub:JoinParty", "Chaos:Send"]);
     }

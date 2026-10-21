@@ -1,9 +1,9 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Errors;
-using DungeonForge.Api.Features.Parties;
-using DungeonForge.Api.Features.Parties.ExploreDungeon;
-using DungeonForge.Api.Features.Parties.Realtime;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Domain;
+using DungeonForge.Application.Errors;
+using DungeonForge.Application.Features.Parties;
+using DungeonForge.Application.Features.Parties.ExploreDungeon;
+using DungeonForge.Application.Features.Parties.Realtime;
+using DungeonForge.Application.Narration;
 using DungeonForge.Tests.Errors;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;

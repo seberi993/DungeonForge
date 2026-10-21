@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Errors;
+using DungeonForge.Domain;
+using DungeonForge.Application.Errors;
 using DungeonForge.Tests.Errors;
 using DungeonForge.Tests.Features.Parties.Chaos;
 using FluentAssertions;

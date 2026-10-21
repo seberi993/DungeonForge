@@ -1,7 +1,8 @@
-using DungeonForge.Api.Features.Social.Core;
-using DungeonForge.Api.Features.Social.Seed;
-using DungeonForge.Api.Features.Social.Supervision;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Infrastructure.Narration;
+using DungeonForge.Application.Features.Social.Core;
+using DungeonForge.Application.Features.Social.Seed;
+using DungeonForge.Application.Features.Social.Supervision;
+using DungeonForge.Application.Narration;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -158,11 +159,11 @@ public class NarratorJudgeTests(WebApplicationFactory<Program> factory) : IClass
     private SocialHarness Harness(FakeJsonModel model, Dictionary<string, string?>? config = null) =>
         SocialHarness.Create(factory, config, services: s => s.AddSingleton<IJsonModel>(model));
 
-    private static SocialEvent Accusation(SocialPipeline pipeline, Api.Domain.Party party) =>
+    private static SocialEvent Accusation(SocialPipeline pipeline, DungeonForge.Domain.Party party) =>
         pipeline.NewEvent(party, SocialEventTypes.AskReply, 1, ["Dru"],
             new Dictionary<string, string> { ["from"] = "Conan", ["kind"] = "Accusation", ["choice"] = "Dodge", ["text"] = "You took gold" });
 
-    private static AuditEntry? LlmRow(Api.Domain.Party party)
+    private static AuditEntry? LlmRow(DungeonForge.Domain.Party party)
     {
         lock (party.SyncRoot)
         {

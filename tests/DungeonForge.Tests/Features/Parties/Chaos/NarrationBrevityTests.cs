@@ -1,5 +1,5 @@
-using DungeonForge.Api.Domain;
-using DungeonForge.Api.Infrastructure.Narration;
+using DungeonForge.Domain;
+using DungeonForge.Application.Narration;
 using FluentAssertions;
 
 namespace DungeonForge.Tests.Features.Parties.Chaos;

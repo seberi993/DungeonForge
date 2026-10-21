@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using DungeonForge.Api.Domain;
+using DungeonForge.Domain;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 

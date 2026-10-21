@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Shared\Limits.cs" Link="Shared\Limits.cs" />
+    <ProjectReference Include="..\DungeonForge.Shared\DungeonForge.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
